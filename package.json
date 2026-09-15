@@ -1,0 +1,61 @@
+{
+  "name": "layerlens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": "24.19.x",
+    "npm": "11.17.x"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "desktop:build": "tauri build -- --locked",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "npm run format:rust && npm run format:web",
+    "format:rust": "cargo fmt --all",
+    "format:web": "prettier --write .",
+    "format:check": "npm run format:rust:check && npm run format:web:check",
+    "format:rust:check": "cargo fmt --all -- --check",
+    "format:web:check": "prettier --check .",
+    "format:staged": "node scripts/check-staged-format.mjs",
+    "test:hooks": "node --test scripts/check-staged-format.test.mjs",
+    "bindings:generate": "cargo run --locked -p layerlens-core --example export_bindings",
+    "icons:generate": "node scripts/generate-icons.mjs",
+    "bindings:check": "cargo run --locked -p layerlens-core --example export_bindings -- --check",
+    "check:frontend": "npm run format:web:check && npm run typecheck && npm run lint && npm run test && vite build",
+    "check:rust": "npm run format:rust:check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked && npm run bindings:check",
+    "check": "npm run check:frontend && npm run check:rust && npm run test:hooks"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "vue": "3.5.42"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@tauri-apps/cli": "2.11.4",
+    "@types/node": "24.13.4",
+    "@vitejs/plugin-vue": "6.0.9",
+    "@vue/test-utils": "2.5.0",
+    "eslint": "10.10.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-vue": "10.11.0",
+    "globals": "17.12.0",
+    "husky": "9.1.7",
+    "jsdom": "30.0.1",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vite": "8.3.0",
+    "vitest": "5.0.1",
+    "vue-tsc": "3.3.11"
+  }
+}

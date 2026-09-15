@@ -1,0 +1,39 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows desktop
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install pinned npm
+        run: npm install --global npm@11.17.0
+      - name: Install Rust toolchain
+        run: rustup show
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Check source, contracts and tests
+        run: npm run check
+      - name: Build Windows installer
+        run: npm run desktop:build
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: layerlens-windows
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error
