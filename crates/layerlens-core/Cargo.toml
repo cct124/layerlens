@@ -7,8 +7,14 @@ license.workspace = true
 description = "LayerLens 的共享应用核心与边界类型"
 
 [dependencies]
+ag-psd.workspace = true
+png.workspace = true
 serde.workspace = true
+sha2.workspace = true
 ts-rs.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

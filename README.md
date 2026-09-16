@@ -2,7 +2,7 @@
 
 基于 Rust + Tauri 的开源 PSD 解析与 AI 协作工具，目标是通过交互式选区、图层样式提取和素材导出，为编程 Agent 提供结构化设计上下文，辅助还原 H5 页面。
 
-当前工程为 **M0-00 桌面脚手架**：包含 Vue 工作区入口、Rust 应用信息调用、错误反馈及独立核心测试。PSD 解析、图层查看、素材导出和 MCP 属于后续开发范围。设计见 [docs](docs/README.md)，当前任务与验证记录见 [devlog](devlog/README.md)。
+当前工程为 **桌面脚手架与 M0-01 PSD 解析原型**：桌面包含 Vue 工作区入口、Rust 应用信息调用和错误反馈；独立 Rust 核心提供实验性的简单 PSD 元数据、合成预览及透明 PNG 验证。原型尚未接入桌面，图层查看、完整素材服务和 MCP 属于后续开发范围。设计见 [docs](docs/README.md)，当前任务与验证记录见 [devlog](devlog/README.md)。
 
 ## 开发环境
 
@@ -43,6 +43,20 @@ cargo test --locked -p layerlens-core # 单独验证不依赖 Tauri 的核心
 ```
 
 Windows CI 使用相同的完整检查入口并构建 NSIS 安装包；新增或变更的流水线需以远端实际运行结果为准。
+
+## PSD 解析实验
+
+本轮精确使用 `ag-psd 0.3.0`（上游仓库名 `ag-psd-rs`），第三方类型隔离在核心适配器内。实验只接纳预检覆盖的 PSD v1、RGB／8 位、RAW／RLE 简单结构；文字、ICC 和其他未验证的附加信息、蒙版、ZIP 及其他模式暂时明确拒绝，不能据此推断候选库本身均不支持。无保存时合成图时仍可查看图层元数据，但不自动重新合成。预览仅开放三通道且不含合成透明度标记的输入，其他情况保留元数据和可用的图层导出，并说明候选限制。
+
+```powershell
+npm run fixtures:check # 检查独立合成样本、预期值和指纹是否可复现
+New-Item -ItemType Directory -Force .local | Out-Null
+cargo run --locked -p layerlens-core --example inspect_psd -- crates/layerlens-core/tests/fixtures/psd/bitmap-raw.psd .local/psd-raw-report
+```
+
+输出目录必须不存在。命令生成 `report.json`、可用的 `preview.png` 和逐层 `layer-<id>.png`；报告记录源 SHA-256、规范化元数据、能力限制、解析及逐项解码／编码耗时。简单可见位图以 1× 导出，保留画布外部分和透明边缘；隐藏层、组和未验证的混合／不透明度依赖不导出。失败项保留错误原因并使命令返回非零，不覆盖已有文件。
+
+Windows 读取期间限制并发写入和替换，后续按需解码只使用已取得的压缩数据。默认准入上限为源文件 64 MiB、画布与图层累计 16 Mi 像素、4096 条图层记录，另限制组嵌套 64 层；这些是实验保护阈值，不是全进程内存硬上限或性能承诺。尚未完成真实 H5 稿、文字样式、ICC 色彩对照和规模性能验收。样本来源、独立预期与覆盖范围见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
 
 ## 格式化与提交
 

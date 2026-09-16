@@ -9,6 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "ag-psd"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6470c6a2f96a00a8d4154504020b34807c2282438c98f90f5069ef3f8cb0e7bf"
+dependencies = [
+ "flate2",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1686,7 +1695,11 @@ dependencies = [
 name = "layerlens-core"
 version = "0.1.0"
 dependencies = [
+ "ag-psd",
+ "png 0.17.16",
  "serde",
+ "serde_json",
+ "sha2",
  "ts-rs",
 ]
 

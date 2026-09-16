@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "source": "LayerLens 人工定义并按 Adobe PSD v1 规范编码的合成样本",
+  "license": "MIT",
+  "pixelOrder": "rgbaHex 使用行优先 RGBA8，不预乘 alpha；图层像素保留透明边距和画布外内容。",
+  "layerOrder": "bottom-to-top",
+  "samples": [
+    {
+      "file": "bitmap-raw.psd",
+      "compression": "raw",
+      "document": {
+        "width": 4,
+        "height": 3,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [
+        {
+          "name": "negative-origin",
+          "visible": true,
+          "bounds": {
+            "x": -1,
+            "y": 1,
+            "width": 3,
+            "height": 2
+          },
+          "rgbaHex": "ff0000ff00ff00800000ff00ffff00ff00ffffffff00ff80"
+        },
+        {
+          "name": "hidden-overlay",
+          "visible": false,
+          "bounds": {
+            "x": 1,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ff8000ff"
+        }
+      ],
+      "composite": {
+        "width": 4,
+        "height": 3,
+        "rgbaHex": "ffffffffffffffffffffffffffffffff7fff7fffffffffffffffffffffffffff00ffffffff7fffffffffffffffffffff"
+      },
+      "sizeBytes": 322,
+      "sha256": "ff8fac38690dc0531ce3185407b3272624096379c92a0f323ea4622f18657de5"
+    },
+    {
+      "file": "bitmap-rle.psd",
+      "compression": "rle",
+      "document": {
+        "width": 4,
+        "height": 3,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [
+        {
+          "name": "negative-origin",
+          "visible": true,
+          "bounds": {
+            "x": -1,
+            "y": 1,
+            "width": 3,
+            "height": 2
+          },
+          "rgbaHex": "ff0000ff00ff00800000ff00ffff00ff00ffffffff00ff80"
+        },
+        {
+          "name": "hidden-overlay",
+          "visible": false,
+          "bounds": {
+            "x": 1,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ff8000ff"
+        }
+      ],
+      "composite": {
+        "width": 4,
+        "height": 3,
+        "rgbaHex": "ffffffffffffffffffffffffffffffff7fff7fffffffffffffffffffffffffff00ffffffff7fffffffffffffffffffff"
+      },
+      "sizeBytes": 385,
+      "sha256": "4bd688db6cde604c1f1937606d1162639649a3706329c6f92f90bcd30a35d001"
+    },
+    {
+      "file": "bitmap-no-composite.psd",
+      "compression": "raw",
+      "document": {
+        "width": 4,
+        "height": 3,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [
+        {
+          "name": "negative-origin",
+          "visible": true,
+          "bounds": {
+            "x": -1,
+            "y": 1,
+            "width": 3,
+            "height": 2
+          },
+          "rgbaHex": "ff0000ff00ff00800000ff00ffff00ff00ffffffff00ff80"
+        },
+        {
+          "name": "hidden-overlay",
+          "visible": false,
+          "bounds": {
+            "x": 1,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ff8000ff"
+        }
+      ],
+      "composite": null,
+      "note": "完整图层与蒙版节后 EOF；故意省略 Image Data，验证元数据与缺失预览的错误边界。",
+      "sizeBytes": 284,
+      "sha256": "f5251955028abe2031b9b9b50e09f62d593a2186587392898fdc5d6365fecc95"
+    },
+    {
+      "file": "rgb16.psd",
+      "compression": "raw",
+      "document": {
+        "width": 1,
+        "height": 1,
+        "depth": 16,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [],
+      "composite": null,
+      "rgb16Hex": "1234abcd00ff",
+      "note": "合法 RGB/16 位输入；合成图为 R=0x1234、G=0xabcd、B=0x00ff，不伪造 RGBA8 预期。",
+      "sizeBytes": 74,
+      "sha256": "66e65f2d8d39a736835578b23a0b6f595f37c9c888d14166cb4b0ccf99860ea5"
+    }
+  ]
+}
