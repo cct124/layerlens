@@ -139,7 +139,7 @@ fn raw_and_rle_metadata_preserve_bounds_visibility_order_and_missing_profile() {
         );
         let dpi = expected["document"]["resolutionDpi"].as_f64().unwrap();
         assert_eq!(info.resolution_dpi, Some([dpi, dpi]));
-        assert_eq!(info.color_profile, None, "缺失 ICC 不能补成 sRGB");
+        assert!(info.color_profile.is_none(), "缺失 ICC 不能补成 sRGB");
         assert_eq!(info.text.status, Support::Unsupported);
         assert!(!info.text.reason.is_empty());
         assert_eq!(info.preview.status, Support::Supported);
@@ -327,6 +327,7 @@ fn resource_limits_include_layer_pixels_and_accept_the_exact_boundary() {
         max_file_bytes: bytes.len() as u64,
         max_total_pixels: 19,
         max_layers: 2,
+        ..ParseLimits::default()
     };
     assert!(PsdDocument::from_bytes(&bytes, limits).is_ok());
     for limits in [
@@ -352,7 +353,7 @@ fn resource_limits_include_layer_pixels_and_accept_the_exact_boundary() {
 }
 
 #[test]
-fn merged_alpha_reports_the_known_preview_limit_without_losing_layers() {
+fn merged_alpha_preserves_pixels_while_extra_channels_remain_unverified() {
     let mut bytes = fixture("bitmap-raw.psd");
     let count = layer_section_offset(&bytes) + 8;
     bytes[count..count + 2].copy_from_slice(&(-2_i16).to_be_bytes());
@@ -360,10 +361,10 @@ fn merged_alpha_reports_the_known_preview_limit_without_losing_layers() {
     bytes.extend_from_slice(&[255; 12]);
     let document = parse(&bytes);
     assert_eq!(document.info().layers.len(), 2);
-    assert_eq!(document.info().preview.status, Support::Unsupported);
-    assert_eq!(
-        document.preview_png().unwrap_err().code,
-        PsdErrorCode::PreviewUnavailable
+    assert_eq!(document.info().preview.status, Support::Supported);
+    assert_png(
+        &document.preview_png().unwrap(),
+        &expected_sample(&manifest(), "bitmap-raw.psd")["composite"],
     );
     assert_visible_layer_png(&document, &expected_sample(&manifest(), "bitmap-raw.psd"));
 
@@ -375,6 +376,25 @@ fn merged_alpha_reports_the_known_preview_limit_without_losing_layers() {
         &extra_alpha,
         &expected_sample(&manifest(), "bitmap-raw.psd"),
     );
+}
+
+#[test]
+fn deferred_decode_budget_does_not_block_metadata_and_small_layers() {
+    let document = PsdDocument::from_bytes(
+        &fixture("bitmap-rle.psd"),
+        ParseLimits {
+            // 小图层需 24 字节 RGBA 及 RLE 临时表；画布 RGBA 自身即需 48 字节。
+            max_decoded_bytes: 47,
+            ..ParseLimits::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(document.info().layers.len(), 2);
+    assert_eq!(
+        document.preview_png().unwrap_err().code,
+        PsdErrorCode::ResourceLimit
+    );
+    assert_visible_layer_png(&document, &expected_sample(&manifest(), "bitmap-rle.psd"));
 }
 
 #[cfg(windows)]

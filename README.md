@@ -2,7 +2,7 @@
 
 基于 Rust + Tauri 的开源 PSD 解析与 AI 协作工具，目标是通过交互式选区、图层样式提取和素材导出，为编程 Agent 提供结构化设计上下文，辅助还原 H5 页面。
 
-当前工程为 **桌面脚手架与 M0-01 PSD 解析原型**：桌面包含 Vue 工作区入口、Rust 应用信息调用和错误反馈；独立 Rust 核心提供实验性的简单 PSD 元数据、合成预览及透明 PNG 验证。原型尚未接入桌面，图层查看、完整素材服务和 MCP 属于后续开发范围。设计见 [docs](docs/README.md)，当前任务与验证记录见 [devlog](devlog/README.md)。
+当前工程为 **桌面脚手架与 M0-01 PSD 解析原型**：桌面包含 Vue 工作区入口、Rust 应用信息调用和错误反馈；独立 Rust 核心提供实验性的 PSD 图层分类、文字原文、能力诊断、保存时合成预览及简单位图 PNG 验证。原型尚未接入桌面，图层查看、完整素材服务和 MCP 属于后续开发范围。设计见 [docs](docs/README.md)，当前任务与验证记录见 [devlog](devlog/README.md)。
 
 ## 开发环境
 
@@ -37,6 +37,7 @@ npm run desktop:build # 构建 release 桌面程序及 Windows NSIS 安装包
 npm run check          # 仓库格式、前端与 Rust 检查、DTO 一致性及 hook 测试
 npm run check:frontend # Prettier 格式、严格类型、lint、组件测试及前端构建
 npm run check:rust     # rustfmt、Clippy、Rust 测试及 DTO 一致性检查
+npm run test:parser    # 本地 ag-psd 补丁回归；也纳入 check:rust
 npm run test:hooks     # 暂存内容检查及部分暂存保护测试
 npm run test:watch     # 交互式前端测试
 cargo test --locked -p layerlens-core # 单独验证不依赖 Tauri 的核心
@@ -46,7 +47,11 @@ Windows CI 使用相同的完整检查入口并构建 NSIS 安装包；新增或
 
 ## PSD 解析实验
 
-本轮精确使用 `ag-psd 0.3.0`（上游仓库名 `ag-psd-rs`），第三方类型隔离在核心适配器内。实验只接纳预检覆盖的 PSD v1、RGB／8 位、RAW／RLE 简单结构；文字、ICC 和其他未验证的附加信息、蒙版、ZIP 及其他模式暂时明确拒绝，不能据此推断候选库本身均不支持。无保存时合成图时仍可查看图层元数据，但不自动重新合成。预览仅开放三通道且不含合成透明度标记的输入，其他情况保留元数据和可用的图层导出，并说明候选限制。
+本轮使用 `ag-psd 0.3.0 + LayerLens patch 1`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，生产解析器选型尚未完成。
+
+实验接纳预检覆盖的 PSD v1、RGB／8 位、3／4 个合成通道及 RAW／RLE 像素。未知资源和附加块在已校验的边界内跳读，并记录诊断；明确未实现的渐变等能力可局部降级，结构损坏、越界和预算错误仍使读取失败。图层区分组、文字、位图、形状、智能对象、调整层和未知类型。文字只提供 TySh 原文、UTF-16 长度与变换，保留 CR/LF 和首尾空白；分段样式、字体及单位保真仍待验收。
+
+预览使用保存时合成图，不重新渲染图层；支持有 global alpha 标记的合成透明度。ICC 仅记录存在性、大小及指纹，未执行颜色转换，因此该类预览标为 `partial`。缺失合成图或额外通道语义未验证时，预览明确不可用，不影响已读取元数据。ZIP、高位深、其他颜色模式及 PSB 尚未开放。
 
 ```powershell
 npm run fixtures:check # 检查独立合成样本、预期值和指纹是否可复现
@@ -54,9 +59,11 @@ New-Item -ItemType Directory -Force .local | Out-Null
 cargo run --locked -p layerlens-core --example inspect_psd -- crates/layerlens-core/tests/fixtures/psd/bitmap-raw.psd .local/psd-raw-report
 ```
 
-输出目录必须不存在。命令生成 `report.json`、可用的 `preview.png` 和逐层 `layer-<id>.png`；报告记录源 SHA-256、规范化元数据、能力限制、解析及逐项解码／编码耗时。简单可见位图以 1× 导出，保留画布外部分和透明边缘；隐藏层、组和未验证的混合／不透明度依赖不导出。失败项保留错误原因并使命令返回非零，不覆盖已有文件。
+输出目录必须不存在。命令生成 `report.json`、可用的 `preview.png` 和逐层 `layer-<id>.png`；报告记录源 SHA-256、解析器标识、显式预算、规范化元数据、逐项诊断和耗时。报告包含原文和图层名称，私有稿报告与派生图应存入被忽略的 `.local/`。简单可见位图以 1× 导出，保留画布外部分和透明边缘；隐藏层、组、复杂类型及含蒙版、效果或其他未验证视觉依赖的图层不作为独立素材导出。预览允许 `partial`，图层仅导出 `supported` 项；不支持项记录为跳过，实际解码或写入失败返回非零，不覆盖已有文件。
 
-Windows 读取期间限制并发写入和替换，后续按需解码只使用已取得的压缩数据。默认准入上限为源文件 64 MiB、画布与图层累计 16 Mi 像素、4096 条图层记录，另限制组嵌套 64 层；这些是实验保护阈值，不是全进程内存硬上限或性能承诺。尚未完成真实 H5 稿、文字样式、ICC 色彩对照和规模性能验收。样本来源、独立预期与覆盖范围见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
+Windows 读取期间限制并发写入和替换，后续按需解码只使用已取得的压缩数据。默认上限为源文件 64 MiB、画布／图层／蒙版累计 16 Mi 像素、4096 条图层记录、64 层组嵌套；单次解码的 RGBA 与临时缓冲预算为 128 MiB，不含源数据、元数据与输出 PNG，也不是全进程内存上限。CLI 可通过 `--max-file-mib`、`--max-total-pixels`、`--max-decoded-mib`、`--max-layers` 显式调整，报告保留实际值。`--metadata-only` 只写报告，`--preview-only` 写报告和合成预览，两者互斥。
+
+7 个公开合成样本由独立生成器维护。首个私有真实稿已在显式扩大源文件和累计像素预算后，通过正式核心的结构和合成预览对照；仍未完成 Photoshop 视觉参考、文字样式、ICC 与规模性能验收。能力矩阵及复现记录见[活动任务](devlog/_plan/260915/M0-01-PSD解析验证.md)，样本来源及独立预期见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
 
 ## 格式化与提交
 
@@ -70,7 +77,7 @@ npm run format:web:check  # 仅检查上述 Prettier 文件
 npm run format:staged     # 检查 Git 索引中的待提交内容
 ```
 
-Prettier 的范围包含 `docs/`、Markdown、前端代码及 `src-tauri` JSON 等受支持文件；生成 DTO、锁文件、编译产物、`.local/` 和 Husky 内部生成目录 `.husky/_/` 由忽略配置排除。Rust 通过 `.rustfmt.toml` 明确使用 2024 edition 与 2024 格式风格。
+Prettier 的范围包含 `docs/`、Markdown、前端代码及 `src-tauri` JSON 等受支持文件；生成 DTO、锁文件、编译产物、`.local/` 和 Husky 内部生成目录 `.husky/_/` 由忽略配置排除。PSD `manifest.json` 由 `fixtures:check` 逐字节校验，不另行格式化生成结果。Rust 通过 `.rustfmt.toml` 明确使用 2024 edition 与 2024 格式风格；格式入口只处理两个自有 crate，`vendor/` 保留上游源码格式以便审查补丁，暂存检查采用相同忽略规则。
 
 Husky 的 `pre-commit` 调用 `format:staged`。检查器直接读取 Git 索引中的文件内容，通过 Prettier API 或 rustfmt 标准输入检查，通常只检查暂存的新增、修改、重命名和复制文件，忽略删除项；暂存的格式配置发生变化时，检查范围扩大到整个索引。文件名中的空格和中文按完整路径处理。
 

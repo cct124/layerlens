@@ -144,6 +144,290 @@
       "note": "合法 RGB/16 位输入；合成图为 R=0x1234、G=0xabcd、B=0x00ff，不伪造 RGBA8 预期。",
       "sizeBytes": 74,
       "sha256": "66e65f2d8d39a736835578b23a0b6f595f37c9c888d14166cb4b0ccf99860ea5"
+    },
+    {
+      "file": "resources-groups-alpha-raw.psd",
+      "compression": "raw",
+      "document": {
+        "width": 4,
+        "height": 1,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [
+        {
+          "name": "alpha-art",
+          "kind": "bitmap",
+          "visible": true,
+          "effectiveVisible": true,
+          "parentName": null,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 1
+          },
+          "rgbaHex": "204060ff1e3c5a55183654aaffffff00"
+        },
+        {
+          "name": "hidden-child",
+          "kind": "bitmap",
+          "visible": true,
+          "effectiveVisible": false,
+          "parentName": "hidden-folder",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ff8000ff"
+        },
+        {
+          "name": "hidden-folder",
+          "kind": "group",
+          "visible": false,
+          "effectiveVisible": false,
+          "parentName": null,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          }
+        }
+      ],
+      "composite": {
+        "width": 4,
+        "height": 1,
+        "rgbaHex": "204060ff1e3c5a55183654aaffffff00"
+      },
+      "storedComposite": {
+        "width": 4,
+        "height": 1,
+        "rgbaHex": "204060ffb4bec85565798daaffffff00"
+      },
+      "resources": [
+        {
+          "id": 1028,
+          "dataHex": "1c0205000141"
+        },
+        {
+          "id": 1039,
+          "dataHex": "4943432d756e76616c696461746564",
+          "profileValidated": false
+        },
+        {
+          "id": 1005,
+          "resolutionDpi": 72
+        }
+      ],
+      "layerRecordCount": 4,
+      "globalAlpha": true,
+      "note": "非空未知图像资源、奇数长度 opaque ICC、资源后续读取、隐藏父组和合成透明度。",
+      "sizeBytes": 484,
+      "sha256": "c47d4931c564143e98f4f8a06f8be20073fcc4e84b06034dfcf8bf4334eaa0b1"
+    },
+    {
+      "file": "resources-groups-alpha-rle.psd",
+      "compression": "rle",
+      "document": {
+        "width": 4,
+        "height": 1,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [
+        {
+          "name": "alpha-art",
+          "kind": "bitmap",
+          "visible": true,
+          "effectiveVisible": true,
+          "parentName": null,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 1
+          },
+          "rgbaHex": "204060ff1e3c5a55183654aaffffff00"
+        },
+        {
+          "name": "hidden-child",
+          "kind": "bitmap",
+          "visible": true,
+          "effectiveVisible": false,
+          "parentName": "hidden-folder",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ff8000ff"
+        },
+        {
+          "name": "hidden-folder",
+          "kind": "group",
+          "visible": false,
+          "effectiveVisible": false,
+          "parentName": null,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          }
+        }
+      ],
+      "composite": {
+        "width": 4,
+        "height": 1,
+        "rgbaHex": "204060ff1e3c5a55183654aaffffff00"
+      },
+      "storedComposite": {
+        "width": 4,
+        "height": 1,
+        "rgbaHex": "204060ffb4bec85565798daaffffff00"
+      },
+      "resources": [
+        {
+          "id": 1028,
+          "dataHex": "1c0205000141"
+        },
+        {
+          "id": 1039,
+          "dataHex": "4943432d756e76616c696461746564",
+          "profileValidated": false
+        },
+        {
+          "id": 1005,
+          "resolutionDpi": 72
+        }
+      ],
+      "layerRecordCount": 4,
+      "globalAlpha": true,
+      "note": "非空未知图像资源、奇数长度 opaque ICC、资源后续读取、隐藏父组和合成透明度。",
+      "sizeBytes": 520,
+      "sha256": "e6398ebaeeae72f00061a67082761cecb5c2a4ada5c7c31c33f3b8c4a5d8c8a5"
+    },
+    {
+      "file": "metadata-text.psd",
+      "compression": "raw",
+      "document": {
+        "width": 1,
+        "height": 1,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [
+        {
+          "name": "unsupported-gradient",
+          "kind": "shape",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ffffffff"
+        },
+        {
+          "name": "literal-text",
+          "kind": "text",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ffffffff"
+        },
+        {
+          "name": "placed-object",
+          "kind": "smartObject",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ffffffff"
+        },
+        {
+          "name": "brightness-adjustment",
+          "kind": "adjustment",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ffffffff"
+        },
+        {
+          "name": "unknown-semantic-tag",
+          "kind": "unknown",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "rgbaHex": "ffffffff"
+        }
+      ],
+      "composite": {
+        "width": 1,
+        "height": 1,
+        "rgbaHex": "ffffffff"
+      },
+      "text": {
+        "rawText": " 中😀é\r\n尾  \r",
+        "utf16Length": 12,
+        "transform": [
+          1.5,
+          0.25,
+          -0.5,
+          2,
+          -3,
+          7
+        ],
+        "styleRuns": null
+      },
+      "additionalTags": [
+        {
+          "layerName": "unsupported-gradient",
+          "key": "GdFl"
+        },
+        {
+          "layerName": "literal-text",
+          "key": "TySh"
+        },
+        {
+          "layerName": "placed-object",
+          "key": "PlLd"
+        },
+        {
+          "layerName": "brightness-adjustment",
+          "key": "brit"
+        },
+        {
+          "layerName": "unknown-semantic-tag",
+          "key": "zzzz"
+        }
+      ],
+      "note": "最小 descriptor 不含 EngineData；验证原文和仿射矩阵，不声明字体/字号/分段样式保真。",
+      "sizeBytes": 973,
+      "sha256": "adf6e7af63fe5b521b751f0b0f2241430cf4734640da57319e46b01e420cff15"
     }
   ]
 }

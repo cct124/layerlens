@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/layerlens-core", "src-tauri"]
+exclude = ["vendor/ag-psd"]
 resolver = "3"
 
 [workspace.package]
@@ -24,3 +25,6 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = "warn"
+
+[patch.crates-io]
+ag-psd = { path = "vendor/ag-psd" }

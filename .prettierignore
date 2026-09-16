@@ -8,3 +8,6 @@ package-lock.json
 Cargo.lock
 .local/
 .husky/_/
+vendor/
+# 由 fixtures:check 逐字节校验，保持独立生成器的确定性 JSON 格式。
+crates/layerlens-core/tests/fixtures/psd/manifest.json
