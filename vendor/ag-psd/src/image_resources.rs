@@ -1734,7 +1734,21 @@ fn read_animations(
                         1,
                         |reader, inner_left| {
                             if sub_key == "AnDs" {
+                                let start = reader.offset;
                                 let desc = read_version_and_descriptor(reader)?;
+                                // Some Photoshop files include four-byte zero alignment
+                                // in AnDs's declared length; others end at the descriptor.
+                                // Consume only exact padding so Roll stays at its boundary.
+                                let padding = inner_left(reader);
+                                let expected = (4 - (reader.offset - start) % 4) % 4;
+                                if padding != 0 && padding != expected {
+                                    return Err(ReadError::StrictViolation("Invalid AnDs padding length".to_string()));
+                                }
+                                for _ in 0..padding {
+                                    if read_uint8(reader)? != 0 {
+                                        return Err(ReadError::StrictViolation("Nonzero AnDs padding".to_string()));
+                                    }
+                                }
                                 target.animations = Some(parse_animations(&desc));
                             } else {
                                 // 'Roll' or unhandled — skip bytes.

@@ -29,4 +29,4 @@ pub use text_model::{
 };
 
 /// 当前原型使用的候选及仓库补丁标识；补丁来源见 vendor/ag-psd 的维护记录。
-pub const PARSER_BUILD: &str = "ag-psd 0.3.0 + LayerLens patch 2";
+pub const PARSER_BUILD: &str = "ag-psd 0.3.0 + LayerLens patch 3";

@@ -276,6 +276,7 @@ fn layer_and_mask(
         return Ok(result);
     }
     let mut info = section.section()?;
+    let info_start = info.offset;
     if !info.remaining.is_empty() {
         let signed_count = info.u16()? as i16;
         result.global_alpha = signed_count < 0;
@@ -303,10 +304,19 @@ fn layer_and_mask(
             layer_channels(&mut info, &layer)?;
             result.layers.push(layer.record);
         }
-        if info.remaining.len() > 1 {
+        // 公开真实稿同时存在两字节和四字节补齐；仅接受精确对齐所需的零字节，
+        // 不能将任意剩余数据当作 padding。见 M0 公开样本兼容性记录。
+        let consumed = info.offset - info_start;
+        let tail = info.remaining.len();
+        if tail != (2 - consumed % 2) % 2 && tail != (4 - consumed % 4) % 4 {
             return Err(invalid("PSD 图层信息区包含未声明的数据"));
         }
-        info.padding(info.remaining.len())?;
+        info.padding(tail)?;
+    }
+    // 部分第三方稿在完整 Layer Info 后直接结束父区段（候选库亦兼容 SAI）。
+    // 仅接受恰好结束；存在 1..3 字节长度前缀或不完整蒙版时仍按截断拒绝。
+    if section.remaining.is_empty() {
+        return Ok(result);
     }
     let global_mask = section.section()?;
     if !global_mask.remaining.is_empty() {

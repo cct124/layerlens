@@ -64,6 +64,56 @@ fn malformed_known_resource_is_never_a_recoverable_feature() {
 }
 
 #[test]
+fn animation_descriptor_accepts_only_exact_zero_padding_and_preserves_following_data() {
+    let build = |descriptor: &[u8], padding: &[u8]| {
+        let mut blocks = b"8BIMAnDs".to_vec();
+        blocks.extend_from_slice(&((descriptor.len() + padding.len()) as u32).to_be_bytes());
+        blocks.extend_from_slice(descriptor);
+        blocks.extend_from_slice(padding);
+        blocks.extend_from_slice(b"8BIMRoll\0\0\0\x08\0\0\0\0\0\0\0\0");
+        let mut payload = b"maniIRFR".to_vec();
+        payload.extend_from_slice(&(blocks.len() as u32).to_be_bytes());
+        payload.extend(blocks);
+        let mut resources = resource(4000, &payload);
+        resources.extend(resource(1028, &[1, 2]));
+        document(&resources, &[])
+    };
+    // Independent descriptor encoding: name and optional boolean span all mod-4 lengths.
+    for name_length in 0_u32..=1 {
+        for with_property in [false, true] {
+            let mut descriptor = 16_u32.to_be_bytes().to_vec();
+            descriptor.extend_from_slice(&name_length.to_be_bytes());
+            if name_length == 1 { descriptor.extend_from_slice(&[0, 0]); }
+            descriptor.extend_from_slice(b"\0\0\0\0null");
+            descriptor.extend_from_slice(&u32::from(with_property).to_be_bytes());
+            if with_property { descriptor.extend_from_slice(b"\0\0\0\0testbool\x01"); }
+            let expected = (4 - descriptor.len() % 4) % 4;
+            for count in 0..=7 {
+                let padding = vec![0; count];
+                let result = crate::read_psd(&build(&descriptor, &padding), &strict_options());
+                if count == 0 || count == expected {
+                    let psd = result.unwrap();
+                    assert!(psd.image_resources.unwrap().animations.is_some());
+                    assert_eq!(psd.diagnostics[0].tag, "1028");
+                    assert_eq!(psd.raw_composite_data.unwrap(), [0, 0, 10, 20, 30]);
+                    if count > 0 {
+                        let mut nonzero = padding;
+                        nonzero[count - 1] = 1;
+                        assert!(crate::read_psd(&build(&descriptor, &nonzero), &strict_options()).is_err());
+                    }
+                } else {
+                    assert!(result.is_err());
+                }
+            }
+            // A zero-length section is absent per the existing container contract.
+            for truncated in 1..descriptor.len() {
+                assert!(crate::read_psd(&build(&descriptor[..truncated], &[]), &strict_options()).is_err(), "prefix {truncated}");
+            }
+        }
+    }
+}
+
+#[test]
 fn unsupported_gradient_is_typed_and_cannot_swallow_a_truncated_descriptor() {
     let mut payload = 16_u32.to_be_bytes().to_vec();
     payload.extend_from_slice(&0_u32.to_be_bytes()); // descriptor name

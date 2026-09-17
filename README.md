@@ -48,7 +48,7 @@ Windows CI 使用相同的完整检查入口并构建 NSIS 安装包；新增或
 
 ## PSD 解析实验
 
-本轮使用 `ag-psd 0.3.0 + LayerLens patch 2`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，生产解析器选型尚未完成。
+首版支持子集采用 `ag-psd 0.3.0 + LayerLens patch 3`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，支持范围、已知限制与后续条件见[解析器决策](docs/07-PSD首版支持与解析器决策.md)。
 
 实验接纳预检覆盖的 PSD v1、RGB／8 位、3／4 个合成通道及 RAW／RLE 像素。未知资源和附加块在已校验的边界内跳读，并记录诊断；明确未实现的渐变等能力可局部降级，结构损坏、越界和预算错误仍使读取失败。图层区分组、文字、位图、形状、智能对象、调整层和未知类型。
 
@@ -70,7 +70,7 @@ cargo run --locked -p layerlens-core --example inspect_psd -- crates/layerlens-c
 
 Windows 读取期间限制并发写入和替换，后续按需解码只使用已取得的压缩数据。默认上限为源文件 64 MiB、画布／图层／蒙版累计 16 Mi 像素、4096 条图层记录、64 层组嵌套；单次解码的 RGBA 与临时缓冲预算为 128 MiB，不含源数据、元数据与输出 PNG，也不是全进程内存上限。CLI 可通过 `--max-file-mib`、`--max-total-pixels`、`--max-decoded-mib`、`--max-layers` 显式调整，报告保留实际值。`--metadata-only` 只写报告，`--preview-only` 写报告和合成预览，两者互斥。
 
-10 个公开合成样本由独立生成器维护，包含 72／300／缺失 DPI 的 EngineData 分段样式、明确属性预期和异常降级。首个私有真实稿已通过正式核心结构和合成预览对照，读取到 95 个文字层、204 个字符段和 108 个段落段；已完成微型 RAW／RLE 与该真实稿的 release 性能及释放基线。Photoshop 文字排版／单位／颜色参考、ICC、更多规模样本和桌面响应仍待验证。能力矩阵及实测记录见[活动任务](devlog/_plan/260915/M0-01-PSD解析验证.md)，样本来源及独立预期见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
+10 个仓库内合成样本由独立生成器维护；另在被忽略的 `.local/public-psd-260917/` 下载 21 份公开 PSD，默认预算下 15 份、显式实验预算下 17 份完成读取与预览。真实长页、中等页面、图层密集样本及既有私有稿已完成 release 性能和释放基线；新增 3 个上游 Photoshop 参考像素及 1 张配套 PNG 对照通过，仅证明对应保存时合成图数据。下载资源、参考图和派生产物均不进入仓库。Photoshop 文字排版／单位、ICC、复杂素材与桌面响应仍待验证。能力矩阵、失败原因及实测记录见[M0-01 结果](devlog/_fin/260917/M0-01-PSD解析验证.md)，仓库样本的独立预期见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
 
 ### 性能与资源基线
 

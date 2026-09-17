@@ -1,4 +1,4 @@
-# ag-psd 0.3.0 局部兼容补丁（patch 2）
+# ag-psd 0.3.0 局部兼容补丁（patch 3）
 
 来源为 crates.io 的 [`ag-psd 0.3.0` 发行归档](https://static.crates.io/crates/ag-psd/ag-psd-0.3.0.crate)，SHA-256：
 `6470c6a2f96a00a8d4154504020b34807c2282438c98f90f5069ef3f8cb0e7bf`。
@@ -30,6 +30,8 @@
 - `additional_info/vector_keys.rs`：仅把明确未实现的渐变与图案解释改为 typed unsupported。
 - `image_resources.rs`：原先静默跳过的 timeline information 显式返回 typed unsupported。
   恢复前仍完整解析其 descriptor；渐变／图案同样先验证完整 descriptor，再报告语义未实现。
+  patch 3 兼容 `AnDs` descriptor 末尾精确四字节对齐的零填充，也接受恰好结束；
+  多余字节、非零填充和截断仍失败，后续 `Roll` 保持原声明边界。
 - `layerlens_tests.rs`：公开、内存内构造的回归样本，不依赖私有 PSD。
 
 ## 修改文件和验证入口
@@ -41,12 +43,19 @@
 
 从 LayerLens 根目录运行 `npm run test:parser`（`cargo test --locked -p ag-psd --lib`）；
 该入口已纳入 `npm run check:rust` 和 CI 使用的 `npm run check`。
-本轮 269 项通过，其中 12 项为补丁专项回归。上游部分测试在其外部样本缺失时直接返回，
+本轮 270 项通过，其中 13 项为补丁专项回归。上游部分测试在其外部样本缺失时直接返回，
 此结果不等同于验证了上游完整样本库；LayerLens 自有公开样本在核心集成测试中另行验证。
 
 patch 2 核心集成测试使用独立编码的 `text-engine-*` PSD，核对原文、矩阵、字体、字符／段落属性与来源、
 不同 DPI、语义降级，以及直接修改 PSD 字节后的非法 TySh／EngineData UTF-16 和数字拒绝。
 私有稿仅在本机做结构与读取验证，不作为公开 fixture 或 Photoshop 视觉保真证据。
+
+patch 3 的独立内存样本覆盖 descriptor 长度的全部模四余数、0–7 字节尾部、非零填充、
+非空 descriptor 的全部截断前缀以及后续资源和合成图。证据来自仅保存在本机的公开
+`text.psd`、DIFF 与 EXE coming-soon 页面；没有复制这些资源或其内容进测试。
+核心另外收紧并兼容 Layer Info 的两／四字节零填充和父区段恰好结束时缺省的 global mask 长度，
+由 `tests/psd_framing.rs` 的独立 PSD 编码回归覆盖，不属于 vendored 源码修改。
+首版范围及仍未处理的 RAW 图案通道缺口见[解析器决策](../../docs/07-PSD首版支持与解析器决策.md)。
 
 这不是完整 PSD 安全审计，也未提供完整元数据总内存预算或颜色管理。LayerLens 的容器预检、
 支持子集与资源预算仍是正式入口的必要前提。尤其 ZIP 和高位深路径仍沿用上游部分临时
