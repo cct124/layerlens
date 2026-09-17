@@ -2,7 +2,9 @@
 
 use std::{fs, io::Cursor, path::PathBuf};
 
-use layerlens_core::psd::{LayerKind, ParseLimits, PsdDocument, PsdErrorCode, Support};
+use layerlens_core::psd::{
+    ExportBlocker, LayerKind, ParseLimits, PsdDocument, PsdErrorCode, Support,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -118,6 +120,7 @@ fn hidden_parent_preserves_child_own_visibility_and_prevents_export() {
             None => assert_eq!(layer.parent_id, None),
         }
         if !layer.effective_visible {
+            assert!(layer.export_blockers.contains(&ExportBlocker::Hidden));
             assert_eq!(layer.export.status, Support::Unsupported);
             assert_eq!(
                 document.layer_png(layer.id).unwrap_err().code,
@@ -246,6 +249,16 @@ fn global_mask_diagnostic_points_to_source_and_blocks_independent_assets() {
         .expect("全局蒙版限制有来源");
     assert_eq!(diagnostic.offset, mask_offset as u64);
     for layer in &document.info().layers {
+        assert!(layer.export_blockers.contains(&ExportBlocker::GlobalMask));
+        assert!(
+            !layer
+                .export_blockers
+                .contains(&ExportBlocker::AncestorVisualDependency)
+        );
+        assert_eq!(
+            layer.export_blockers.contains(&ExportBlocker::Hidden),
+            !layer.effective_visible
+        );
         assert_eq!(
             document.layer_png(layer.id).unwrap_err().code,
             PsdErrorCode::ExportUnsupported

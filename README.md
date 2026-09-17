@@ -36,8 +36,9 @@ npm run desktop:build # 构建 release 桌面程序及 Windows NSIS 安装包
 ```powershell
 npm run check          # 仓库格式、前端与 Rust 检查、DTO 一致性及 hook 测试
 npm run check:frontend # Prettier 格式、严格类型、lint、组件测试及前端构建
-npm run check:rust     # rustfmt、Clippy、Rust 测试及 DTO 一致性检查
+npm run check:rust     # rustfmt、Clippy、Rust 测试、DTO 一致性及 Windows 测量脚本回归
 npm run test:parser    # 本地 ag-psd 补丁回归；也纳入 check:rust
+npm run test:measurement # Windows 测量会话、目录保护及失败清理；也纳入 check:rust
 npm run test:hooks     # 暂存内容检查及部分暂存保护测试
 npm run test:watch     # 交互式前端测试
 cargo test --locked -p layerlens-core # 单独验证不依赖 Tauri 的核心
@@ -53,6 +54,8 @@ Windows CI 使用相同的完整检查入口并构建 NSIS 安装包；新增或
 
 文字保留 TySh 原文、UTF-16 长度、CR/LF、首尾空白及原始矩阵；新增经完整区间校验的字符／段落样式、显式字体引用、RGB 值和属性来源。每类最多 16384 段；区间错误只关闭对应类别，无效属性返回 `null` 并附诊断，不补默认字体。度量单位暂标为 `unverifiedEngine`，不按 DPI 或矩阵换算为 pt、px 或 CSS；颜色未做 ICC 转换、字重和字体可用性未推断，文字样式仍为 `partial`。输出契约与验证边界见[文字与样式](docs/03-PSD数据与素材.md#文字与样式)。
 
+工具持续负责原稿数据、来源、单位、变换和限制，目标项目的 CSS、布局、响应式策略及字体替代由 Agent 决定；这不是只适用于原型的临时限制。详见[产品职责边界](docs/01-产品与交互.md#目标与场景)。
+
 预览使用保存时合成图，不重新渲染图层；支持有 global alpha 标记的合成透明度。ICC 仅记录存在性、大小及指纹，未执行颜色转换，因此该类预览标为 `partial`。缺失合成图或额外通道语义未验证时，预览明确不可用，不影响已读取元数据。ZIP、高位深、其他颜色模式及 PSB 尚未开放。
 
 ```powershell
@@ -63,9 +66,28 @@ cargo run --locked -p layerlens-core --example inspect_psd -- crates/layerlens-c
 
 输出目录必须不存在。命令生成 `report.json`、可用的 `preview.png` 和逐层 `layer-<id>.png`；报告记录源 SHA-256、解析器标识、显式预算、规范化元数据、逐项诊断和耗时。报告包含原文和图层名称，私有稿报告与派生图应存入被忽略的 `.local/`。简单可见位图以 1× 导出，保留画布外部分和透明边缘；隐藏层、组、复杂类型及含蒙版、效果或其他未验证视觉依赖的图层不作为独立素材导出。预览允许 `partial`，图层仅导出 `supported` 项；不支持项记录为跳过，实际解码或写入失败返回非零，不覆盖已有文件。
 
+实验报告新增 `openTimings`（源读取、预检、候选解析、规范化、指纹、源缓冲释放及总耗时）、产物 `pngTimings`（解码／编码）和 `summary`（规模、能力及导出限制计数）。原有 `parseElapsedMs` 保留为含源读取与释放的打开总耗时，不能再与分项相加。图层 `exportBlockers` 保留可重叠的拒绝因素，原有主要原因不变；这些是未发布的核心／CLI 实验字段，尚未成为桌面或 MCP DTO。
+
 Windows 读取期间限制并发写入和替换，后续按需解码只使用已取得的压缩数据。默认上限为源文件 64 MiB、画布／图层／蒙版累计 16 Mi 像素、4096 条图层记录、64 层组嵌套；单次解码的 RGBA 与临时缓冲预算为 128 MiB，不含源数据、元数据与输出 PNG，也不是全进程内存上限。CLI 可通过 `--max-file-mib`、`--max-total-pixels`、`--max-decoded-mib`、`--max-layers` 显式调整，报告保留实际值。`--metadata-only` 只写报告，`--preview-only` 写报告和合成预览，两者互斥。
 
-10 个公开合成样本由独立生成器维护，包含 72／300／缺失 DPI 的 EngineData 分段样式、明确属性预期和异常降级。首个私有真实稿已通过正式核心结构和合成预览对照，本轮读取到 95 个文字层、204 个字符段和 108 个段落段；仍未完成 Photoshop 文字排版／单位／颜色视觉参考、ICC 与规模性能验收。能力矩阵及复现记录见[活动任务](devlog/_plan/260915/M0-01-PSD解析验证.md)，样本来源及独立预期见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
+10 个公开合成样本由独立生成器维护，包含 72／300／缺失 DPI 的 EngineData 分段样式、明确属性预期和异常降级。首个私有真实稿已通过正式核心结构和合成预览对照，读取到 95 个文字层、204 个字符段和 108 个段落段；已完成微型 RAW／RLE 与该真实稿的 release 性能及释放基线。Photoshop 文字排版／单位／颜色参考、ICC、更多规模样本和桌面响应仍待验证。能力矩阵及实测记录见[活动任务](devlog/_plan/260915/M0-01-PSD解析验证.md)，样本来源及独立预期见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
+
+### 性能与资源基线
+
+在仓库根目录使用 Windows PowerShell 5.1 运行；需要可用的 CIM 系统信息查询和子进程权限。脚本先完成锁定依赖的 release 构建，再启动独立 CLI 测量，不将编译耗时计入基线：
+
+```powershell
+New-Item -ItemType Directory -Force .local | Out-Null
+npm run bench:psd -- -InputPath crates/layerlens-core/tests/fixtures/psd/bitmap-raw.psd -OutputPath .local/baseline-raw -Mode all -Runs 6
+```
+
+`OutputPath` 必须不存在，父目录须已存在。`Mode` 为 `metadata`、`preview`（默认）或 `all`；`Runs` 为 1–100，默认 6。每轮重新打开并释放文档，后两种模式额外在同一文档上再次请求预览。当前没有解码缓存。源／像素预算通过 `MaxFileMiB`、`MaxTotalPixels`、`MaxDecodedMiB`、`MaxLayers` 显式调整，默认值与核心一致。
+
+输出包含 `baseline.json`、`run-NNN/report.json` 和按模式生成的 PNG。基线记录系统与构建信息、源／可执行文件／锁文件指纹、各阶段耗时及 ready／opened／exported／released 内存检查点；首次打开单列，后续打开统计最小值、中位数和最大值。简报不复制图层名称、文字及完整属性，私有稿的 PNG 和所有报告仍应留在 `.local/`。
+
+测量脚本每 25 ms 及检查点采集工作集与私有内存：峰值工作集是整个子进程的累计 OS 计数，私有内存峰值仅为采样最大值，释放效果看当时存活占用。系统文件缓存未清空，首次打开不能称为冷读；PNG 写盘未请求物理设备同步。会话总耗时包含检查点等待，核心阶段不包含等待和报告序列化。
+
+默认进程保护为 `TimeoutSeconds=180`、`MaxWorkingSetMiB=1024`、`MaxPrivateMiB=1536`，超限终止本次测量子进程并返回失败；它们是外部观察阈值，不是分配硬上限或产品默认预算。基线只覆盖同步 CLI，不代表桌面响应、并发多文档、应用缓存或取消行为已经验收。
 
 ## 格式化与提交
 
@@ -87,15 +109,15 @@ Husky 的 `pre-commit` 调用 `format:staged`。检查器直接读取 Git 索引
 
 ## 代码组织
 
-| 路径                      | 职责                                                      |
-| ------------------------- | --------------------------------------------------------- |
-| `src/features/workspace/` | 工作区界面、状态检查流程及组件测试                        |
-| `src/shared/api/`         | 桌面调用、运行时响应校验及生成的 TypeScript DTO           |
-| `crates/layerlens-core/`  | 独立 Rust 核心、协议约束与领域错误                        |
-| `src-tauri/`              | Tauri Commands、窗口、权限及打包配置                      |
-| `scripts/`                | 暂存格式检查、hook 测试、开发资源生成脚本及应用图标源文件 |
-| `.husky/`                 | 受版本管理的 Git hook 入口；内部生成目录忽略              |
-| `.github/workflows/`      | Windows 检查与安装包构建                                  |
+| 路径                      | 职责                                                       |
+| ------------------------- | ---------------------------------------------------------- |
+| `src/features/workspace/` | 工作区界面、状态检查流程及组件测试                         |
+| `src/shared/api/`         | 桌面调用、运行时响应校验及生成的 TypeScript DTO            |
+| `crates/layerlens-core/`  | 独立 Rust 核心、协议约束与领域错误                         |
+| `src-tauri/`              | Tauri Commands、窗口、权限及打包配置                       |
+| `scripts/`                | 格式与 hook 检查、PSD 测量及回归、开发资源生成与图标源文件 |
+| `.husky/`                 | 受版本管理的 Git hook 入口；内部生成目录忽略               |
+| `.github/workflows/`      | Windows 检查与安装包构建                                   |
 
 前端通过 `get_app_info` Command 调用核心，只有 `main` 窗口获得该命令权限。核心不依赖 Tauri；协议版本不匹配返回结构化错误。Rust mock IPC 测试覆盖成功、错误序列化和窗口权限，组件测试覆盖展示、错误重试、浏览器预览及非法响应。
 

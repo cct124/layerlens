@@ -32,10 +32,12 @@
     "icons:generate": "node scripts/generate-icons.mjs",
     "fixtures:generate": "node scripts/generate-psd-fixtures.mjs",
     "fixtures:check": "node scripts/generate-psd-fixtures.mjs --check",
+    "bench:psd": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/measure-psd.ps1",
+    "test:measurement": "node --test scripts/measure-psd.test.mjs",
     "test:parser": "cargo test --locked -p ag-psd --lib",
     "bindings:check": "cargo run --locked -p layerlens-core --example export_bindings -- --check",
     "check:frontend": "npm run format:web:check && npm run typecheck && npm run lint && npm run test && vite build",
-    "check:rust": "npm run fixtures:check && npm run format:rust:check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked && cargo test --locked -p layerlens-core --example inspect_psd && npm run test:parser && npm run bindings:check",
+    "check:rust": "npm run fixtures:check && npm run format:rust:check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked && cargo test --locked -p layerlens-core --example inspect_psd && npm run test:parser && npm run bindings:check && npm run test:measurement",
     "check": "npm run check:frontend && npm run check:rust && npm run test:hooks"
   },
   "dependencies": {

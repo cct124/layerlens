@@ -31,6 +31,7 @@ pub(super) fn normalize(
         .collect();
     let mut layers = LayerNormalizer {
         records,
+        global_mask: header.global_mask_offset.is_some(),
         output: Vec::new(),
         paths: Vec::new(),
     };
@@ -39,7 +40,7 @@ pub(super) fn normalize(
         &[],
         None,
         true,
-        header.global_mask_offset.is_none(),
+        true,
     )?;
     if layers.output.len() != layers.records.len() {
         return Err(invalid_candidate("候选图层数量与已校验的 PSD 记录不一致"));
@@ -168,6 +169,7 @@ pub(super) fn normalize(
 }
 
 struct LayerNormalizer<'a> {
+    global_mask: bool,
     records: Vec<&'a LayerRecord>,
     output: Vec<LayerInfo>,
     paths: Vec<Vec<usize>>,
@@ -225,15 +227,38 @@ impl LayerNormalizer<'_> {
                 .iter()
                 .map(|value| diagnostic(value, DiagnosticScope::Layer))
                 .collect();
-            let simple =
-                parent_simple && simple_compositing(layer, record) && diagnostics.is_empty();
+            let own_simple = simple_compositing(layer, record) && diagnostics.is_empty();
+            let simple = parent_simple && own_simple;
+            // 全局、祖先与自身依赖分别保留；不能因较早的拒绝原因遮住其他限制。
+            let mut export_blockers = Vec::new();
+            for (blocked, reason) in [
+                (
+                    kind != LayerKind::Bitmap,
+                    ExportBlocker::UnsupportedLayerKind,
+                ),
+                (!effective_visible, ExportBlocker::Hidden),
+                (self.global_mask, ExportBlocker::GlobalMask),
+                (!parent_simple, ExportBlocker::AncestorVisualDependency),
+                (!own_simple, ExportBlocker::LayerVisualDependency),
+                (!record.has_rgb, ExportBlocker::MissingRgbChannels),
+                (
+                    record.bounds.width == 0
+                        || record.bounds.height == 0
+                        || layer.raw_data.is_none(),
+                    ExportBlocker::EmptyBitmap,
+                ),
+            ] {
+                if blocked {
+                    export_blockers.push(reason);
+                }
+            }
             let export = if kind != LayerKind::Bitmap {
                 Capability::unsupported(
                     "仅开放已验证的普通位图独立导出；组、文字、形状、智能对象及未知类型不以通道冒充素材",
                 )
             } else if !effective_visible {
                 Capability::unsupported("图层或祖先组不可见")
-            } else if !simple || !record.has_rgb {
+            } else if self.global_mask || !simple || !record.has_rgb {
                 Capability::unsupported("图层或祖先存在未验证的视觉依赖，或缺少完整 RGB 通道")
             } else if record.bounds.width == 0
                 || record.bounds.height == 0
@@ -269,6 +294,7 @@ impl LayerNormalizer<'_> {
                 text,
                 diagnostics,
                 export,
+                export_blockers,
             });
             self.paths.push(path.clone());
             if let Some(children) = &layer.children {

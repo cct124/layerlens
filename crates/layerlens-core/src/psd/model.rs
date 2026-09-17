@@ -30,6 +30,19 @@ pub enum LayerKind {
     Unknown,
 }
 
+/// 独立素材导出的阻塞因素；同一节点可同时包含多项，统计不可直接相加为图层数。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExportBlocker {
+    UnsupportedLayerKind,
+    Hidden,
+    GlobalMask,
+    AncestorVisualDependency,
+    LayerVisualDependency,
+    MissingRgbChannels,
+    EmptyBitmap,
+}
+
 /// 诊断所属边界；文件偏移始终相对于固定的原始 PSD 字节。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +111,8 @@ pub struct LayerInfo {
     pub text: Option<TextData>,
     pub diagnostics: Vec<Diagnostic>,
     pub export: Capability,
+    /// 完整的已知拒绝因素；export.reason 仍保留面向用户的主要原因。
+    pub export_blockers: Vec<ExportBlocker>,
 }
 
 /// 本轮实验读取的文档信息；没有读取到的分辨率与配置明确为 null。

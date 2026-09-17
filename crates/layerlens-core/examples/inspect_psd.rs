@@ -16,9 +16,15 @@ use std::{
 };
 
 use layerlens_core::psd::{
-    Capability, DocumentInfo, LayerId, PARSER_BUILD, ParseLimits, PsdDocument, PsdError, Support,
+    Capability, DocumentInfo, LayerId, OpenTimings, PARSER_BUILD, ParseLimits, PngTimings,
+    PsdDocument, PsdError, Support,
 };
 use serde::Serialize;
+
+#[path = "inspect_psd/benchmark.rs"]
+mod benchmark;
+#[path = "inspect_psd/summary.rs"]
+mod summary;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +34,8 @@ struct Report<'a> {
     source_sha256: &'a str,
     source_size_bytes: usize,
     parse_elapsed_ms: f64,
+    open_timings: OpenTimings,
+    summary: summary::DocumentSummary,
     limits: ParseLimits,
     document: &'a DocumentInfo,
     artifacts: Vec<ArtifactReport>,
@@ -48,6 +56,7 @@ struct Options {
     output: PathBuf,
     limits: ParseLimits,
     mode: OutputMode,
+    benchmark_runs: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -57,6 +66,7 @@ struct ArtifactReport {
     layer_id: Option<LayerId>,
     capability: Capability,
     decode_png_elapsed_ms: Option<f64>,
+    png_timings: Option<PngTimings>,
     write_elapsed_ms: Option<f64>,
     #[serde(flatten)]
     outcome: ArtifactOutcome,
@@ -90,61 +100,43 @@ fn main() -> ExitCode {
 
 fn run() -> Result<bool, Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
+    let options = parse_args(&args)?;
+    if let Some(runs) = options.benchmark_runs {
+        return benchmark::run(&options, runs);
+    }
     let Options {
         input,
         output,
         limits,
         mode,
-    } = parse_args(&args)?;
-    let started = Instant::now();
-    let document = PsdDocument::open(&input, limits)?;
-    let parse_elapsed_ms = elapsed_ms(started);
+        ..
+    } = options;
+    let (document, open_timings) = PsdDocument::open_measured(&input, limits)?;
 
     // 由操作系统原子创建目录；既有目录、文件及源文件本身均不能成为覆盖目标。
     fs::create_dir(&output)?;
     let info = document.info();
-    let mut artifacts = Vec::new();
-    if mode != OutputMode::MetadataOnly {
-        artifacts.push(export_artifact(
-            &output,
-            "preview.png".into(),
-            None,
-            &info.preview,
-            || document.preview_png(),
-        ));
-    }
-    if mode == OutputMode::All {
-        for layer in &info.layers {
-            artifacts.push(export_artifact(
-                &output,
-                format!("layer-{}.png", layer.id.0),
-                Some(layer.id),
-                &layer.export,
-                || document.layer_png(layer.id),
-            ));
-        }
-    }
-
+    let artifacts = export_artifacts(&document, &output, mode);
     let exported = artifacts
         .iter()
         .filter(|artifact| matches!(artifact.outcome, ArtifactOutcome::Exported { .. }))
         .count();
-    let succeeded = !artifacts
-        .iter()
-        .any(|artifact| matches!(artifact.outcome, ArtifactOutcome::Failed { .. }));
+    let succeeded = artifacts_succeeded(&artifacts);
     let report = Report {
         parser: PARSER_BUILD,
         mode,
         source_sha256: document.source_sha256(),
         source_size_bytes: document.source_size_bytes(),
-        parse_elapsed_ms,
+        parse_elapsed_ms: open_timings.total_ms,
+        open_timings,
+        summary: summary::DocumentSummary::from_info(info),
         limits,
         document: info,
         artifacts,
         limitations: [
             "按 mode 输出；预览允许 partial 并保留限制，独立素材仅导出 supported 项。",
-            "耗时为本次进程内墙钟记录，解析包含固定源数据与指纹计算；不代表稳定性能基线。",
-            "当前实验未测量峰值内存；真实 PSD 准确性和其他平台兼容性仍需独立验收。",
+            "耗时为进程内墙钟毫秒；总时间包含源读取与释放，PNG 分项区分解码和编码；写盘不含物理设备同步。",
+            "本报告不含内存测量；重复进程资源基线使用 scripts/measure-psd.ps1；未接入桌面显示。",
         ],
     };
     let mut json = serde_json::to_vec_pretty(&report)?;
@@ -152,6 +144,43 @@ fn run() -> Result<bool, Box<dyn Error>> {
     write_new(&output.join("report.json"), &json)?;
     println!("已写入 report.json，成功输出 {exported} 项 PNG。");
     Ok(succeeded)
+}
+
+fn artifacts_succeeded(artifacts: &[ArtifactReport]) -> bool {
+    !artifacts
+        .iter()
+        .any(|artifact| matches!(artifact.outcome, ArtifactOutcome::Failed { .. }))
+}
+
+fn export_artifacts(
+    document: &PsdDocument,
+    output: &Path,
+    mode: OutputMode,
+) -> Vec<ArtifactReport> {
+    let info = document.info();
+    let mut artifacts = Vec::new();
+    if mode != OutputMode::MetadataOnly {
+        artifacts.push(export_artifact(
+            output,
+            "preview.png".into(),
+            None,
+            &info.preview,
+            || document.preview_png_measured(),
+        ));
+    }
+    if mode == OutputMode::All {
+        for layer in &info.layers {
+            artifacts.push(export_artifact(
+                output,
+                format!("layer-{}.png", layer.id.0),
+                Some(layer.id),
+                &layer.export,
+                || document.layer_png_measured(layer.id),
+            ));
+        }
+    }
+
+    artifacts
 }
 
 fn invalid_argument(message: impl Into<String>) -> io::Error {
@@ -180,11 +209,13 @@ fn parse_args(args: &[OsString]) -> io::Result<Options> {
     let [input, output, options @ ..] = args else {
         return Err(invalid_argument(
             "用法：inspect_psd INPUT.psd OUTPUT_DIR [--max-file-mib N] [--max-total-pixels N] \
-             [--max-decoded-mib N] [--max-layers N] [--metadata-only | --preview-only]",
+             [--max-decoded-mib N] [--max-layers N] [--metadata-only | --preview-only] \
+             [--benchmark-runs 1..100（由 measure-psd.ps1 驱动）]",
         ));
     };
     let mut limits = ParseLimits::default();
     let mut mode = OutputMode::All;
+    let mut benchmark_runs = None;
     let mut seen = HashSet::new();
     let mut options = options.iter();
     while let Some(option) = options.next() {
@@ -207,7 +238,11 @@ fn parse_args(args: &[OsString]) -> io::Result<Options> {
         }
         if !matches!(
             option,
-            "--max-file-mib" | "--max-total-pixels" | "--max-decoded-mib" | "--max-layers"
+            "--max-file-mib"
+                | "--max-total-pixels"
+                | "--max-decoded-mib"
+                | "--max-layers"
+                | "--benchmark-runs"
         ) {
             return Err(invalid_argument(format!("未知选项：{option}")));
         }
@@ -216,6 +251,12 @@ fn parse_args(args: &[OsString]) -> io::Result<Options> {
             .ok_or_else(|| invalid_argument(format!("{option} 缺少数值")))?;
         let value = positive_integer(value, option)?;
         match option {
+            "--benchmark-runs" => {
+                if value > 100 {
+                    return Err(invalid_argument("--benchmark-runs 必须在 1..=100 范围内"));
+                }
+                benchmark_runs = Some(value as u32);
+            }
             "--max-file-mib" => limits.max_file_bytes = mebibytes(value, option)?,
             "--max-total-pixels" => limits.max_total_pixels = value,
             "--max-decoded-mib" => limits.max_decoded_bytes = mebibytes(value, option)?,
@@ -231,6 +272,7 @@ fn parse_args(args: &[OsString]) -> io::Result<Options> {
         output: output.into(),
         limits,
         mode,
+        benchmark_runs,
     })
 }
 
@@ -239,13 +281,14 @@ fn export_artifact(
     file: String,
     layer_id: Option<LayerId>,
     capability: &Capability,
-    decode_png: impl FnOnce() -> Result<Vec<u8>, PsdError>,
+    decode_png: impl FnOnce() -> Result<(Vec<u8>, PngTimings), PsdError>,
 ) -> ArtifactReport {
     let mut report = ArtifactReport {
         file,
         layer_id,
         capability: capability.clone(),
         decode_png_elapsed_ms: None,
+        png_timings: None,
         write_elapsed_ms: None,
         outcome: ArtifactOutcome::Skipped {
             reason: capability.reason.clone(),
@@ -261,7 +304,10 @@ fn export_artifact(
     let decoded = decode_png();
     report.decode_png_elapsed_ms = Some(elapsed_ms(started));
     let bytes = match decoded {
-        Ok(bytes) => bytes,
+        Ok((bytes, timings)) => {
+            report.png_timings = Some(timings);
+            bytes
+        }
         Err(error) => {
             report.outcome = ArtifactOutcome::Failed {
                 code: format!("{:?}", error.code),
@@ -322,6 +368,14 @@ mod tests {
         assert_eq!(defaults.input, Path::new("输入.psd"));
         assert_eq!(defaults.output, Path::new("输出目录"));
         assert_eq!(defaults.mode, OutputMode::All);
+        assert_eq!(defaults.benchmark_runs, None);
+        assert_eq!(
+            parse_args(&arguments(&["--benchmark-runs", "5"]))
+                .unwrap()
+                .benchmark_runs,
+            Some(5)
+        );
+        assert!(parse_args(&arguments(&["--benchmark-runs", "101"])).is_err());
         assert_eq!(
             serde_json::to_value(defaults.limits).unwrap(),
             serde_json::to_value(ParseLimits::default()).unwrap()
@@ -353,6 +407,7 @@ mod tests {
     #[test]
     fn budgets_reject_nonpositive_noninteger_missing_and_overflow_values() {
         for option in [
+            "--benchmark-runs",
             "--max-file-mib",
             "--max-total-pixels",
             "--max-decoded-mib",

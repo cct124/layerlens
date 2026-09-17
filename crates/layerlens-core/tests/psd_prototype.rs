@@ -204,6 +204,50 @@ fn hidden_layers_and_unknown_layer_ids_have_distinct_errors() {
 }
 
 #[test]
+#[cfg(windows)]
+fn measured_operations_preserve_metadata_pixels_and_errors() {
+    for name in ["bitmap-raw.psd", "bitmap-rle.psd"] {
+        let ordinary = PsdDocument::open(&fixture_path(name), ParseLimits::default()).unwrap();
+        let (measured, timings) =
+            PsdDocument::open_measured(&fixture_path(name), ParseLimits::default()).unwrap();
+        assert_eq!(
+            serde_json::to_value(ordinary.info()).unwrap(),
+            serde_json::to_value(measured.info()).unwrap()
+        );
+        assert_eq!(ordinary.source_sha256(), measured.source_sha256());
+        let stages = [
+            timings.source_read_ms,
+            timings.preflight_ms,
+            timings.candidate_parse_ms,
+            timings.normalization_ms,
+            timings.source_hash_ms,
+            timings.source_release_ms,
+        ];
+        assert!(
+            stages
+                .iter()
+                .all(|value| value.is_finite() && *value >= 0.0)
+        );
+        // 只检查包含关系，不设置依赖机器速度的阈值。
+        assert!(timings.total_ms + 0.000_001 >= stages.iter().sum::<f64>());
+        let (png, timing) = measured.preview_png_measured().unwrap();
+        assert_eq!(png, ordinary.preview_png().unwrap());
+        assert!(timing.decode_ms.is_finite() && timing.encode_ms.is_finite());
+        for layer in &ordinary.info().layers {
+            match ordinary.layer_png(layer.id) {
+                Ok(expected) => {
+                    assert_eq!(measured.layer_png_measured(layer.id).unwrap().0, expected)
+                }
+                Err(error) => assert_eq!(
+                    measured.layer_png_measured(layer.id).unwrap_err().code,
+                    error.code
+                ),
+            }
+        }
+    }
+}
+
+#[test]
 fn missing_composite_keeps_metadata_and_independent_layer_pixels_available() {
     let expected = expected_sample(&manifest(), "bitmap-no-composite.psd");
     let document = parse(&fixture("bitmap-no-composite.psd"));

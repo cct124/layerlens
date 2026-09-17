@@ -6,6 +6,7 @@
 mod adapter;
 mod capability;
 mod error;
+mod measurement;
 mod model;
 mod normalization;
 mod preflight;
@@ -16,9 +17,10 @@ mod text_model;
 pub use adapter::PsdDocument;
 pub use capability::{Capability, Support};
 pub use error::{PsdError, PsdErrorCode};
+pub use measurement::{OpenTimings, PngTimings};
 pub use model::{
-    Bounds, ColorProfileInfo, Diagnostic, DiagnosticKind, DiagnosticScope, DocumentInfo, LayerId,
-    LayerInfo, LayerKind, ParseLimits, ResourceUsage,
+    Bounds, ColorProfileInfo, Diagnostic, DiagnosticKind, DiagnosticScope, DocumentInfo,
+    ExportBlocker, LayerId, LayerInfo, LayerKind, ParseLimits, ResourceUsage,
 };
 pub use text_model::{
     CharacterStyle, ParagraphAlignment, ParagraphStyle, ParagraphStyleRun, TextColor, TextData,
