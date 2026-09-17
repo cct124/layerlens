@@ -428,6 +428,2423 @@
       "note": "最小 descriptor 不含 EngineData；验证原文和仿射矩阵，不声明字体/字号/分段样式保真。",
       "sizeBytes": 973,
       "sha256": "adf6e7af63fe5b521b751f0b0f2241430cf4734640da57319e46b01e420cff15"
+    },
+    {
+      "file": "text-engine-72.psd",
+      "compression": "raw",
+      "document": {
+        "width": 1,
+        "height": 1,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "layers": [
+        {
+          "name": "mixed",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "exact",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "short-coverage",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "long-coverage",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "surrogate-split",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "negative-length",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "fractional-length",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "overflow-length",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "zero-length",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "count-mismatch",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "bad-paragraph",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "text-mismatch",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "missing-font",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "invalid-local",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "unsupported-color",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "invalid-container",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "style-reference",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "marker-only-run",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "missing-engine-text",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "invalid-engine-text",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "missing-style-run",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "nondictionary-run",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "invalid-font-record",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "missing-font-set",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "escaped",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "empty",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        },
+        {
+          "name": "absent-tysh-text",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        }
+      ],
+      "composite": {
+        "width": 1,
+        "height": 1,
+        "rgbaHex": "ffffffff"
+      },
+      "textCases": [
+        {
+          "name": "mixed",
+          "expected": {
+            "rawText": " 中😀é\r\n尾  \r",
+            "utf16Length": 12,
+            "indexMapping": "trailingParagraphTerminator",
+            "styleRuns": [
+              {
+                "start": 0,
+                "end": 2,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 18,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 2,
+                "end": 6,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 2,
+                      "name": "FixtureLatin-Semibold",
+                      "family": null,
+                      "style": null
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 24,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 0.5,
+                      "red": 1,
+                      "green": 0,
+                      "blue": 0.25
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxBold"
+                  },
+                  "fauxItalic": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxItalic"
+                  },
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 6,
+                "end": 12,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 12,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[2].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              }
+            ],
+            "paragraphRuns": [
+              {
+                "start": 0,
+                "end": 8,
+                "style": {
+                  "alignment": {
+                    "value": "left",
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.2,
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 6,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              },
+              {
+                "start": 8,
+                "end": 12,
+                "style": {
+                  "alignment": {
+                    "value": "center",
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.5,
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 9,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "exact",
+          "expected": {
+            "rawText": " 中😀é\r\n尾  \r",
+            "utf16Length": 12,
+            "indexMapping": "exact",
+            "styleRuns": [
+              {
+                "start": 0,
+                "end": 2,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 18,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 2,
+                "end": 6,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 2,
+                      "name": "FixtureLatin-Semibold",
+                      "family": null,
+                      "style": null
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 24,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 0.5,
+                      "red": 1,
+                      "green": 0,
+                      "blue": 0.25
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxBold"
+                  },
+                  "fauxItalic": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxItalic"
+                  },
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 6,
+                "end": 12,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 12,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[2].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              }
+            ],
+            "paragraphRuns": [
+              {
+                "start": 0,
+                "end": 8,
+                "style": {
+                  "alignment": {
+                    "value": "left",
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.2,
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 6,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              },
+              {
+                "start": 8,
+                "end": 12,
+                "style": {
+                  "alignment": {
+                    "value": "center",
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.5,
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 9,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "short-coverage",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "long-coverage",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "surrogate-split",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "negative-length",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "fractional-length",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "overflow-length",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "zero-length",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "count-mismatch",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "bad-paragraph",
+          "expected": {
+            "paragraphRuns": null,
+            "diagnostic": "invalidRange",
+            "characterAvailable": true
+          }
+        },
+        {
+          "name": "text-mismatch",
+          "expected": {
+            "styleRuns": null,
+            "paragraphRuns": null,
+            "diagnostic": "textMismatch"
+          }
+        },
+        {
+          "name": "missing-font",
+          "expected": {
+            "firstFont": null,
+            "diagnostic": "missing"
+          }
+        },
+        {
+          "name": "invalid-local",
+          "expected": {
+            "firstFont": null,
+            "firstFontSize": null,
+            "firstColor": null,
+            "firstAlignment": null,
+            "diagnostic": "invalid"
+          }
+        },
+        {
+          "name": "unsupported-color",
+          "expected": {
+            "firstColor": null,
+            "diagnostic": "unsupported"
+          }
+        },
+        {
+          "name": "invalid-container",
+          "expected": {
+            "firstFont": null,
+            "firstFontSize": null,
+            "diagnostic": "invalid"
+          }
+        },
+        {
+          "name": "style-reference",
+          "expected": {
+            "diagnostic": "unsupported"
+          }
+        },
+        {
+          "name": "marker-only-run",
+          "expected": {
+            "rawText": " 中😀é\r\n尾  \r",
+            "utf16Length": 12,
+            "indexMapping": "trailingParagraphTerminator",
+            "styleRuns": [
+              {
+                "start": 0,
+                "end": 2,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 18,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 2,
+                "end": 6,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 2,
+                      "name": "FixtureLatin-Semibold",
+                      "family": null,
+                      "style": null
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 24,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 0.5,
+                      "red": 1,
+                      "green": 0,
+                      "blue": 0.25
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxBold"
+                  },
+                  "fauxItalic": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxItalic"
+                  },
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 6,
+                "end": 12,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 12,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[2].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              }
+            ],
+            "paragraphRuns": [
+              {
+                "start": 0,
+                "end": 8,
+                "style": {
+                  "alignment": {
+                    "value": "left",
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.2,
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 6,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              },
+              {
+                "start": 8,
+                "end": 12,
+                "style": {
+                  "alignment": {
+                    "value": "center",
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.5,
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 9,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "missing-engine-text",
+          "expected": {
+            "styleRuns": null,
+            "paragraphRuns": null,
+            "diagnostic": "missing"
+          }
+        },
+        {
+          "name": "invalid-engine-text",
+          "expected": {
+            "styleRuns": null,
+            "paragraphRuns": null,
+            "diagnostic": "invalid"
+          }
+        },
+        {
+          "name": "missing-style-run",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "missing",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "nondictionary-run",
+          "expected": {
+            "styleRuns": null,
+            "diagnostic": "invalidRange",
+            "paragraphAvailable": true
+          }
+        },
+        {
+          "name": "invalid-font-record",
+          "expected": {
+            "firstFont": null,
+            "diagnostic": "invalid"
+          }
+        },
+        {
+          "name": "missing-font-set",
+          "expected": {
+            "firstFont": null,
+            "diagnostic": "invalid"
+          }
+        },
+        {
+          "name": "escaped",
+          "expected": {
+            "rawText": "()\\⠀⤀尀😀",
+            "utf16Length": 8,
+            "indexMapping": "trailingParagraphTerminator",
+            "styleRuns": [
+              {
+                "start": 0,
+                "end": 8,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 18,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              }
+            ],
+            "paragraphRuns": [
+              {
+                "start": 0,
+                "end": 8,
+                "style": {
+                  "alignment": {
+                    "value": "left",
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.2,
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 6,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "empty",
+          "expected": {
+            "rawText": "",
+            "utf16Length": 0,
+            "indexMapping": "trailingParagraphTerminator",
+            "styleRuns": [],
+            "paragraphRuns": []
+          }
+        },
+        {
+          "name": "absent-tysh-text",
+          "expected": {
+            "text": null
+          }
+        }
+      ],
+      "textTransform": [
+        1.5,
+        0.25,
+        -0.5,
+        2,
+        -3,
+        7
+      ],
+      "note": "独立 EngineData 语法与属性预期；验证 UTF-16、显式来源和原始值，不证明 Photoshop 排版或度量单位。",
+      "sizeBytes": 40003,
+      "sha256": "0918609088b973809a1f070d6e188b95980da458e54a6e67c46769f4313c135b"
+    },
+    {
+      "file": "text-engine-300.psd",
+      "compression": "raw",
+      "document": {
+        "width": 1,
+        "height": 1,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 300
+      },
+      "layers": [
+        {
+          "name": "mixed",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        }
+      ],
+      "composite": {
+        "width": 1,
+        "height": 1,
+        "rgbaHex": "ffffffff"
+      },
+      "textCases": [
+        {
+          "name": "mixed",
+          "expected": {
+            "rawText": " 中😀é\r\n尾  \r",
+            "utf16Length": 12,
+            "indexMapping": "trailingParagraphTerminator",
+            "styleRuns": [
+              {
+                "start": 0,
+                "end": 2,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 18,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 2,
+                "end": 6,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 2,
+                      "name": "FixtureLatin-Semibold",
+                      "family": null,
+                      "style": null
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 24,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 0.5,
+                      "red": 1,
+                      "green": 0,
+                      "blue": 0.25
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxBold"
+                  },
+                  "fauxItalic": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxItalic"
+                  },
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 6,
+                "end": 12,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 12,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[2].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              }
+            ],
+            "paragraphRuns": [
+              {
+                "start": 0,
+                "end": 8,
+                "style": {
+                  "alignment": {
+                    "value": "left",
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.2,
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 6,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              },
+              {
+                "start": 8,
+                "end": 12,
+                "style": {
+                  "alignment": {
+                    "value": "center",
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.5,
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 9,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "textTransform": [
+        1.5,
+        0.25,
+        -0.5,
+        2,
+        -3,
+        7
+      ],
+      "note": "独立 EngineData 语法与属性预期；验证 UTF-16、显式来源和原始值，不证明 Photoshop 排版或度量单位。",
+      "sizeBytes": 1605,
+      "sha256": "d3021bf3a0f08c64eb445469b56d725d48a7865c4c5781a3ad9fcd44a8a80c5c"
+    },
+    {
+      "file": "text-engine-no-dpi.psd",
+      "compression": "raw",
+      "document": {
+        "width": 1,
+        "height": 1,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": null
+      },
+      "layers": [
+        {
+          "name": "mixed",
+          "visible": true,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "kind": "text"
+        }
+      ],
+      "composite": {
+        "width": 1,
+        "height": 1,
+        "rgbaHex": "ffffffff"
+      },
+      "textCases": [
+        {
+          "name": "mixed",
+          "expected": {
+            "rawText": " 中😀é\r\n尾  \r",
+            "utf16Length": 12,
+            "indexMapping": "trailingParagraphTerminator",
+            "styleRuns": [
+              {
+                "start": 0,
+                "end": 2,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 18,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 2,
+                "end": 6,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 2,
+                      "name": "FixtureLatin-Semibold",
+                      "family": null,
+                      "style": null
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 24,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 0.5,
+                      "red": 1,
+                      "green": 0,
+                      "blue": 0.25
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxBold"
+                  },
+                  "fauxItalic": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.RunArray[1].StyleSheet.StyleSheetData.FauxItalic"
+                  },
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              },
+              {
+                "start": 6,
+                "end": 12,
+                "style": {
+                  "font": {
+                    "value": {
+                      "index": 1,
+                      "name": "FixtureCJK-Regular",
+                      "family": "Fixture CJK",
+                      "style": "Regular"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Font"
+                  },
+                  "fontSize": {
+                    "value": {
+                      "value": 12,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.RunArray[2].StyleSheet.StyleSheetData.FontSize"
+                  },
+                  "fillColor": {
+                    "value": {
+                      "alpha": 1,
+                      "red": 0.125,
+                      "green": 0.5,
+                      "blue": 0.75
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillColor"
+                  },
+                  "fillEnabled": {
+                    "value": true,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.FillFlag"
+                  },
+                  "strokeEnabled": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.StrokeFlag"
+                  },
+                  "fauxBold": null,
+                  "fauxItalic": null,
+                  "autoLeading": {
+                    "value": false,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.AutoLeading"
+                  },
+                  "leading": {
+                    "value": {
+                      "value": 22,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Leading"
+                  },
+                  "tracking": {
+                    "value": {
+                      "value": -15,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.Tracking"
+                  },
+                  "baselineShift": {
+                    "value": {
+                      "value": 2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.BaselineShift"
+                  },
+                  "horizontalScale": {
+                    "value": 1.25,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.HorizontalScale"
+                  },
+                  "verticalScale": {
+                    "value": 0.75,
+                    "source": "EngineDict.StyleRun.DefaultRunData.StyleSheet.StyleSheetData.VerticalScale"
+                  }
+                }
+              }
+            ],
+            "paragraphRuns": [
+              {
+                "start": 0,
+                "end": 8,
+                "style": {
+                  "alignment": {
+                    "value": "left",
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.2,
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 6,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              },
+              {
+                "start": 8,
+                "end": 12,
+                "style": {
+                  "alignment": {
+                    "value": "center",
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.Justification"
+                  },
+                  "autoLeading": {
+                    "value": 1.5,
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.AutoLeading"
+                  },
+                  "firstLineIndent": {
+                    "value": {
+                      "value": -2,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.FirstLineIndent"
+                  },
+                  "startIndent": {
+                    "value": {
+                      "value": 3,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.StartIndent"
+                  },
+                  "endIndent": {
+                    "value": {
+                      "value": 4,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.EndIndent"
+                  },
+                  "spaceBefore": {
+                    "value": {
+                      "value": 5,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.DefaultRunData.ParagraphSheet.Properties.SpaceBefore"
+                  },
+                  "spaceAfter": {
+                    "value": {
+                      "value": 9,
+                      "unit": "unverifiedEngine"
+                    },
+                    "source": "EngineDict.ParagraphRun.RunArray[1].ParagraphSheet.Properties.SpaceAfter"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "textTransform": [
+        1.5,
+        0.25,
+        -0.5,
+        2,
+        -3,
+        7
+      ],
+      "note": "独立 EngineData 语法与属性预期；验证 UTF-16、显式来源和原始值，不证明 Photoshop 排版或度量单位。",
+      "sizeBytes": 1577,
+      "sha256": "e0ee50828767aee358f4ff228bffdd2ce8c3a8383c6c9c34da447ec42f65ff0d"
     }
   ]
 }

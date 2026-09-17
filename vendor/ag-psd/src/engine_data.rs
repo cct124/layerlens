@@ -103,23 +103,28 @@ pub fn parse_engine_data(data: &[u8]) -> Result<EngineValue, EngineDataError> {
         }
     }
 
-    fn get_text_byte(data: &[u8], index: &mut usize) -> u8 {
-        let mut byte = data[*index];
+    fn get_text_byte(data: &[u8], index: &mut usize) -> Result<u8, EngineDataError> {
+        let mut byte = *data.get(*index)
+            .ok_or_else(|| EngineDataError("Truncated EngineData string".to_string()))?;
+        if byte == 41 {
+            return Err(EngineDataError("Incomplete utf-16 unit".to_string()));
+        }
         *index += 1;
 
         if byte == 92 {
             // \
-            byte = data[*index];
+            byte = *data.get(*index)
+                .ok_or_else(|| EngineDataError("Truncated EngineData escape".to_string()))?;
             *index += 1;
         }
 
-        byte
+        Ok(byte)
     }
 
     fn get_text(data: &[u8], index: &mut usize) -> Result<String, EngineDataError> {
         let mut units: Vec<u16> = Vec::new();
 
-        if data[*index] == 41 {
+        if data.get(*index) == Some(&41) {
             // )
             *index += 1;
             return Ok(String::new());
@@ -136,14 +141,18 @@ pub fn parse_engine_data(data: &[u8]) -> Result<EngineValue, EngineDataError> {
         // interpreting the bytes as utf-16
         while *index < data.len() && data[*index] != 41 {
             // )
-            let high = get_text_byte(data, index) as u16;
-            let low = get_text_byte(data, index) as u16;
+            let high = get_text_byte(data, index)? as u16;
+            let low = get_text_byte(data, index)? as u16;
             let char = (high << 8) | low;
             units.push(char);
         }
 
+        if data.get(*index) != Some(&41) {
+            return Err(EngineDataError("Unterminated EngineData string".to_string()));
+        }
         *index += 1;
-        Ok(String::from_utf16_lossy(&units))
+        String::from_utf16(&units)
+            .map_err(|_| EngineDataError("Invalid utf-16 string".to_string()))
     }
 
     // Корень и стек. В отличие от TS (где объекты — ссылки, и контейнер одновременно
@@ -342,15 +351,11 @@ pub fn parse_engine_data(data: &[u8]) -> Result<EngineValue, EngineDataError> {
                 index += 1;
             }
 
-            let parsed = parse_float(&value);
+            let parsed = value.parse::<f64>().ok().filter(|v| v.is_finite())
+                .ok_or_else(|| EngineDataError("Invalid EngineData number".to_string()))?;
             push_value(&mut stack, &mut root, EngineValue::Number(parsed))?;
         } else {
-            index += 1;
-            // Зеркало `console.log` (невалидный токен пропускается, не бросается).
-            eprintln!(
-                "Invalid token '{}' ({}) at {}",
-                char as char, char, index
-            );
+            return Err(EngineDataError(format!("Invalid EngineData token at {index}")));
         }
 
         skip_whitespace(data, &mut index);
@@ -366,36 +371,6 @@ pub fn parse_engine_data(data: &[u8]) -> Result<EngineValue, EngineDataError> {
     }
 
     Ok(root.unwrap_or(EngineValue::Null))
-}
-
-// Зеркало JS `parseFloat`: парсит ведущий числовой префикс, иначе NaN.
-fn parse_float(value: &str) -> f64 {
-    let s = value.trim_start();
-    // Найти максимальный валидный префикс f64.
-    let mut end = 0;
-    let bytes = s.as_bytes();
-    let mut seen_dot = false;
-    let mut i = 0;
-    if i < bytes.len() && (bytes[i] == b'+' || bytes[i] == b'-') {
-        i += 1;
-    }
-    while i < bytes.len() {
-        let c = bytes[i];
-        if c.is_ascii_digit() {
-            end = i + 1;
-            i += 1;
-        } else if c == b'.' && !seen_dot {
-            seen_dot = true;
-            i += 1;
-        } else {
-            break;
-        }
-    }
-    if end == 0 {
-        f64::NAN
-    } else {
-        s[..end].parse::<f64>().unwrap_or(f64::NAN)
-    }
 }
 
 const FLOAT_KEYS: &[&str] = &[
@@ -741,6 +716,35 @@ fn write_value(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn layerlens_engine_strings_are_bounded_and_strict_utf16() {
+        let valid = [40, 0xfe, 0xff, 0, 65, 0, 92, 41, 0xd8, 0x3d, 0xde, 0, 41];
+        let parse_text = |bytes: &[u8]| super::parse_engine_data(&[b"/Text ".as_slice(), bytes].concat());
+        assert!(parse_text(&valid).is_ok());
+        for end in 1..valid.len() {
+            assert!(parse_text(&valid[..end]).is_err(), "prefix {end}");
+        }
+        for invalid in [
+            vec![40, 0xfe, 0xff, 0, 41],
+            vec![40, 0xfe, 0xff, 0xd8, 0, 41],
+            vec![40, 0xfe, 0xff, 0xdc, 0, 41],
+            vec![40, 0xfe, 0xff, 92],
+        ] {
+            assert!(parse_text(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn layerlens_engine_numbers_do_not_accept_prefixes_or_nonfinite_values() {
+        for invalid in ["[ 1.2.3 ]", "[ 1-2 ]", "[ . ]", "[ - ]", "[ NaN ]", "[ 12oops ]"] {
+            assert!(super::parse_engine_data(invalid.as_bytes()).is_err());
+        }
+        assert!(super::parse_engine_data(format!("[ {} ]", "9".repeat(400)).as_bytes()).is_err());
+        assert!(super::parse_engine_data(b"[ -2 .5 1.25 ]").is_ok());
+        let error = super::parse_engine_data(b"private-text").unwrap_err().to_string();
+        assert!(!error.contains("private-text"));
+    }
+
     use super::*;
 
     fn dict(pairs: Vec<(&str, EngineValue)>) -> EngineValue {

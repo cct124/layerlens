@@ -4,18 +4,27 @@
 //! 不提供写回 PSD、效果合成或生产级文档会话。第三方类型仅存在于适配器内。
 
 mod adapter;
+mod capability;
 mod error;
 mod model;
 mod normalization;
 mod preflight;
 mod source;
+mod text;
+mod text_model;
 
 pub use adapter::PsdDocument;
+pub use capability::{Capability, Support};
 pub use error::{PsdError, PsdErrorCode};
 pub use model::{
-    Bounds, Capability, ColorProfileInfo, Diagnostic, DiagnosticKind, DiagnosticScope,
-    DocumentInfo, LayerId, LayerInfo, LayerKind, ParseLimits, ResourceUsage, Support, TextData,
+    Bounds, ColorProfileInfo, Diagnostic, DiagnosticKind, DiagnosticScope, DocumentInfo, LayerId,
+    LayerInfo, LayerKind, ParseLimits, ResourceUsage,
+};
+pub use text_model::{
+    CharacterStyle, ParagraphAlignment, ParagraphStyle, ParagraphStyleRun, TextColor, TextData,
+    TextDiagnostic, TextDiagnosticCode, TextFont, TextIndexMapping, TextMetric, TextProperty,
+    TextStyleRun, TextUnit,
 };
 
 /// 当前原型使用的候选及仓库补丁标识；补丁来源见 vendor/ag-psd 的维护记录。
-pub const PARSER_BUILD: &str = "ag-psd 0.3.0 + LayerLens patch 1";
+pub const PARSER_BUILD: &str = "ag-psd 0.3.0 + LayerLens patch 2";

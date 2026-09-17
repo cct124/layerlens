@@ -470,7 +470,7 @@ pub fn read(
             }
             let warp_desc = read_version_and_descriptor(reader)?;
 
-            let raw_text = get_text(&text_desc, "Txt ").unwrap_or_default();
+            let raw_text = get_text(&text_desc, "Txt ");
             let gridding = text_gridding_codec()
                 .decode(get_enum(&text_desc, "textGridding").as_deref().unwrap_or(""))
                 .map_err(ReadError::StrictViolation)?;
@@ -482,13 +482,13 @@ pub fn read(
                 .map_err(ReadError::StrictViolation)?;
 
             let mut text = LayerTextData {
-                raw_text: Some(raw_text.clone()),
+                raw_text: raw_text.clone(),
                 transform: Some(transform),
                 left: Some(read_float32(reader)? as f64),
                 top: Some(read_float32(reader)? as f64),
                 right: Some(read_float32(reader)? as f64),
                 bottom: Some(read_float32(reader)? as f64),
-                text: cr_to_lf(&raw_text),
+                text: cr_to_lf(raw_text.as_deref().unwrap_or("")),
                 index: Some(get_integer(&text_desc, "TextIndex").unwrap_or(0) as f64),
                 gridding: Some(text_gridding_from_str(&gridding)),
                 anti_alias: Some(anti_alias_from_str(&anti_alias)),
@@ -511,6 +511,7 @@ pub fn read(
                 // merge: { ...target.text, ...textData } — поля textData
                 // перекрывают, остальные (transform/left/.../warp) остаются.
                 merge_text_data(&mut text, text_data);
+                text.raw_engine_data = Some(engine_data);
             }
 
             info.text = Some(text);

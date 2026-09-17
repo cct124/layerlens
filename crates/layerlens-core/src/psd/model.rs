@@ -2,6 +2,8 @@
 
 use serde::Serialize;
 
+use super::{capability::Capability, text_model::TextData};
+
 /// 仅在所属解析结果中有效的图层引用；不使用图层名称或 PSD 内部 ID 寻址。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct LayerId(pub u32);
@@ -26,44 +28,6 @@ pub enum LayerKind {
     SmartObject,
     Adjustment,
     Unknown,
-}
-
-/// 能力按对象分别报告，限制不能由空值或默认样式掩盖。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Support {
-    Supported,
-    Partial,
-    Unsupported,
-}
-
-/// 描述本次解析或输出的支持程度及已知原因。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Capability {
-    pub status: Support,
-    pub reason: String,
-}
-
-impl Capability {
-    pub(super) fn partial(reason: &str) -> Self {
-        Self {
-            status: Support::Partial,
-            reason: reason.into(),
-        }
-    }
-    pub(super) fn supported(reason: &str) -> Self {
-        Self {
-            status: Support::Supported,
-            reason: reason.into(),
-        }
-    }
-
-    pub(super) fn unsupported(reason: &str) -> Self {
-        Self {
-            status: Support::Unsupported,
-            reason: reason.into(),
-        }
-    }
 }
 
 /// 诊断所属边界；文件偏移始终相对于固定的原始 PSD 字节。
@@ -102,18 +66,6 @@ pub struct ColorProfileInfo {
     pub byte_length: u64,
     pub sha256: String,
     pub conversion: Capability,
-}
-
-/// TySh 描述符中的原文与矩阵；暂不将候选归一化后的样式宣称为保真数据。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TextData {
-    pub raw_text: String,
-    pub utf16_length: u32,
-    /// 从 PSD 文字空间到文档空间的 [a,b,c,d,tx,ty]，未重复应用到原始边界。
-    pub transform: Option<[f64; 6]>,
-    pub normalization_changed: bool,
-    pub styles: Capability,
 }
 
 /// 读取阶段的源与结构计量，与单次像素解码预算分开。

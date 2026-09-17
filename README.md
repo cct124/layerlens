@@ -47,9 +47,11 @@ Windows CI 使用相同的完整检查入口并构建 NSIS 安装包；新增或
 
 ## PSD 解析实验
 
-本轮使用 `ag-psd 0.3.0 + LayerLens patch 1`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，生产解析器选型尚未完成。
+本轮使用 `ag-psd 0.3.0 + LayerLens patch 2`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，生产解析器选型尚未完成。
 
-实验接纳预检覆盖的 PSD v1、RGB／8 位、3／4 个合成通道及 RAW／RLE 像素。未知资源和附加块在已校验的边界内跳读，并记录诊断；明确未实现的渐变等能力可局部降级，结构损坏、越界和预算错误仍使读取失败。图层区分组、文字、位图、形状、智能对象、调整层和未知类型。文字只提供 TySh 原文、UTF-16 长度与变换，保留 CR/LF 和首尾空白；分段样式、字体及单位保真仍待验收。
+实验接纳预检覆盖的 PSD v1、RGB／8 位、3／4 个合成通道及 RAW／RLE 像素。未知资源和附加块在已校验的边界内跳读，并记录诊断；明确未实现的渐变等能力可局部降级，结构损坏、越界和预算错误仍使读取失败。图层区分组、文字、位图、形状、智能对象、调整层和未知类型。
+
+文字保留 TySh 原文、UTF-16 长度、CR/LF、首尾空白及原始矩阵；新增经完整区间校验的字符／段落样式、显式字体引用、RGB 值和属性来源。每类最多 16384 段；区间错误只关闭对应类别，无效属性返回 `null` 并附诊断，不补默认字体。度量单位暂标为 `unverifiedEngine`，不按 DPI 或矩阵换算为 pt、px 或 CSS；颜色未做 ICC 转换、字重和字体可用性未推断，文字样式仍为 `partial`。输出契约与验证边界见[文字与样式](docs/03-PSD数据与素材.md#文字与样式)。
 
 预览使用保存时合成图，不重新渲染图层；支持有 global alpha 标记的合成透明度。ICC 仅记录存在性、大小及指纹，未执行颜色转换，因此该类预览标为 `partial`。缺失合成图或额外通道语义未验证时，预览明确不可用，不影响已读取元数据。ZIP、高位深、其他颜色模式及 PSB 尚未开放。
 
@@ -63,7 +65,7 @@ cargo run --locked -p layerlens-core --example inspect_psd -- crates/layerlens-c
 
 Windows 读取期间限制并发写入和替换，后续按需解码只使用已取得的压缩数据。默认上限为源文件 64 MiB、画布／图层／蒙版累计 16 Mi 像素、4096 条图层记录、64 层组嵌套；单次解码的 RGBA 与临时缓冲预算为 128 MiB，不含源数据、元数据与输出 PNG，也不是全进程内存上限。CLI 可通过 `--max-file-mib`、`--max-total-pixels`、`--max-decoded-mib`、`--max-layers` 显式调整，报告保留实际值。`--metadata-only` 只写报告，`--preview-only` 写报告和合成预览，两者互斥。
 
-7 个公开合成样本由独立生成器维护。首个私有真实稿已在显式扩大源文件和累计像素预算后，通过正式核心的结构和合成预览对照；仍未完成 Photoshop 视觉参考、文字样式、ICC 与规模性能验收。能力矩阵及复现记录见[活动任务](devlog/_plan/260915/M0-01-PSD解析验证.md)，样本来源及独立预期见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
+10 个公开合成样本由独立生成器维护，包含 72／300／缺失 DPI 的 EngineData 分段样式、明确属性预期和异常降级。首个私有真实稿已通过正式核心结构和合成预览对照，本轮读取到 95 个文字层、204 个字符段和 108 个段落段；仍未完成 Photoshop 文字排版／单位／颜色视觉参考、ICC 与规模性能验收。能力矩阵及复现记录见[活动任务](devlog/_plan/260915/M0-01-PSD解析验证.md)，样本来源及独立预期见[样本说明](crates/layerlens-core/tests/fixtures/psd/README.md)。
 
 ## 格式化与提交
 

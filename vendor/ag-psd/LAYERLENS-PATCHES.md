@@ -1,4 +1,4 @@
-# ag-psd 0.3.0 局部兼容补丁
+# ag-psd 0.3.0 局部兼容补丁（patch 2）
 
 来源为 crates.io 的 [`ag-psd 0.3.0` 发行归档](https://static.crates.io/crates/ag-psd/ag-psd-0.3.0.crate)，SHA-256：
 `6470c6a2f96a00a8d4154504020b34807c2282438c98f90f5069ef3f8cb0e7bf`。
@@ -22,8 +22,11 @@
   时的两字节填充；对应上游往返测试及 LayerLens 独立手构蒙版样本共同覆盖。
 - `descriptor.rs`、`engine_data.rs`：计数校验及嵌套深度上限，避免声明长度直接分配和深递归。
 - `psd.rs`、`additional_info/text_keys.rs`：保留 TySh 原始文本 `raw_text`，不受原有 CR/LF
-  归一化及 EngineData 合并影响。该字段仍是合法 UTF-8；无效 UTF-16 的替换行为沿用上游，
-  不表示对损坏文本的逐 code-unit 无损保存。reader 仅移除格式使用的尾部 NUL，不裁剪空白。
+  归一化及 EngineData 合并影响。patch 2 另保留解析后的 `raw_engine_data`，供核心校验原文与区间，
+  不使用候选裁剪、去重或补默认值的样式；缺失 Txt 字段返回 None，不伪装为空文本。
+  reader 仅移除格式使用的尾部 NUL，不裁剪空白；strict 模式新增拒绝非法 UTF-16，非 strict 仍保留上游替换行为。
+- `engine_data.rs`：patch 2 对 UTF-16BE 字符串和字节转义做有界读取，拒绝截断、缺少结束符及非法代理项；
+  数字须完整解析为有限值，非法 token 返回不含原文的错误，不再打印字符并跳过。
 - `additional_info/vector_keys.rs`：仅把明确未实现的渐变与图案解释改为 typed unsupported。
 - `image_resources.rs`：原先静默跳过的 timeline information 显式返回 typed unsupported。
   恢复前仍完整解析其 descriptor；渐变／图案同样先验证完整 descriptor，再报告语义未实现。
@@ -38,8 +41,12 @@
 
 从 LayerLens 根目录运行 `npm run test:parser`（`cargo test --locked -p ag-psd --lib`）；
 该入口已纳入 `npm run check:rust` 和 CI 使用的 `npm run check`。
-本轮 267 项通过，其中 10 项为补丁专项回归。上游部分测试在其外部样本缺失时直接返回，
+本轮 269 项通过，其中 12 项为补丁专项回归。上游部分测试在其外部样本缺失时直接返回，
 此结果不等同于验证了上游完整样本库；LayerLens 自有公开样本在核心集成测试中另行验证。
+
+patch 2 核心集成测试使用独立编码的 `text-engine-*` PSD，核对原文、矩阵、字体、字符／段落属性与来源、
+不同 DPI、语义降级，以及直接修改 PSD 字节后的非法 TySh／EngineData UTF-16 和数字拒绝。
+私有稿仅在本机做结构与读取验证，不作为公开 fixture 或 Photoshop 视觉保真证据。
 
 这不是完整 PSD 安全审计，也未提供完整元数据总内存预算或颜色管理。LayerLens 的容器预检、
 支持子集与资源预算仍是正式入口的必要前提。尤其 ZIP 和高位深路径仍沿用上游部分临时

@@ -1233,6 +1233,9 @@ pub enum TextShapeType {
 pub struct LayerTextData {
     /// Original TySh descriptor text, before CR/LF normalization or EngineData merge.
     pub raw_text: Option<String>,
+    /// Original parsed TySh EngineData, before trimming, defaulting or style deduplication.
+    /// Read-only evidence for adapters; the writer continues to use the friendly fields.
+    pub raw_engine_data: Option<crate::engine_data::EngineValue>,
     pub text: String,
     /// 2d transform matrix [xx, xy, yx, yy, tx, ty]
     pub transform: Option<Vec<f64>>,

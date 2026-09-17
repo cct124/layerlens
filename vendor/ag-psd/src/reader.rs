@@ -582,7 +582,7 @@ pub fn read_unicode_string_with_length(
             units.push(value);
         }
     }
-    Ok(utf16_units_to_string(&units))
+    utf16_units_to_string(&units, reader.strict)
 }
 
 /// Зеркало `readUnicodeStringWithLengthLE` (little-endian uint16 code units).
@@ -600,20 +600,25 @@ pub fn read_unicode_string_with_length_le(
             units.push(value);
         }
     }
-    Ok(utf16_units_to_string(&units))
+    utf16_units_to_string(&units, reader.strict)
 }
 
 /// Сборка строки из UTF-16 code unit'ов.
 ///
 /// Upstream аккумулирует JS-строку напрямую из `fromCharCode(unit)`, что
 /// допускает одиночные суррогаты. Rust `String` хранит только валидные scalar
-/// values, поэтому для битых/одиночных суррогатов используем
-/// `decode_utf16` с заменой на U+FFFD — для всех корректных PSD-строк результат
-/// идентичен upstream'у.
-fn utf16_units_to_string(units: &[u16]) -> String {
-    char::decode_utf16(units.iter().copied())
+/// values. В строгом режиме битые/одиночные суррогаты вызывают ошибку;
+/// в нестрогом режиме `decode_utf16` заменяет их на U+FFFD.
+/// Для всех корректных PSD-строк результат идентичен upstream'у.
+fn utf16_units_to_string(units: &[u16], strict: bool) -> ReadResult<String> {
+    // LayerLens uses strict reads: never replace invalid design text silently.
+    if strict {
+        return String::from_utf16(units)
+            .map_err(|_| ReadError::StrictViolation("Invalid UTF-16 string".to_string()));
+    }
+    Ok(char::decode_utf16(units.iter().copied())
         .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER))
-        .collect()
+        .collect())
 }
 
 /// Зеркало `checkSignature(reader, a, b?)`.

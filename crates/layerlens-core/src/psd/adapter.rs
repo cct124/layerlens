@@ -3,8 +3,9 @@
 //! 容器检查与规范化分别由 preflight、normalization 负责；候选类型不泄漏给调用方。
 
 use super::{
+    capability::Support,
     error::{PsdError, PsdErrorCode},
-    model::{DocumentInfo, LayerId, ParseLimits, Support},
+    model::{DocumentInfo, LayerId, ParseLimits},
     normalization, preflight,
     source::{SourceData, SourceReadError},
 };

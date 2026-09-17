@@ -6,6 +6,7 @@ use ag_psd::psd::{BlendMode, Layer, Psd, ReadDiagnostic};
 use sha2::{Digest, Sha256};
 
 use super::{
+    capability::Capability,
     error::{PsdError, PsdErrorCode},
     model::*,
     preflight::{Header, LayerRecord},
@@ -128,7 +129,9 @@ pub(super) fn normalize(
         });
     }
     let text = if layers.output.iter().any(|layer| layer.text.is_some()) {
-        Capability::partial("可读取 TySh 原文与文字矩阵；字符/段落样式、单位和字体保真尚未完成验收")
+        Capability::partial(
+            "可读取 TySh 原文、矩阵及经区间校验的 EngineData 样式；逐层限制见文字诊断，单位与视觉保真仍待独立参考",
+        )
     } else {
         Capability::unsupported("本次未读取到可验证的 TySh 原文")
     };
@@ -242,7 +245,13 @@ impl LayerNormalizer<'_> {
                     "简单普通位图的完整通道，保留透明边缘与画布外部分；未执行色彩转换",
                 )
             };
-            let text = text_data(layer)?;
+            let text = layer
+                .additional_info
+                .text
+                .as_ref()
+                .map(super::text::normalize)
+                .transpose()?
+                .flatten();
             self.output.push(LayerInfo {
                 id,
                 parent_id,
@@ -327,36 +336,6 @@ fn simple_compositing(layer: &Layer, record: &LayerRecord) -> bool {
         && record.tags.iter().all(|key| {
             matches!(key, b"lyid" | b"luni" | b"lsct" | b"lsdk" | b"lspf" | b"lclr" | b"lnsr" | b"lyvr" | b"fxrp")
         })
-}
-
-fn text_data(layer: &Layer) -> Result<Option<TextData>, PsdError> {
-    let Some(text) = &layer.additional_info.text else {
-        return Ok(None);
-    };
-    let Some(raw) = &text.raw_text else {
-        return Ok(None);
-    };
-    let transform = match &text.transform {
-        None => None,
-        Some(values) => Some(
-            values
-                .as_slice()
-                .try_into()
-                .ok()
-                .filter(|matrix: &[f64; 6]| matrix.iter().all(|v| v.is_finite()))
-                .ok_or_else(|| invalid_candidate("文字矩阵必须有六个有限值"))?,
-        ),
-    };
-    Ok(Some(TextData {
-        raw_text: raw.clone(),
-        utf16_length: u32::try_from(raw.encode_utf16().count())
-            .map_err(|_| invalid_candidate("文字 UTF-16 长度超出范围"))?,
-        transform,
-        normalization_changed: *raw != text.text,
-        styles: Capability::unsupported(
-            "候选字符／段落样式存在默认与归一化行为，尚未通过原文区间和单位验收",
-        ),
-    }))
 }
 
 fn verify_bounds(layer: &Layer, bounds: Bounds) -> Result<(), PsdError> {

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { encodeEngineData, textFixtures } from './psd-text-fixtures.mjs';
 
 // 只编码本文件声明的极小样本；不调用待验证的 PSD 解析器或写入器。
 // 字段布局依据 Adobe Photoshop File Formats Specification 的 PSD v1 章节。
@@ -74,13 +75,13 @@ function pascalName(name, alignment) {
   return padded(Buffer.concat([Buffer.from([bytes.length]), bytes]), alignment);
 }
 
-function resolutionResource() {
+function resolutionResource(dpi = 72) {
   // Resource 1005: 水平/垂直 16.16 fixed DPI，分辨率单位 1=pixels/inch，尺寸单位 1=inches。
   const data = Buffer.concat([
-    unsigned32(72 * 65536),
+    unsigned32(dpi * 65536),
     unsigned16(1),
     unsigned16(1),
-    unsigned32(72 * 65536),
+    unsigned32(dpi * 65536),
     unsigned16(1),
     unsigned16(1),
   ]);
@@ -326,12 +327,15 @@ function groupsAlphaPsd(compression) {
 
 const rawText = ' 中😀e\u0301\r\n尾  \r';
 const textTransform = [1.5, 0.25, -0.5, 2, -3, 7];
-function typeToolData() {
+function typeToolData(text = rawText, engineData) {
+  const entries = text === null ? [] : [['Txt ', 'TEXT', unicode(text)]];
+  if (engineData !== undefined)
+    entries.push(['EngineData', 'tdta', section(encodeEngineData(engineData))]);
   return Buffer.concat([
     signed16(1),
     ...textTransform.map(float64),
     signed16(50),
-    versionedDescriptor('TxLr', [['Txt ', 'TEXT', unicode(rawText)]]),
+    versionedDescriptor('TxLr', entries),
     signed16(1),
     versionedDescriptor('warp'),
     ...[0, 0, 1, 1].map(float32),
@@ -457,6 +461,33 @@ const cases = [
     note: '最小 descriptor 不含 EngineData；验证原文和仿射矩阵，不声明字体/字号/分段样式保真。',
   },
 ];
+
+for (const dpi of [72, 300, null]) {
+  const definitions = dpi === 72 ? textFixtures : textFixtures.slice(0, 1);
+  const records = definitions.map((sample) => ({
+    name: sample.name,
+    visible: true,
+    bounds: { x: 0, y: 0, width: 1, height: 1 },
+    additionalInfo: [additionalInfo('TySh', typeToolData(sample.rawText, sample.engineData))],
+  }));
+  cases.push({
+    file: 'text-engine-' + (dpi ?? 'no-dpi') + '.psd',
+    compression: 'raw',
+    bytes: Buffer.concat([
+      header(1, 1, 8),
+      unsigned32(0),
+      section(dpi === null ? Buffer.alloc(0) : resolutionResource(dpi)),
+      layerSection(records, 'raw'),
+      compositeData('raw', metadataComposite),
+    ]),
+    document: { ...document, width: 1, height: 1, resolutionDpi: dpi },
+    layers: records.map(({ name, visible, bounds }) => ({ name, visible, bounds, kind: 'text' })),
+    composite: metadataComposite,
+    textCases: definitions.map(({ name, expected }) => ({ name, expected })),
+    textTransform,
+    note: '独立 EngineData 语法与属性预期；验证 UTF-16、显式来源和原始值，不证明 Photoshop 排版或度量单位。',
+  });
+}
 
 const manifest = {
   schemaVersion: 1,
