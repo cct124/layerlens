@@ -28,6 +28,10 @@ impl Entry {
             path: self.path.clone(),
             width: self.revision.parsed.info().width,
             height: self.revision.parsed.info().height,
+            layer_count: self.revision.parsed.info().resources.layer_records,
+            color_mode: self.revision.parsed.info().color_mode.clone(),
+            bit_depth: self.revision.parsed.info().bit_depth,
+            preview_note: self.revision.parsed.info().preview.reason.clone(),
         }
     }
 }

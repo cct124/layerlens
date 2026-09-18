@@ -1,7 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "主窗口仅能读取应用信息，不开放文件系统、Shell 或远程页面权限。",
+  "description": "主窗口可调用只读工作区、受控 PNG 和文件选择命令，并订阅状态。无通用文件系统、Shell 或远程页面权限。",
   "windows": ["main"],
-  "permissions": ["allow-get-app-info"]
+  "permissions": [
+    "allow-get-app-info",
+    "allow-workspace-action",
+    "allow-read-preview",
+    "allow-choose-psd-files",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
 }

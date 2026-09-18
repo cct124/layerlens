@@ -2,6 +2,7 @@
 
 use std::{env, error::Error, fs, io, path::PathBuf};
 
+use layerlens_core::workspace_contract::*;
 use layerlens_core::{
     AppInfo, AppInfoRequest, CommandError, CommandErrorCode, IPC_PROTOCOL_VERSION,
 };
@@ -30,6 +31,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         AppInfo::decl(&config),
         CommandErrorCode::decl(&config),
         CommandError::decl(&config),
+        WorkspaceAction::decl(&config),
+        WorkspaceRequest::decl(&config),
+        PreviewRequest::decl(&config),
+        WorkspaceErrorCode::decl(&config),
+        WorkspaceError::decl(&config),
+        WorkspaceDocument::decl(&config),
+        WorkspaceJobPhase::decl(&config),
+        WorkspaceJob::decl(&config),
+        WorkspacePreviewState::decl(&config),
+        WorkspacePreview::decl(&config),
+        WorkspaceNotice::decl(&config),
+        WorkspaceResources::decl(&config),
+        WorkspaceSnapshot::decl(&config),
     ];
     let mut expected = String::from(
         "// 此文件由 Rust DTO 自动生成，请勿手工编辑。\n\

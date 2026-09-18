@@ -12,8 +12,13 @@ fn main() {
     }
 
     // 显式登记应用命令后，调用受 capability 的命令权限约束。
-    let attributes = tauri_build::Attributes::new()
-        .app_manifest(tauri_build::AppManifest::new().commands(&["get_app_info"]));
+    let attributes =
+        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+            "get_app_info",
+            "workspace_action",
+            "read_preview",
+            "choose_psd_files",
+        ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         eprintln!("Tauri 构建配置失败：{error:#}");
         std::process::exit(1);

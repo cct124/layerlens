@@ -104,6 +104,10 @@ pub struct DocumentSummary {
     pub path: PathBuf,
     pub width: u32,
     pub height: u32,
+    pub layer_count: u32,
+    pub color_mode: String,
+    pub bit_depth: u16,
+    pub preview_note: String,
 }
 
 /// 标签顺序、活动入口与作业状态在同一次短锁访问中取得。

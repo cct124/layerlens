@@ -1,9 +1,19 @@
 //! Tauri 桌面入口，仅装配窗口、权限和共享核心的命令适配。
 
 mod commands;
+mod workspace;
+
+use tauri::{Emitter, Manager};
 
 fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
-    builder.invoke_handler(tauri::generate_handler![commands::get_app_info])
+    builder
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            commands::get_app_info,
+            commands::workspace_action,
+            commands::read_preview,
+            commands::choose_psd_files
+        ])
 }
 
 /// 启动桌面事件循环，应用业务能力由共享核心提供。
@@ -12,7 +22,42 @@ fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R>
 ///
 /// 窗口或运行时初始化失败时返回 Tauri 错误，由入口统一处理。
 pub fn run() -> tauri::Result<()> {
-    configure(tauri::Builder::default()).run(tauri::generate_context!())
+    let app = configure(tauri::Builder::default())
+        .setup(|app| {
+            let events = app.handle().clone();
+            let exit = app.handle().clone();
+            let host = workspace::WorkspaceHost::start(
+                Default::default(),
+                move |snapshot| {
+                    if let Err(error) = events.emit_to("main", workspace::EVENT, snapshot) {
+                        eprintln!(
+                            "operation=workspace_notify sequence={} error={error}",
+                            snapshot.sequence
+                        );
+                    }
+                },
+                move |result| {
+                    if let Err(error) = &result {
+                        eprintln!("operation=workspace_shutdown error={}", error.message);
+                    }
+                    exit.exit(i32::from(result.is_err()));
+                },
+            )
+            .map_err(|error| std::io::Error::other(error.message))?;
+            app.manage(host);
+            Ok(())
+        })
+        .build(tauri::generate_context!())?;
+    app.run(|app, event| {
+        if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            let host = app.state::<workspace::WorkspaceHost>();
+            if !host.stopped() {
+                api.prevent_exit();
+                host.stop();
+            }
+        }
+    });
+    Ok(())
 }
 
 #[cfg(test)]
@@ -25,8 +70,26 @@ mod tests {
     };
 
     fn invoke_from(window_label: &str, protocol_version: u32) -> Result<Value, Value> {
+        invoke_command(
+            window_label,
+            "get_app_info",
+            json!({ "protocolVersion": protocol_version }),
+        )
+    }
+
+    fn invoke_command(window_label: &str, command: &str, request: Value) -> Result<Value, Value> {
         // 使用正式配置生成的 ACL，验证实际命令派发与窗口授权，而非直调函数。
+        let (exited, exit) = std::sync::mpsc::channel();
+        let host = crate::workspace::WorkspaceHost::start(
+            Default::default(),
+            |_| {},
+            move |result| {
+                let _ = exited.send(result);
+            },
+        )
+        .unwrap();
         let app = super::configure(mock_builder())
+            .manage(host)
             .build(tauri::generate_context!())
             .expect("测试应用必须能够装配");
         let window =
@@ -38,18 +101,21 @@ mod tests {
         let response = get_ipc_response(
             &window,
             InvokeRequest {
-                cmd: "get_app_info".to_owned(),
+                cmd: command.to_owned(),
                 callback: CallbackFn(0),
                 error: CallbackFn(1),
                 url: "http://tauri.localhost".parse().expect("固定测试 URL 有效"),
-                body: InvokeBody::Json(json!({
-                    "request": { "protocolVersion": protocol_version }
-                })),
+                body: InvokeBody::Json(json!({ "request": request })),
                 headers: Default::default(),
                 invoke_key: INVOKE_KEY.to_owned(),
             },
         );
 
+        use tauri::Manager;
+        app.state::<crate::workspace::WorkspaceHost>().stop();
+        exit.recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap()
+            .unwrap();
         response.map(|body| body.deserialize().expect("命令成功结果必须为 JSON"))
     }
 
@@ -91,5 +157,57 @@ mod tests {
                 text.contains("get_app_info") && text.contains("not allowed")
             })
         );
+    }
+
+    #[test]
+    fn workspace_commands_enforce_acl_and_protocol() {
+        for (command, request) in [
+            (
+                "workspace_action",
+                json!({ "protocolVersion": 2, "action": { "kind": "snapshot" } }),
+            ),
+            (
+                "read_preview",
+                json!({ "protocolVersion": 2, "documentId": "1", "revision": "1" }),
+            ),
+            ("choose_psd_files", json!({ "protocolVersion": 2 })),
+        ] {
+            let blocked = invoke_command("untrusted", command, request.clone()).unwrap_err();
+            assert!(blocked.as_str().unwrap().contains("not allowed"));
+            let incompatible = invoke_command("main", command, request).unwrap_err();
+            assert_eq!(incompatible["code"], "PROTOCOL_MISMATCH");
+        }
+    }
+
+    #[test]
+    fn workspace_request_validates_shape_path_and_stale_preview() {
+        let empty = invoke_command(
+            "main",
+            "workspace_action",
+            json!({ "protocolVersion": 1, "action": { "kind": "snapshot" } }),
+        )
+        .unwrap();
+        assert_eq!(empty["documents"], json!([]));
+        assert_eq!(empty["sequence"], "1");
+        let path = invoke_command(
+            "main",
+            "workspace_action",
+            json!({ "protocolVersion": 1, "action": { "kind": "open", "path": "relative.psd" } }),
+        )
+        .unwrap_err();
+        assert_eq!(path["code"], "INVALID_INPUT");
+        let shape = invoke_command(
+            "main",
+            "workspace_action",
+            json!({ "protocolVersion": 1, "action": { "kind": "snapshot", "extra": 1 } }),
+        );
+        assert!(shape.is_err());
+        let stale = invoke_command(
+            "main",
+            "read_preview",
+            json!({ "protocolVersion": 1, "documentId": "1", "revision": "1" }),
+        )
+        .unwrap_err();
+        assert_eq!(stale["code"], "STALE_PREVIEW");
     }
 }

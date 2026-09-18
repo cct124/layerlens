@@ -34,3 +34,29 @@ code: CommandErrorCode,
  * 包含原因及恢复提示的用户消息。
  */
 message: string, };
+
+export type WorkspaceAction = { "kind": "snapshot", } | { "kind": "open", path: string, } | { "kind": "activate", documentId: string, } | { "kind": "close", documentId: string, } | { "kind": "reload", documentId: string, } | { "kind": "retryPreview", } | { "kind": "cancel", jobId: string, } | { "kind": "dismissNotice", noticeId: string, };
+
+export type WorkspaceRequest = { protocolVersion: number, action: WorkspaceAction, };
+
+export type PreviewRequest = { protocolVersion: number, documentId: string, revision: string, };
+
+export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "SHUTTING_DOWN" | "INTERNAL";
+
+export type WorkspaceError = { code: WorkspaceErrorCode, message: string, };
+
+export type WorkspaceDocument = { id: string, revision: string, name: string, path: string, width: number, height: number, layerCount: number, colorMode: string, bitDepth: number, previewNote: string, };
+
+export type WorkspaceJobPhase = "queued" | "running" | "cancelling" | "finishing";
+
+export type WorkspaceJob = { id: string, label: string, phase: WorkspaceJobPhase, };
+
+export type WorkspacePreviewState = { "phase": "pending", jobId: string | null, status: WorkspaceJobPhase, } | { "phase": "ready", cacheHit: boolean, } | { "phase": "failed", error: WorkspaceError, } | { "phase": "cancelled" };
+
+export type WorkspacePreview = { documentId: string, revision: string, state: WorkspacePreviewState, };
+
+export type WorkspaceNotice = { id: string, message: string, };
+
+export type WorkspaceResources = { sourceBytes: string, decodedBytes: string, outputBytes: string, cacheBytes: string, };
+
+export type WorkspaceSnapshot = { protocolVersion: number, sequence: string, documents: Array<WorkspaceDocument>, activeDocumentId: string | null, jobs: Array<WorkspaceJob>, preview: WorkspacePreview | null, notices: Array<WorkspaceNotice>, resources: WorkspaceResources, shuttingDown: boolean, };

@@ -20,6 +20,8 @@ tauri-build.workspace = true
 [dependencies]
 layerlens-core.workspace = true
 tauri.workspace = true
+tauri-plugin-dialog.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

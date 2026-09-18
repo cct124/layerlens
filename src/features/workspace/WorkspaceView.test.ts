@@ -1,86 +1,216 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VueWrapper } from '@vue/test-utils';
+import type { EventCallback } from '@tauri-apps/api/event';
+import type { WorkspaceDocument, WorkspaceSnapshot } from '../../shared/api/generated';
 import WorkspaceView from './WorkspaceView.vue';
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-  isTauri: vi.fn(),
-}));
-
-const appInfo = { appName: 'LayerLens', appVersion: '0.1.0', protocolVersion: 1 };
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
+const doc = (id: string): WorkspaceDocument => ({
+  id,
+  revision: id,
+  name: `design-${id}.psd`,
+  path: `C:/design-${id}.psd`,
+  width: 1000,
+  height: 800,
+  layerCount: 3,
+  colorMode: 'RGB',
+  bitDepth: 8,
+  previewNote: '保存时合成图，无 ICC 转换',
+});
+const state = (
+  sequence: string,
+  ids: string[] = [],
+  active = ids[0] ?? null,
+): WorkspaceSnapshot => ({
+  protocolVersion: 1,
+  sequence,
+  documents: ids.map(doc),
+  activeDocumentId: active,
+  jobs: [],
+  preview: active
+    ? { documentId: active, revision: active, state: { phase: 'ready', cacheHit: false } }
+    : null,
+  notices: [],
+  resources: { sourceBytes: '0', decodedBytes: '0', outputBytes: '0', cacheBytes: '0' },
+  shuttingDown: false,
+});
+const png = () => new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]).buffer;
 let wrapper: VueWrapper | undefined;
+let receive: EventCallback<unknown>;
+const stop = vi.fn();
+let current: WorkspaceSnapshot;
+function emit(next: unknown) {
+  receive({ event: 'workspace-changed', id: 1, payload: next });
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn() });
+  current = state('1');
   vi.mocked(isTauri).mockReturnValue(true);
-  vi.mocked(invoke).mockResolvedValue(appInfo);
+  vi.mocked(listen).mockImplementation(async (_name, callback) => {
+    receive = callback;
+    return stop;
+  });
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === 'get_app_info')
+      return { appName: 'LayerLens', appVersion: '0.1.0', protocolVersion: 1 };
+    if (command === 'read_preview') return png();
+    if (command === 'choose_psd_files') return ['C:/picked.psd'];
+    return current;
+  });
 });
-
 afterEach(() => {
   wrapper?.unmount();
   wrapper = undefined;
+  vi.unstubAllGlobals();
 });
 
-describe('启动工作区', () => {
-  it('通过桌面接口确认状态，并保留未开放 PSD 能力的说明', async () => {
+describe('只读桌面工作区', () => {
+  it('先订阅再读取状态，文件选择只转发到核心', async () => {
     wrapper = mount(WorkspaceView);
     await flushPromises();
-
-    expect(invoke).toHaveBeenCalledWith('get_app_info', {
-      request: { protocolVersion: 1 },
+    expect(wrapper.text()).toContain('桌面工作区已连接');
+    expect(wrapper.text()).toContain('v0.1.0');
+    await wrapper.get('.app-header .primary-button').trigger('click');
+    await flushPromises();
+    expect(invoke).toHaveBeenCalledWith('workspace_action', {
+      request: { protocolVersion: 1, action: { kind: 'open', path: 'C:/picked.psd' } },
     });
-    expect(wrapper.text()).toContain('桌面应用可用');
-    expect(wrapper.text()).toContain('应用版本 0.1.0');
-    expect(wrapper.text()).toContain('尚未开放 PSD 文件读取');
-    expect(wrapper.find('button').text()).toBe('重新检查');
+    expect(wrapper.findAll('.document-tab')).toHaveLength(0);
   });
-
-  it('调用失败时提示并允许重新检查，成功后移除错误', async () => {
-    vi.mocked(invoke).mockRejectedValueOnce('transport disconnected');
-    wrapper = mount(WorkspaceView);
-    await flushPromises();
-
-    expect(wrapper.get('[role="alert"]').text()).toContain('暂时无法读取桌面应用状态');
-    expect(wrapper.text()).not.toContain('桌面应用可用');
-    await wrapper.get('button').trigger('click');
-    await flushPromises();
-
-    expect(invoke).toHaveBeenCalledTimes(2);
-    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain('桌面应用可用');
-  });
-
-  it('浏览器预览不调用桌面接口或显示成功状态', async () => {
+  it('浏览器预览不调用桌面能力', async () => {
     vi.mocked(isTauri).mockReturnValue(false);
     wrapper = mount(WorkspaceView);
     await flushPromises();
-
     expect(invoke).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('浏览器预览');
-    expect(wrapper.text()).toContain('请在桌面应用中继续');
-    expect(wrapper.text()).not.toContain('桌面应用可用');
-    expect(wrapper.find('button').exists()).toBe(false);
   });
-
-  it.each([null, { ...appInfo, appVersion: 12 }, { ...appInfo, protocolVersion: 2 }])(
-    '拒绝不符合接口约定的桌面响应：%j',
-    async (response) => {
-      vi.mocked(invoke).mockResolvedValue(response);
-      wrapper = mount(WorkspaceView);
-      await flushPromises();
-
-      expect(wrapper.get('[role="alert"]').text()).toContain('信息不完整或版本不兼容');
-      expect(wrapper.text()).not.toContain('桌面应用可用');
-    },
-  );
-
-  it('将版本错误转换为用户可执行的恢复提示', async () => {
-    vi.mocked(invoke).mockRejectedValue({ code: 'PROTOCOL_MISMATCH', message: 'unsupported' });
+  it('晚到的初始化响应和旧事件不能覆盖新快照', async () => {
+    const response = deferred<WorkspaceSnapshot>();
+    vi.mocked(invoke).mockImplementation((command) =>
+      command === 'workspace_action'
+        ? response.promise
+        : Promise.resolve(
+            command === 'read_preview'
+              ? png()
+              : { appName: 'LayerLens', appVersion: '0.1.0', protocolVersion: 1 },
+          ),
+    );
     wrapper = mount(WorkspaceView);
     await flushPromises();
-
-    expect(wrapper.get('[role="alert"]').text()).toContain('请重新启动或更新应用');
+    emit(state('9007199254740994', ['1']));
+    await flushPromises();
+    response.resolve(state('1'));
+    emit(state('9007199254740993', ['2']));
+    await flushPromises();
+    expect(wrapper.get('.document-name').text()).toBe('design-1.psd');
+  });
+  it('拒绝修订关联失配的通知并保留有效状态', async () => {
+    current = state('1', ['1']);
+    wrapper = mount(WorkspaceView);
+    await flushPromises();
+    emit({
+      ...state('2', ['2']),
+      preview: { documentId: '1', revision: '1', state: { phase: 'ready', cacheHit: false } },
+    });
+    await flushPromises();
+    expect(wrapper.get('.document-name').text()).toBe('design-1.psd');
+    expect(wrapper.get('[role="alert"]').text()).toContain('通知无效');
+  });
+  it('图像串行读取，切换后丢弃旧结果并在关闭时撤销 URL', async () => {
+    const old = deferred<ArrayBuffer>();
+    current = state('1', ['1']);
+    const base = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation((command, args, options) =>
+      command === 'read_preview' &&
+      vi.mocked(invoke).mock.calls.filter((c) => c[0] === 'read_preview').length === 1
+        ? old.promise
+        : base(command, args, options),
+    );
+    wrapper = mount(WorkspaceView);
+    await flushPromises();
+    emit(state('2', ['1', '2'], '2'));
+    await flushPromises();
+    expect(vi.mocked(invoke).mock.calls.filter((c) => c[0] === 'read_preview')).toHaveLength(1);
+    old.resolve(png());
+    await flushPromises();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('read_preview', {
+      request: { protocolVersion: 1, documentId: '2', revision: '2' },
+    });
+    emit(state('3'));
+    await flushPromises();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+    expect(wrapper.find('img').exists()).toBe(false);
+  });
+  it('每个文档保留自己的缩放和平移', async () => {
+    current = state('1', ['1', '2'], '1');
+    wrapper = mount(WorkspaceView);
+    await flushPromises();
+    await wrapper.get('[aria-label="放大"]').trigger('click');
+    await wrapper.get('[aria-label="PSD 预览画布"]').trigger('keydown', { key: 'ArrowRight' });
+    const transform = wrapper.get('img').attributes('style');
+    emit(state('2', ['1', '2'], '2'));
+    await flushPromises();
+    expect(wrapper.get('img').attributes('style')).not.toBe(transform);
+    emit(state('3', ['1', '2'], '1'));
+    await flushPromises();
+    expect(wrapper.get('img').attributes('style')).toBe(transform);
+  });
+  it('预览失败保留文档信息并允许重试', async () => {
+    current = state('1', ['1']);
+    current.preview = {
+      documentId: '1',
+      revision: '1',
+      state: { phase: 'failed', error: { code: 'PREVIEW_FAILED', message: '缺少合成图' } },
+    };
+    wrapper = mount(WorkspaceView);
+    await flushPromises();
+    expect(wrapper.text()).toContain('缺少合成图');
+    expect(wrapper.text()).toContain('1000 × 800');
+    await wrapper.get('.canvas-message button').trigger('click');
+    expect(invoke).toHaveBeenCalledWith('workspace_action', {
+      request: { protocolVersion: 1, action: { kind: 'retryPreview' } },
+    });
+  });
+  it('订阅失败可重连，销毁后移除监听且丢弃晚到图像', async () => {
+    vi.mocked(listen).mockRejectedValueOnce(new Error('连接中断'));
+    wrapper = mount(WorkspaceView);
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('连接中断');
+    const image = deferred<ArrayBuffer>();
+    current = state('1', ['1']);
+    const base = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation((command, args, options) =>
+      command === 'read_preview' ? image.promise : base(command, args, options),
+    );
+    await wrapper.get('.error-notice button').trigger('click');
+    await flushPromises();
+    wrapper.unmount();
+    wrapper = undefined;
+    image.resolve(png());
+    await flushPromises();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 });
