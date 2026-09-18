@@ -2,7 +2,7 @@
 
 基于 Rust + Tauri 的开源 PSD 解析与 AI 协作工具，目标是通过交互式选区、图层样式提取和素材导出，为编程 Agent 提供结构化设计上下文，辅助还原 H5 页面。
 
-当前工程为 **桌面脚手架与 M0-01 PSD 解析原型**：桌面包含 Vue 工作区入口、Rust 应用信息调用和错误反馈；独立 Rust 核心提供实验性的 PSD 图层分类、文字原文、能力诊断、保存时合成预览及简单位图 PNG 验证。原型尚未接入桌面，图层查看、完整素材服务和 MCP 属于后续开发范围。设计见 [docs](docs/README.md)，当前任务与验证记录见 [devlog](devlog/README.md)。
+当前工程为 **桌面脚手架、M0 PSD 解析原型与 M1 核心文档／预览服务**：桌面包含 Vue 工作区入口、Rust 应用信息调用和错误反馈；独立 Rust 核心提供 PSD 图层分类、文字原文、能力诊断、保存时合成预览及简单位图 PNG 验证，并具备多文档生命周期、有界后台打开／重载／预览、LRU 缓存与资源计费。PSD 能力尚未接入桌面，图层查看、完整素材服务和 MCP 属于后续开发范围。设计见 [docs](docs/README.md)，当前任务与验证记录见 [devlog](devlog/README.md)。
 
 ## 开发环境
 
@@ -46,6 +46,30 @@ cargo test --locked -p layerlens-core # 单独验证不依赖 Tauri 的核心
 
 Windows CI 使用相同的完整检查入口并构建 NSIS 安装包；新增或变更的流水线需以远端实际运行结果为准。
 
+## 核心文档服务
+
+Rust 的 `documents::DocumentService` 管理标签顺序、活动文档、打开／重载作业及不可变修订。重复路径复用文档或已知加载请求，后台规范化后合并路径别名；打开失败保留已有内容，较早请求完成不会抢占后来打开或手动切换的焦点。关闭活动标签优先切换到右邻，其次左邻。
+
+`DocumentLease` 固定 PSD 修订的原始事实、单位、来源与能力诊断；重载、关闭及服务退出不改变已有引用。当前不暴露绕过调度的解码入口，也不生成 CSS。`OpenJob` 提供状态、排队／执行耗时和完成结果；句柄丢弃不自动取消。只有显式 `cancel` 被接受才保证该作业不发布成功。
+
+打开和预览共用 **1 个后台线程、4 个未完成作业**，按提交顺序执行；默认最多 **8 个存活或预留修订、256 MiB 源字节额度、64 Mi 声明像素额度**。解析开始前按单文件上限预留，成功后按实际源字节和声明像素结算；旧修订的额度随最后一个引用释放。单文件限制沿用 M0，保守预留可能拒绝一个实际很小的输入。
+
+`preview(document_id)` 请求当前固定修订的原尺寸保存时合成 PNG，结果保留 `partial` 等能力限制。相同修订的在途请求共用 `PreviewJob`，显式 `cancel_preview` 会取消整个共同作业；命中缓存无需工作线程或空闲作业名额。缓存 key 包含文档、修订和预览种类，使用 LRU 淘汰。成功重载或关闭会使旧缓存失效，失败重载保留原内容。
+
+预览默认额度为 **128 MiB 解码预留、64 MiB 单张 PNG、128 MiB 存活输出总量、64 MiB／16 项缓存**。执行前预留完整单文件解码额度和单张 PNG 上限，编码成功后按 PNG 分配容量结算；输出紧张时先淘汰缓存，外部仍持有的图像继续计费，不足则明确失败。`PreviewLease` 只保留 PNG，不延长源 PSD 的寿命；完成的作业句柄、结果和状态副本也可能持有 PNG，最后一个引用释放后才归还额度。这些是保守准入限制，不覆盖全部编解码器临时开销、分配器、WebView 或进程 RSS。
+
+排队取消在清理后完成，执行中的取消须等待同步解析／解码返回并释放未发布数据。发布后的资源清理期间状态为 `Finishing`，不再接受取消，仍占用作业额度。`request_shutdown` 停止准入、请求取消，并在锁外释放预览缓存和排队引用；`shutdown`／析构等待线程退出。适配层须在后台执行阻塞等待、退出及可能销毁大修订或图像的操作，不能放在 UI 线程。详细约定见[技术架构](docs/02-技术架构.md#当前核心文档与预览实现m1)。
+
+Windows 本机只读烟测入口（可传多个路径；输出 JSON Lines，不写入设计稿或预览）：
+
+```powershell
+cargo run --locked -p layerlens-core --example document_lifecycle -- "design-a.psd" "design-b.psd"
+cargo run --release --locked -p layerlens-core --example document_lifecycle -- --large ".local/psd-samples/tab-1.psd"
+cargo run --release --locked -p layerlens-core --example document_preview -- --large ".local/psd-samples/tab-1.psd"
+```
+
+两个示例的 `--large` 仅用于显式实验：单文件上限改为 512 MiB／128 Mi 声明像素，全局改为 1 GiB／384 Mi 声明像素，其他默认值不变。生命周期烟测将所有文档保留到关闭阶段，并持有首个修订核对关闭后的计费和最终归零。预览烟测依次请求首张与缓存图像，保留 PNG 后关闭文档，再释放图像并核对源／输出账本；不把图片写入磁盘。预览示例的 `--checkpoint` 在每个阶段输出后等待 stdin 换行，供外部进程采集内存，等待不计入请求耗时。本机 5 份真实样本的串行测量、OS 缓存条件及限制见[M1 记录](devlog/_plan/260917/M1-01-文档生命周期与后台任务.md#真实-psd-预览与释放基线)。示例计时不代表桌面首帧可见耗时。
+
 ## PSD 解析实验
 
 首版支持子集采用 `ag-psd 0.3.0 + LayerLens patch 3`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，支持范围、已知限制与后续条件见[解析器决策](docs/07-PSD首版支持与解析器决策.md)。
@@ -81,7 +105,7 @@ New-Item -ItemType Directory -Force .local | Out-Null
 npm run bench:psd -- -InputPath crates/layerlens-core/tests/fixtures/psd/bitmap-raw.psd -OutputPath .local/baseline-raw -Mode all -Runs 6
 ```
 
-`OutputPath` 必须不存在，父目录须已存在。`Mode` 为 `metadata`、`preview`（默认）或 `all`；`Runs` 为 1–100，默认 6。每轮重新打开并释放文档，后两种模式额外在同一文档上再次请求预览。当前没有解码缓存。源／像素预算通过 `MaxFileMiB`、`MaxTotalPixels`、`MaxDecodedMiB`、`MaxLayers` 显式调整，默认值与核心一致。
+`OutputPath` 必须不存在，父目录须已存在。`Mode` 为 `metadata`、`preview`（默认）或 `all`；`Runs` 为 1–100，默认 6。每轮重新打开并释放文档，后两种模式额外在同一文档上再次请求预览。这条同步适配器测量路径没有解码缓存，保留为 M0 对照；它不经过新增的 `DocumentService` PNG 缓存。源／像素预算通过 `MaxFileMiB`、`MaxTotalPixels`、`MaxDecodedMiB`、`MaxLayers` 显式调整，默认值与核心一致。
 
 输出包含 `baseline.json`、`run-NNN/report.json` 和按模式生成的 PNG。基线记录系统与构建信息、源／可执行文件／锁文件指纹、各阶段耗时及 ready／opened／exported／released 内存检查点；首次打开单列，后续打开统计最小值、中位数和最大值。简报不复制图层名称、文字及完整属性，私有稿的 PNG 和所有报告仍应留在 `.local/`。
 

@@ -16,7 +16,7 @@ use std::{path::Path, time::Instant};
 
 /// 固定源版本的解析结果；压缩数据由候选拥有，后续解码不再访问源路径。
 ///
-/// 尚无文档注册、任务和缓存语义。同步解析和解码须由未来有界后台作业调用。
+/// 不包含文档注册、任务和缓存语义。应用通过 documents 的有界后台调用。
 pub struct PsdDocument {
     parsed: Psd,
     info: DocumentInfo,
@@ -153,6 +153,29 @@ impl PsdDocument {
     /// # Errors
     /// 与 preview_png 相同。
     pub fn preview_png_measured(&self) -> Result<(Vec<u8>, PngTimings), PsdError> {
+        let (pixels, decode_ms) = self.preview_pixels()?;
+        encode_measured(pixels, self.info.width, self.info.height, decode_ms)
+    }
+
+    /// 应用服务使用的同步入口；输出容量受限，修订和跨请求预算由调用方管理。
+    pub(crate) fn preview_png_bounded(
+        &self,
+        max_png_bytes: usize,
+    ) -> Result<(Vec<u8>, PngTimings), PsdError> {
+        let (pixels, decode_ms) = self.preview_pixels()?;
+        let started = Instant::now();
+        let bytes =
+            super::png_output::encode(pixels, self.info.width, self.info.height, max_png_bytes)?;
+        Ok((
+            bytes,
+            PngTimings {
+                decode_ms,
+                encode_ms: elapsed_ms(started),
+            },
+        ))
+    }
+
+    fn preview_pixels(&self) -> Result<(ag_psd::PixelData, f64), PsdError> {
         if self.info.preview.status == Support::Unsupported {
             return Err(PsdError::new(
                 PsdErrorCode::PreviewUnavailable,
@@ -164,12 +187,7 @@ impl PsdDocument {
         let pixels = ag_psd::get_composite_image_data(&self.parsed)
             .map_err(|cause| parser_error("解码保存时合成图", cause))?
             .ok_or_else(|| PsdError::new(PsdErrorCode::PreviewUnavailable, "候选没有合成图像素"))?;
-        encode_measured(
-            pixels,
-            self.info.width,
-            self.info.height,
-            elapsed_ms(started),
-        )
+        Ok((pixels, elapsed_ms(started)))
     }
 
     /// 导出已验证的简单可见位图为 1× 透明 PNG，保留画布外部分及透明边缘。
