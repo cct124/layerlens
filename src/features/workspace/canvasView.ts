@@ -24,3 +24,23 @@ export function zoomAround(view: CanvasView, zoom: number, pointX = 0, pointY = 
     y: pointY - (pointY - view.y) * ratio,
   };
 }
+
+/** 将 PSD 几何边界居中；文档坐标不乘设备像素比，也不再次应用文字矩阵。 */
+export function locateBounds(
+  width: number,
+  height: number,
+  bounds: { x: number; y: number; width: number; height: number },
+  viewportWidth: number,
+  viewportHeight: number,
+): CanvasView {
+  const zoom = Math.max(
+    0.01,
+    Math.min(8, (viewportWidth - 64) / bounds.width, (viewportHeight - 64) / bounds.height),
+  );
+  return {
+    mode: 'manual',
+    zoom,
+    x: (width / 2 - bounds.x - bounds.width / 2) * zoom,
+    y: (height / 2 - bounds.y - bounds.height / 2) * zoom,
+  };
+}

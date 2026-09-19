@@ -1,0 +1,166 @@
+.panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.panel-heading h2,
+.panel-heading h3 {
+  margin: 0;
+  flex: 1;
+}
+.panel-heading span {
+  font-size: 11px;
+  color: #718177;
+}
+.panel-heading button,
+.text-pages button {
+  font-size: 11px;
+  padding: 4px 7px;
+}
+.layer-search {
+  width: 100%;
+  border: 1px solid #d2ddd3;
+  background: #fff;
+  border-radius: 5px;
+  padding: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+.tree-viewport {
+  height: 280px;
+  overflow: auto;
+  margin: 8px 0 14px;
+  border: 1px solid #e1e7df;
+  border-radius: 5px;
+}
+.tree-row {
+  position: absolute;
+  height: 28px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-right: 5px;
+}
+.tree-row.selected {
+  background: #dceade;
+  box-shadow: inset 3px 0 #467653;
+}
+.tree-row.hidden .tree-name {
+  color: #86928b;
+}
+.tree-toggle,
+.tree-leaf {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.tree-toggle {
+  border: 0;
+  padding: 1px;
+  background: transparent;
+}
+.tree-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  font-size: 12px;
+}
+.tree-name span {
+  display: inline-block;
+  margin-right: 7px;
+  font-size: 10px;
+  color: #7f9085;
+}
+.hidden-mark {
+  font-size: 9px;
+  color: #89958b;
+}
+.layer-properties {
+  border-top: 1px solid #dce2db;
+  padding-top: 6px;
+}
+.layer-properties h3 {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.property-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 12px;
+  font-size: 11px;
+}
+.property-facts dt {
+  color: #748176;
+}
+.property-facts dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.raw-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f0f4ed;
+  border-radius: 5px;
+  padding: 10px;
+  max-height: 180px;
+  overflow: auto;
+  font:
+    12px/1.7 ui-monospace,
+    monospace;
+  user-select: text;
+}
+.layer-properties details {
+  margin: 8px 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.layer-properties summary,
+.document-details summary {
+  cursor: pointer;
+  line-height: 1.6;
+}
+.layer-properties details pre {
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 10px;
+  user-select: text;
+}
+.capability-note {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #6a786e;
+  overflow-wrap: anywhere;
+}
+.text-pages {
+  display: flex;
+  gap: 8px;
+}
+.document-details {
+  margin-top: 18px;
+  border-top: 1px solid #dce2db;
+  padding-top: 12px;
+  font-size: 11px;
+}
+.layer-error {
+  padding: 8px;
+  color: #8b493b;
+  background: #fff0ea;
+  font-size: 12px;
+}
+.layer-boundary {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid #40a3ec;
+  box-shadow: 0 0 0 1px #fff9;
+  pointer-events: none;
+}

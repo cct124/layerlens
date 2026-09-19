@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use crate::psd::{DocumentInfo, ParseLimits, PsdDocument};
+use crate::psd::{DocumentInfo, LayerId, ParseLimits, PsdDocument};
 
 use super::{
     DocumentError,
@@ -108,6 +108,7 @@ pub struct DocumentSummary {
     pub color_mode: String,
     pub bit_depth: u16,
     pub preview_note: String,
+    pub selected_layer: Option<LayerId>,
 }
 
 /// 标签顺序、活动入口与作业状态在同一次短锁访问中取得。

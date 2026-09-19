@@ -22,6 +22,9 @@ pub enum DocumentError {
         limit: u64,
     },
     NotFound(DocumentId),
+    StaleRevision,
+    InvalidQuery(&'static str),
+    LayerNotFound(crate::psd::LayerId),
     ShuttingDown,
     IdExhausted,
     WorkerStart(io::Error),
@@ -47,6 +50,9 @@ impl fmt::Display for DocumentError {
                 write!(f, "全局 {resource} 额度不足（上限 {limit}）")
             }
             Self::NotFound(id) => write!(f, "文档 {} 不存在或已关闭", id.get()),
+            Self::StaleRevision => f.write_str("文档修订已变化，请重新读取图层。"),
+            Self::InvalidQuery(message) => write!(f, "无效图层查询：{message}"),
+            Self::LayerNotFound(id) => write!(f, "图层 {} 不属于本次修订", id.0),
             Self::ShuttingDown => f.write_str("文档服务正在退出"),
             Self::IdExhausted => f.write_str("文档服务标识符已耗尽"),
             Self::WorkerStart(source) => write!(f, "无法启动文档后台线程：{source}"),

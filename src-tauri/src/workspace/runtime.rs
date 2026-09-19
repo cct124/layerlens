@@ -2,7 +2,7 @@
 
 use super::{engine::Engine, error};
 use layerlens_core::{
-    documents::{DocumentServiceConfig, PreviewLease},
+    documents::{DocumentLease, DocumentServiceConfig, PreviewLease},
     workspace_contract::*,
 };
 use std::{
@@ -27,6 +27,10 @@ enum Message {
         PreviewRequest,
         oneshot::Sender<Result<PreviewLease, WorkspaceError>>,
     ),
+    Inspect(
+        LayerRequest,
+        oneshot::Sender<Result<DocumentLease, WorkspaceError>>,
+    ),
 }
 
 /// 应用持有的适配入口；退出只发信号，由后台释放全部对象后通知事件循环退出。
@@ -36,6 +40,7 @@ pub(crate) struct WorkspaceHost {
     stopped: Arc<AtomicBool>,
     pub(crate) image_reading: Arc<AtomicBool>,
     pub(crate) picking: Arc<AtomicBool>,
+    pub(crate) inspecting: Arc<AtomicBool>,
 }
 
 impl WorkspaceHost {
@@ -78,6 +83,12 @@ impl WorkspaceHost {
                                 });
                                 let _ = reply.send(result);
                             }
+                            Ok(Message::Inspect(request, reply)) => {
+                                let _ = reply.send(
+                                    engine
+                                        .inspection_lease(&request.document_id, &request.revision),
+                                );
+                            }
                             Err(mpsc::RecvTimeoutError::Timeout) => {}
                             Err(mpsc::RecvTimeoutError::Disconnected) => break,
                         }
@@ -107,6 +118,7 @@ impl WorkspaceHost {
             stopped,
             image_reading: Arc::new(AtomicBool::new(false)),
             picking: Arc::new(AtomicBool::new(false)),
+            inspecting: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -148,6 +160,16 @@ impl WorkspaceHost {
 
     pub(crate) fn stop(&self) {
         self.stopping.store(true, Ordering::Release);
+    }
+    pub(crate) async fn inspection(
+        &self,
+        request: LayerRequest,
+    ) -> Result<DocumentLease, WorkspaceError> {
+        let (sender, receiver) = oneshot::channel();
+        self.send(Message::Inspect(request, sender))?;
+        receiver
+            .await
+            .map_err(|_| error(WorkspaceErrorCode::ShuttingDown, "工作区已停止。"))?
     }
     pub(crate) fn stopped(&self) -> bool {
         self.stopped.load(Ordering::Acquire)

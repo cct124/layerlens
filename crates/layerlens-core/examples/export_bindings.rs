@@ -2,6 +2,8 @@
 
 use std::{env, error::Error, fs, io, path::PathBuf};
 
+use layerlens_core::documents::{LayerDetails, LayerPage, LayerSummary, TextSlice};
+use layerlens_core::psd::*;
 use layerlens_core::workspace_contract::*;
 use layerlens_core::{
     AppInfo, AppInfoRequest, CommandError, CommandErrorCode, IPC_PROTOCOL_VERSION,
@@ -44,6 +46,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         WorkspaceNotice::decl(&config),
         WorkspaceResources::decl(&config),
         WorkspaceSnapshot::decl(&config),
+        LayerId::decl(&config),
+        Bounds::decl(&config),
+        LayerKind::decl(&config),
+        ExportBlocker::decl(&config),
+        Support::decl(&config),
+        Capability::decl(&config),
+        TextIndexMapping::decl(&config),
+        TextProperty::<TextMetric>::decl(&config),
+        TextUnit::decl(&config),
+        TextMetric::decl(&config),
+        TextFont::decl(&config),
+        TextColor::decl(&config),
+        CharacterStyle::decl(&config),
+        TextStyleRun::decl(&config),
+        ParagraphAlignment::decl(&config),
+        ParagraphStyle::decl(&config),
+        ParagraphStyleRun::decl(&config),
+        TextDiagnosticCode::decl(&config),
+        TextDiagnostic::decl(&config),
+        LayerSummary::decl(&config),
+        LayerPage::decl(&config),
+        TextSlice::decl(&config),
+        LayerDetails::decl(&config),
+        LayerQuery::decl(&config),
+        LayerRequest::decl(&config),
+        LayerResult::decl(&config),
+        LayerResponse::decl(&config),
     ];
     let mut expected = String::from(
         "// 此文件由 Rust DTO 自动生成，请勿手工编辑。\n\

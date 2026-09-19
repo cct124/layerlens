@@ -32,11 +32,14 @@ pub(crate) fn check_version(version: u32) -> Result<(), WorkspaceError> {
     Ok(())
 }
 
-fn domain_error(value: &DocumentError) -> WorkspaceError {
+pub(super) fn domain_error(value: &DocumentError) -> WorkspaceError {
     let code = match value {
         DocumentError::QueueFull { .. } => WorkspaceErrorCode::Busy,
         DocumentError::ResourceLimit { .. } => WorkspaceErrorCode::ResourceLimit,
         DocumentError::NotFound(_) => WorkspaceErrorCode::NotFound,
+        DocumentError::LayerNotFound(_) => WorkspaceErrorCode::NotFound,
+        DocumentError::StaleRevision => WorkspaceErrorCode::StaleRevision,
+        DocumentError::InvalidQuery(_) => WorkspaceErrorCode::InvalidInput,
         DocumentError::ShuttingDown => WorkspaceErrorCode::ShuttingDown,
         DocumentError::Parse { source, .. } | DocumentError::Preview { source, .. }
             if source.code == PsdErrorCode::ResourceLimit =>

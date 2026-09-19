@@ -51,6 +51,40 @@ fn snapshot_sequence_is_monotonic_and_idle_does_not_emit() {
 }
 
 #[test]
+fn inspection_and_selection_are_revision_scoped_without_polluting_state_with_text() {
+    let mut engine = Engine::new(Default::default()).unwrap();
+    let doc = open(&mut engine, "metadata-text.psd").documents[0].clone();
+    let lease = engine.inspection_lease(&doc.id, &doc.revision).unwrap();
+    let layer = lease.layers(0, 128).unwrap().layers[0].id;
+    engine
+        .act(WorkspaceAction::SelectLayer {
+            document_id: doc.id.clone(),
+            revision: doc.revision.clone(),
+            layer_id: Some(layer.0),
+        })
+        .unwrap();
+    let selected = engine.refresh().unwrap().0;
+    assert_eq!(selected.documents[0].selected_layer_id, Some(layer.0));
+    assert!(
+        !serde_json::to_string(&selected)
+            .unwrap()
+            .contains("rawText")
+    );
+    assert!(engine.inspection_lease(&doc.id, "99999").is_err());
+    engine
+        .act(WorkspaceAction::Reload {
+            document_id: doc.id.clone(),
+        })
+        .unwrap();
+    finish_opens(&engine);
+    assert_eq!(
+        engine.refresh().unwrap().0.documents[0].selected_layer_id,
+        None
+    );
+    assert!(engine.inspection_lease(&doc.id, &doc.revision).is_err());
+}
+
+#[test]
 fn switching_close_and_reload_never_return_another_revision_image() {
     let mut engine = Engine::new(Default::default()).unwrap();
     let first = open(&mut engine, "bitmap-raw.psd").documents[0].clone();

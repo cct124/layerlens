@@ -208,12 +208,14 @@ fn publish(shared: &Shared, work: Work, result: Result<Computed, DocumentError>)
                             .find(|entry| entry.revision.document_id == work.document)
                             .expect("未取消重载的目标必须存在");
                         discarded = Some(std::mem::replace(&mut entry.revision, revision));
+                        entry.selected_layer = None;
                         cleanup = state.previews.invalidate(Some(work.document));
                     } else {
                         state.documents.push(Entry {
                             path,
                             request_path: work.path,
                             revision,
+                            selected_layer: None,
                         });
                         if state.activation == Some(work.id) {
                             state.active = Some(work.document);

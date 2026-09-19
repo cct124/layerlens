@@ -4,7 +4,11 @@ import { listen } from '@tauri-apps/api/event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VueWrapper } from '@vue/test-utils';
 import type { EventCallback } from '@tauri-apps/api/event';
-import type { WorkspaceDocument, WorkspaceSnapshot } from '../../shared/api/generated';
+import type {
+  LayerResponse,
+  WorkspaceDocument,
+  WorkspaceSnapshot,
+} from '../../shared/api/generated';
 import WorkspaceView from './WorkspaceView.vue';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
@@ -20,6 +24,7 @@ const doc = (id: string): WorkspaceDocument => ({
   colorMode: 'RGB',
   bitDepth: 8,
   previewNote: '保存时合成图，无 ICC 转换',
+  selectedLayerId: null,
 });
 const state = (
   sequence: string,
@@ -39,6 +44,14 @@ const state = (
   shuttingDown: false,
 });
 const png = () => new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]).buffer;
+/** 测试默认图层查询返回空页，避免图层树因响应无法校验而报错。 */
+const emptyLayers = (documentId: string, revision: string): LayerResponse => ({
+  documentId,
+  revision,
+  result: { kind: 'list', page: { offset: 0, total: 0, nextOffset: null, layers: [] } },
+});
+const layerRequest = (args: unknown) =>
+  (args as { request: { documentId: string; revision: string } }).request;
 let wrapper: VueWrapper | undefined;
 let receive: EventCallback<unknown>;
 const stop = vi.fn();
@@ -70,11 +83,15 @@ beforeEach(() => {
     receive = callback;
     return stop;
   });
-  vi.mocked(invoke).mockImplementation(async (command) => {
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
     if (command === 'get_app_info')
       return { appName: 'LayerLens', appVersion: '0.1.0', protocolVersion: 1 };
     if (command === 'read_preview') return png();
     if (command === 'choose_psd_files') return ['C:/picked.psd'];
+    if (command === 'read_layers') {
+      const request = layerRequest(args);
+      return emptyLayers(request.documentId, request.revision);
+    }
     return current;
   });
 });
@@ -107,15 +124,15 @@ describe('只读桌面工作区', () => {
   });
   it('晚到的初始化响应和旧事件不能覆盖新快照', async () => {
     const response = deferred<WorkspaceSnapshot>();
-    vi.mocked(invoke).mockImplementation((command) =>
-      command === 'workspace_action'
-        ? response.promise
-        : Promise.resolve(
-            command === 'read_preview'
-              ? png()
-              : { appName: 'LayerLens', appVersion: '0.1.0', protocolVersion: 1 },
-          ),
-    );
+    vi.mocked(invoke).mockImplementation((command, args) => {
+      if (command === 'workspace_action') return response.promise;
+      if (command === 'read_preview') return Promise.resolve(png());
+      if (command === 'read_layers') {
+        const request = layerRequest(args);
+        return Promise.resolve(emptyLayers(request.documentId, request.revision));
+      }
+      return Promise.resolve({ appName: 'LayerLens', appVersion: '0.1.0', protocolVersion: 1 });
+    });
     wrapper = mount(WorkspaceView);
     await flushPromises();
     emit(state('9007199254740994', ['1']));
@@ -123,7 +140,7 @@ describe('只读桌面工作区', () => {
     response.resolve(state('1'));
     emit(state('9007199254740993', ['2']));
     await flushPromises();
-    expect(wrapper.get('.document-name').text()).toBe('design-1.psd');
+    expect(wrapper.get('.document-details summary').text()).toContain('design-1.psd');
   });
   it('拒绝修订关联失配的通知并保留有效状态', async () => {
     current = state('1', ['1']);
@@ -134,7 +151,7 @@ describe('只读桌面工作区', () => {
       preview: { documentId: '1', revision: '1', state: { phase: 'ready', cacheHit: false } },
     });
     await flushPromises();
-    expect(wrapper.get('.document-name').text()).toBe('design-1.psd');
+    expect(wrapper.get('.document-details summary').text()).toContain('design-1.psd');
     expect(wrapper.get('[role="alert"]').text()).toContain('通知无效');
   });
   it('图像串行读取，切换后丢弃旧结果并在关闭时撤销 URL', async () => {

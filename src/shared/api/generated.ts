@@ -35,17 +35,17 @@ code: CommandErrorCode,
  */
 message: string, };
 
-export type WorkspaceAction = { "kind": "snapshot", } | { "kind": "open", path: string, } | { "kind": "activate", documentId: string, } | { "kind": "close", documentId: string, } | { "kind": "reload", documentId: string, } | { "kind": "retryPreview", } | { "kind": "cancel", jobId: string, } | { "kind": "dismissNotice", noticeId: string, };
+export type WorkspaceAction = { "kind": "snapshot", } | { "kind": "open", path: string, } | { "kind": "activate", documentId: string, } | { "kind": "close", documentId: string, } | { "kind": "reload", documentId: string, } | { "kind": "selectLayer", documentId: string, revision: string, layerId: number | null, } | { "kind": "retryPreview", } | { "kind": "cancel", jobId: string, } | { "kind": "dismissNotice", noticeId: string, };
 
 export type WorkspaceRequest = { protocolVersion: number, action: WorkspaceAction, };
 
 export type PreviewRequest = { protocolVersion: number, documentId: string, revision: string, };
 
-export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "SHUTTING_DOWN" | "INTERNAL";
+export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "STALE_REVISION" | "SHUTTING_DOWN" | "INTERNAL";
 
 export type WorkspaceError = { code: WorkspaceErrorCode, message: string, };
 
-export type WorkspaceDocument = { id: string, revision: string, name: string, path: string, width: number, height: number, layerCount: number, colorMode: string, bitDepth: number, previewNote: string, };
+export type WorkspaceDocument = { id: string, revision: string, name: string, path: string, width: number, height: number, layerCount: number, colorMode: string, bitDepth: number, previewNote: string, selectedLayerId: number | null, };
 
 export type WorkspaceJobPhase = "queued" | "running" | "cancelling" | "finishing";
 
@@ -60,3 +60,61 @@ export type WorkspaceNotice = { id: string, message: string, };
 export type WorkspaceResources = { sourceBytes: string, decodedBytes: string, outputBytes: string, cacheBytes: string, };
 
 export type WorkspaceSnapshot = { protocolVersion: number, sequence: string, documents: Array<WorkspaceDocument>, activeDocumentId: string | null, jobs: Array<WorkspaceJob>, preview: WorkspacePreview | null, notices: Array<WorkspaceNotice>, resources: WorkspaceResources, shuttingDown: boolean, };
+
+export type LayerId = number;
+
+export type Bounds = { x: number, y: number, width: number, height: number, };
+
+export type LayerKind = "group" | "bitmap" | "text" | "shape" | "smartObject" | "adjustment" | "unknown";
+
+export type ExportBlocker = "unsupportedLayerKind" | "hidden" | "globalMask" | "ancestorVisualDependency" | "layerVisualDependency" | "missingRgbChannels" | "emptyBitmap";
+
+export type Support = "supported" | "partial" | "unsupported";
+
+export type Capability = { status: Support, reason: string, };
+
+export type TextIndexMapping = "exact" | "trailingParagraphTerminator";
+
+export type TextProperty<T> = { value: T, source: string, };
+
+export type TextUnit = "unverifiedEngine";
+
+export type TextMetric = { value: number, unit: TextUnit, };
+
+export type TextFont = { index: number, name: string, family: string | null, style: string | null, };
+
+export type TextColor = { red: number, green: number, blue: number, alpha: number, };
+
+export type CharacterStyle = { font: TextProperty<TextFont> | null, fontSize: TextProperty<TextMetric> | null, fillColor: TextProperty<TextColor> | null, fillEnabled: TextProperty<boolean> | null, strokeEnabled: TextProperty<boolean> | null,
+/**
+ * Photoshop 的显式 FauxBold；不转换成 CSS font-weight。
+ */
+fauxBold: TextProperty<boolean> | null, fauxItalic: TextProperty<boolean> | null, autoLeading: TextProperty<boolean> | null, leading: TextProperty<TextMetric> | null, tracking: TextProperty<TextMetric> | null, baselineShift: TextProperty<TextMetric> | null, horizontalScale: TextProperty<number> | null, verticalScale: TextProperty<number> | null, };
+
+export type TextStyleRun = { start: number, end: number, style: CharacterStyle, };
+
+export type ParagraphAlignment = "left" | "right" | "center" | "justifyLeft" | "justifyRight" | "justifyCenter" | "justifyAll";
+
+export type ParagraphStyle = { alignment: TextProperty<ParagraphAlignment> | null, autoLeading: TextProperty<number> | null, firstLineIndent: TextProperty<TextMetric> | null, startIndent: TextProperty<TextMetric> | null, endIndent: TextProperty<TextMetric> | null, spaceBefore: TextProperty<TextMetric> | null, spaceAfter: TextProperty<TextMetric> | null, };
+
+export type ParagraphStyleRun = { start: number, end: number, style: ParagraphStyle, };
+
+export type TextDiagnosticCode = "missing" | "invalid" | "unsupported" | "unverified" | "textMismatch" | "invalidRange";
+
+export type TextDiagnostic = { code: TextDiagnosticCode, path: string, message: string, };
+
+export type LayerSummary = { id: LayerId, parentId: LayerId | null, name: string, nameTruncated: boolean, kind: LayerKind, bounds: Bounds, visible: boolean, effectiveVisible: boolean, opacity: number, };
+
+export type LayerPage = { offset: number, total: number, nextOffset: number | null, layers: Array<LayerSummary>, };
+
+export type TextSlice = { text: string, start: number, end: number, totalLength: number, nextStart: number | null, transform: [number, number, number, number, number, number] | null, styles: Capability, indexMapping: TextIndexMapping | null, styleRuns: Array<TextStyleRun> | null, paragraphRuns: Array<ParagraphStyleRun> | null, diagnostics: Array<TextDiagnostic>, diagnosticsTruncated: boolean, };
+
+export type LayerDetails = { layer: LayerSummary, export: Capability, exportBlockers: Array<ExportBlocker>, diagnostics: Array<string>, diagnosticsTruncated: boolean, text: TextSlice | null, };
+
+export type LayerQuery = { "kind": "list", offset: number, limit: number, } | { "kind": "details", layerId: number, textStart: number, };
+
+export type LayerRequest = { protocolVersion: number, documentId: string, revision: string, query: LayerQuery, };
+
+export type LayerResult = { "kind": "list", page: LayerPage, } | { "kind": "details", details: LayerDetails, };
+
+export type LayerResponse = { documentId: string, revision: string, result: LayerResult, };

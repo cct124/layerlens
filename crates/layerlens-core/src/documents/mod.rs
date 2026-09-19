@@ -6,12 +6,14 @@
 
 mod budget;
 mod error;
+mod inspection;
 mod model;
 mod preview;
 mod state;
 mod worker;
 
 pub use error::DocumentError;
+pub use inspection::{LayerDetails, LayerPage, LayerSummary, TextSlice};
 pub use model::{
     DocumentId, DocumentLease, DocumentServiceConfig, DocumentSummary, JobCompletion, JobStatus,
     OpenJob, OpenJobId, OpenOutcome, PreviewJobId, ResourceAccounting, RevisionId, ServiceSnapshot,

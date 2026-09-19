@@ -2,7 +2,8 @@
 
 use crate::workspace::{WorkspaceHost, check_version, error};
 use layerlens_core::workspace_contract::{
-    PreviewRequest, WorkspaceError, WorkspaceErrorCode, WorkspaceRequest, WorkspaceSnapshot,
+    LayerQuery, LayerRequest, LayerResponse, LayerResult, PreviewRequest, WorkspaceError,
+    WorkspaceErrorCode, WorkspaceRequest, WorkspaceSnapshot,
 };
 use layerlens_core::{AppInfo, AppInfoRequest, CommandError};
 use std::sync::{
@@ -57,6 +58,41 @@ pub(crate) async fn read_preview(
     })
     .await
     .map_err(|e| error(WorkspaceErrorCode::Internal, format!("读取预览失败：{e}")))
+}
+
+/// 固定修订后在阻塞池组装有界详情；一次只允许一个查询，避免复制大文字属性时无限并发。
+#[tauri::command]
+pub(crate) async fn read_layers(
+    request: LayerRequest,
+    host: tauri::State<'_, WorkspaceHost>,
+) -> Result<LayerResponse, WorkspaceError> {
+    check_version(request.protocol_version)?;
+    let guard = SingleOperation::acquire(&host.inspecting)?;
+    let lease = host.inspection(request.clone()).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
+        let result = match request.query {
+            LayerQuery::List { offset, limit } => lease
+                .layers(offset, limit)
+                .map(|page| LayerResult::List { page }),
+            LayerQuery::Details {
+                layer_id,
+                text_start,
+            } => lease
+                .layer_details(layerlens_core::psd::LayerId(layer_id), text_start)
+                .map(|details| LayerResult::Details {
+                    details: Box::new(details),
+                }),
+        }
+        .map_err(|e| crate::workspace::domain_error(&e))?;
+        Ok(LayerResponse {
+            document_id: lease.document_id().get().to_string(),
+            revision: lease.revision_id().get().to_string(),
+            result,
+        })
+    })
+    .await
+    .map_err(|e| error(WorkspaceErrorCode::Internal, format!("读取图层失败：{e}")))?
 }
 
 #[tauri::command]

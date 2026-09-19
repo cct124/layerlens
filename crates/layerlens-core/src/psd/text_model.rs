@@ -2,11 +2,12 @@
 //! 不推断字体字重、不执行排版、不把文本引擎数值当作 CSS 值。
 
 use serde::Serialize;
+use ts_rs::TS;
 
 use super::capability::Capability;
 
 /// TySh 原文、矩阵及经校验的样式；null 区间表示缺失或不可映射，空数组表示空文本。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TextData {
     pub raw_text: String,
@@ -22,7 +23,7 @@ pub struct TextData {
 }
 
 /// 仅允许精确原文或原文后单个引擎段落结束符；不按归一化文本猜测区间。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum TextIndexMapping {
     Exact,
@@ -30,28 +31,28 @@ pub enum TextIndexMapping {
 }
 
 /// 属性值及其完整 EngineData 键路径；继承仅使用源文件显式 DefaultRunData。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct TextProperty<T> {
     pub value: T,
     pub source: String,
 }
 
 /// 尚未有独立参考确认 pt/px 的引擎量；保留数值而不按 DPI 或矩阵换算。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum TextUnit {
     UnverifiedEngine,
 }
 
 /// 原始文字度量值；包含字号、行距、字距和段落间距。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct TextMetric {
     pub value: f64,
     pub unit: TextUnit,
 }
 
 /// 明确 Font 索引引用的 FontSet 项；名称不表示本机可用或确定的 CSS 字重。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TextFont {
     pub index: u32,
@@ -61,7 +62,7 @@ pub struct TextFont {
 }
 
 /// 引擎 RGB 颜色的原始 0–1 通道；未执行 ICC 转换，不能直接声明为 sRGB。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct TextColor {
     pub red: f64,
     pub green: f64,
@@ -70,7 +71,7 @@ pub struct TextColor {
 }
 
 /// 源中已读取的字符属性；null 表示缺失、非法或未支持，原因见文字诊断。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CharacterStyle {
     pub font: Option<TextProperty<TextFont>>,
@@ -90,7 +91,7 @@ pub struct CharacterStyle {
 }
 
 /// 字符样式的原文 UTF-16 左闭右开区间；边界不拆分代理对。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 pub struct TextStyleRun {
     pub start: u32,
     pub end: u32,
@@ -98,7 +99,7 @@ pub struct TextStyleRun {
 }
 
 /// 引擎 Justification 显式枚举；未知值不回退到左对齐。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ParagraphAlignment {
     Left,
@@ -111,7 +112,7 @@ pub enum ParagraphAlignment {
 }
 
 /// 已读取的段落属性；自动行距仅保留比率，不推算最终排版行高。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ParagraphStyle {
     pub alignment: Option<TextProperty<ParagraphAlignment>>,
@@ -124,7 +125,7 @@ pub struct ParagraphStyle {
 }
 
 /// 段落属性的原文 UTF-16 左闭右开区间。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 pub struct ParagraphStyleRun {
     pub start: u32,
     pub end: u32,
@@ -132,7 +133,7 @@ pub struct ParagraphStyleRun {
 }
 
 /// 缺失、非法、未实现与待独立核验的信息可机器区分。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum TextDiagnosticCode {
     Missing,
@@ -144,7 +145,7 @@ pub enum TextDiagnosticCode {
 }
 
 /// 文字局部诊断；路径指向字段或数组项，不记录文字原文及字体名称。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 pub struct TextDiagnostic {
     pub code: TextDiagnosticCode,
     pub path: String,

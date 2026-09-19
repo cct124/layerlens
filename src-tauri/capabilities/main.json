@@ -7,6 +7,7 @@
     "allow-get-app-info",
     "allow-workspace-action",
     "allow-read-preview",
+    "allow-read-layers",
     "allow-choose-psd-files",
     "core:event:allow-listen",
     "core:event:allow-unlisten"

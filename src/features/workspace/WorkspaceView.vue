@@ -1,8 +1,14 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useWorkspace } from './useWorkspace';
 import { useAppStatus } from './useAppStatus';
 import PreviewCanvas from './PreviewCanvas.vue';
+import LayerTree from './LayerTree.vue';
+import LayerProperties from './LayerProperties.vue';
+import './inspection.css';
+import { useLayers } from './useLayers';
+import { initialTree } from './layerTree';
+import type { LayerTreeView } from './layerTree';
 import { initialView } from './canvasView';
 import type { CanvasView } from './canvasView';
 import type { WorkspaceJobPhase } from '../../shared/api/generated';
@@ -11,12 +17,39 @@ const { desktop, snapshot, active, error, connecting, picking, preview, act, con
 const { url, error: imageError, loading, retry, imageFailed } = preview;
 const { status } = useAppStatus();
 const views = reactive(new Map<string, CanvasView>());
+const trees = reactive(new Map<string, { revision: string; view: LayerTreeView }>());
+const {
+  layers,
+  details,
+  error: layerError,
+  loading: layersLoading,
+  detailLoading,
+  readText,
+  reload: reloadLayers,
+} = useLayers(active);
+const canvas = ref<InstanceType<typeof PreviewCanvas> | null>(null);
+const selectedBounds = computed(
+  () => layers.value.find((layer) => layer.id === active.value?.selectedLayerId)?.bounds ?? null,
+);
+function selectLayer(layerId: number | null) {
+  if (active.value)
+    void act({
+      kind: 'selectLayer',
+      documentId: active.value.id,
+      revision: active.value.revision,
+      layerId,
+    });
+}
 watch(
   snapshot,
   (value) => {
     const ids = new Set(value?.documents.map((d) => d.id));
     for (const id of views.keys()) if (!ids.has(id)) views.delete(id);
     for (const id of ids) if (!views.has(id)) views.set(id, initialView());
+    for (const id of trees.keys()) if (!ids.has(id)) trees.delete(id);
+    for (const doc of value?.documents ?? [])
+      if (trees.get(doc.id)?.revision !== doc.revision)
+        trees.set(doc.id, { revision: doc.revision, view: initialTree() });
   },
   { flush: 'sync' },
 );
@@ -101,12 +134,14 @@ function retryPreview() {
       <section class="workspace" aria-label="文档工作区">
         <PreviewCanvas
           v-if="active"
+          ref="canvas"
           :key="active.id"
           :width="active.width"
           :height="active.height"
           :name="active.name"
           :url="url"
           :view="views.get(active.id) ?? initialView()"
+          :bounds="selectedBounds"
           @update:view="views.set(active.id, $event)"
           @image-error="imageFailed"
         >
@@ -159,32 +194,48 @@ function retryPreview() {
           <p v-if="connecting" role="status">正在连接桌面工作区…</p>
         </div>
       </section>
-      <aside class="sidebar" aria-label="文档信息">
-        <div class="section-heading">
-          <h2>文档信息</h2>
-          <span>01</span>
-        </div>
-        <template v-if="active"
-          ><h3 class="document-name">{{ active.name }}</h3>
-          <dl class="document-facts">
-            <dt>画布</dt>
-            <dd>{{ active.width }} × {{ active.height }} px</dd>
-            <dt>颜色</dt>
-            <dd>{{ active.colorMode }} / {{ active.bitDepth }} 位</dd>
-            <dt>图层记录</dt>
-            <dd>{{ active.layerCount }}</dd>
-            <dt>修订</dt>
-            <dd>{{ active.revision }}</dd>
-          </dl>
-          <p class="document-path" :title="active.path">{{ active.path }}</p>
-          <button class="wide-button" @click="act({ kind: 'reload', documentId: active.id })">
-            从磁盘重新加载
-          </button>
-          <p class="subtle">文件改变后请主动重载；加载失败时保留已有内容。</p>
-          <div class="sidebar-divider"></div>
-          <h3>预览范围</h3>
-          <p class="preview-note">{{ active.previewNote }}</p></template
-        >
+      <aside class="sidebar" aria-label="图层与只读属性">
+        <template v-if="active">
+          <LayerTree
+            :key="`${active.id}:${active.revision}`"
+            :layers="layers"
+            :selected="active.selectedLayerId"
+            :loading="layersLoading"
+            :view="trees.get(active.id)?.view ?? initialTree()"
+            @select="selectLayer"
+            @update:view="trees.set(active.id, { revision: active.revision, view: $event })"
+          />
+          <div v-if="layerError" class="layer-error" role="alert">
+            {{ layerError }} <button @click="reloadLayers">重新读取</button>
+          </div>
+          <LayerProperties
+            :details="details"
+            :loading="detailLoading"
+            @page="readText"
+            @locate="canvas?.locate()"
+          />
+          <details class="document-details">
+            <summary>文档信息 · {{ active.name }}</summary>
+            <dl class="document-facts">
+              <dt>画布</dt>
+              <dd>{{ active.width }} × {{ active.height }} px</dd>
+              <dt>颜色</dt>
+              <dd>{{ active.colorMode }} / {{ active.bitDepth }} 位</dd>
+              <dt>图层记录</dt>
+              <dd>{{ active.layerCount }}</dd>
+              <dt>修订</dt>
+              <dd>{{ active.revision }}</dd>
+            </dl>
+            <p class="document-path" :title="active.path">{{ active.path }}</p>
+            <button class="wide-button" @click="act({ kind: 'reload', documentId: active.id })">
+              从磁盘重新加载
+            </button>
+            <p class="subtle">文件改变后请主动重载；加载失败时保留已有内容。</p>
+            <div class="sidebar-divider"></div>
+            <h3>预览范围</h3>
+            <p class="preview-note">{{ active.previewNote }}</p>
+          </details>
+        </template>
         <template v-else
           ><p class="subtle">打开文档后，在这里查看画布尺寸、颜色模式和预览能力。</p>
           <div class="sidebar-divider"></div>

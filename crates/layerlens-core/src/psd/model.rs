@@ -1,15 +1,16 @@
 //! 解析实验的规范化输出；不泄漏候选库类型，也不代表已发布的桌面或 MCP 契约。
 
 use serde::Serialize;
+use ts_rs::TS;
 
 use super::{capability::Capability, text_model::TextData};
 
 /// 仅在所属解析结果中有效的图层引用；不使用图层名称或 PSD 内部 ID 寻址。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 pub struct LayerId(pub u32);
 
 /// 文档像素坐标，原点位于画布左上角；保留负坐标及零面积。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 pub struct Bounds {
     pub x: i32,
     pub y: i32,
@@ -18,7 +19,7 @@ pub struct Bounds {
 }
 
 /// 原型能识别的来源类型；识别类型不表示支持其渲染或样式读取。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum LayerKind {
     Group,
@@ -31,7 +32,7 @@ pub enum LayerKind {
 }
 
 /// 独立素材导出的阻塞因素；同一节点可同时包含多项，统计不可直接相加为图层数。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ExportBlocker {
     UnsupportedLayerKind,

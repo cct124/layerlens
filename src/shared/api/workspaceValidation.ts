@@ -32,6 +32,7 @@ const errorCodes: Record<WorkspaceErrorCode, true> = {
   OPEN_FAILED: true,
   PREVIEW_FAILED: true,
   STALE_PREVIEW: true,
+  STALE_REVISION: true,
   SHUTTING_DOWN: true,
   INTERNAL: true,
 };
@@ -59,7 +60,9 @@ function document(value: unknown): value is WorkspaceDocument {
     integer(value.layerCount) &&
     typeof value.colorMode === 'string' &&
     integer(value.bitDepth) &&
-    typeof value.previewNote === 'string'
+    typeof value.previewNote === 'string' &&
+    (value.selectedLayerId === null ||
+      (integer(value.selectedLayerId) && value.selectedLayerId <= 4294967295))
   );
 }
 

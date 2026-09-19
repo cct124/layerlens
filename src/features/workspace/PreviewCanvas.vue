@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { fitZoom, initialView, zoomAround } from './canvasView';
+import { fitZoom, initialView, locateBounds, zoomAround } from './canvasView';
 import type { CanvasView } from './canvasView';
+import type { Bounds } from '../../shared/api/generated';
 const props = defineProps<{
   width: number;
   height: number;
   url: string | null;
   name: string;
   view: CanvasView;
+  bounds: Bounds | null;
 }>();
 const emit = defineEmits<{ 'update:view': [view: CanvasView]; imageError: [] }>();
 const viewport = ref<HTMLElement | null>(null);
@@ -63,6 +65,14 @@ function move(event: PointerEvent) {
 function end() {
   drag = null;
 }
+function locate() {
+  if (props.bounds?.width && props.bounds.height)
+    emit(
+      'update:view',
+      locateBounds(props.width, props.height, props.bounds, size.value.width, size.value.height),
+    );
+}
+defineExpose({ locate });
 </script>
 <template>
   <div class="preview-pane">
@@ -116,7 +126,18 @@ function end() {
         }"
         @error="emit('imageError')"
       />
-      <div v-else class="canvas-message"><slot /></div>
+      <div
+        v-if="bounds && bounds.width > 0 && bounds.height > 0"
+        class="layer-boundary"
+        aria-label="选中图层几何边界"
+        :style="{
+          left: `calc(50% + ${effective.x + (bounds.x - width / 2) * effective.zoom}px)`,
+          top: `calc(50% + ${effective.y + (bounds.y - height / 2) * effective.zoom}px)`,
+          width: `${bounds.width * effective.zoom}px`,
+          height: `${bounds.height * effective.zoom}px`,
+        }"
+      ></div>
+      <div v-if="!url" class="canvas-message"><slot /></div>
     </div>
     <div class="canvas-footer">
       <span>{{ width }} × {{ height }} 原稿像素</span><span>拖动平移 · 滚轮缩放 · 方向键移动</span>

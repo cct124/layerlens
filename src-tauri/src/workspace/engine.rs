@@ -6,8 +6,8 @@ use std::{collections::BTreeMap, path::Path};
 use layerlens_core::{
     IPC_PROTOCOL_VERSION,
     documents::{
-        DocumentId, DocumentService, DocumentServiceConfig, JobStatus, OpenJob, OpenJobId,
-        OpenOutcome, PreviewJob, PreviewLease, PreviewOutcome, RevisionId,
+        DocumentId, DocumentLease, DocumentService, DocumentServiceConfig, JobStatus, OpenJob,
+        OpenJobId, OpenOutcome, PreviewJob, PreviewLease, PreviewOutcome, RevisionId,
     },
     workspace_contract::*,
 };
@@ -100,6 +100,16 @@ impl Engine {
                     .into_owned();
                 let job = self.service.reload(id).map_err(|e| domain_error(&e))?;
                 self.opens.insert(job.id(), (format!("重载 {name}"), job));
+            }
+            WorkspaceAction::SelectLayer {
+                document_id,
+                revision,
+                layer_id,
+            } => {
+                let lease = self.inspection_lease(&document_id, &revision)?;
+                self.service
+                    .select_layer(&lease, layer_id.map(layerlens_core::psd::LayerId))
+                    .map_err(|e| domain_error(&e))?;
             }
             WorkspaceAction::RetryPreview {} => {
                 // 重试只释放本适配层引用，不隐式取消另一个调用方合并的工作。
@@ -245,6 +255,7 @@ impl Engine {
                 color_mode: d.color_mode.clone(),
                 bit_depth: d.bit_depth,
                 preview_note: d.preview_note.clone(),
+                selected_layer_id: d.selected_layer.map(|id| id.0),
             });
         }
         let mut snapshot = WorkspaceSnapshot {
@@ -307,6 +318,24 @@ impl Engine {
                     "预览已切换或尚未就绪，请读取当前工作区。",
                 )
             })
+    }
+
+    pub(super) fn inspection_lease(
+        &self,
+        document: &str,
+        revision: &str,
+    ) -> Result<DocumentLease, WorkspaceError> {
+        let lease = self
+            .service
+            .lease(self.document(document)?)
+            .map_err(|e| domain_error(&e))?;
+        if lease.revision_id().get().to_string() != revision {
+            return Err(error(
+                WorkspaceErrorCode::StaleRevision,
+                "文档修订已变化，请重新读取图层。",
+            ));
+        }
+        Ok(lease)
     }
 
     pub(super) fn shutdown(&mut self) -> Result<(), WorkspaceError> {

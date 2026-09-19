@@ -66,6 +66,9 @@ fn source_replacement_and_failed_reload_leave_old_revision_intact() {
     let mut service = DocumentService::new(DocumentServiceConfig::default()).unwrap();
     let (document, revision) = opened(service.open(&path).unwrap());
     let old = service.lease(document).unwrap();
+    service
+        .select_layer(&old, Some(layerlens_core::psd::LayerId(0)))
+        .unwrap();
     let hash = old.source_sha256().to_owned();
     let before = service.snapshot().resources;
 
@@ -73,6 +76,10 @@ fn source_replacement_and_failed_reload_leave_old_revision_intact() {
     let failed = service.reload(document).unwrap().wait();
     assert!(matches!(failed.outcome, OpenOutcome::Failed(_)));
     assert_eq!(service.lease(document).unwrap().revision_id(), revision);
+    assert_eq!(
+        service.snapshot().documents[0].selected_layer,
+        Some(layerlens_core::psd::LayerId(0))
+    );
     assert_eq!(service.snapshot().resources, before);
     assert_eq!(service.snapshot().active_document, Some(document));
 

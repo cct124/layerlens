@@ -18,6 +18,7 @@ pub(super) struct Entry {
     pub path: PathBuf,
     pub request_path: PathBuf,
     pub revision: Arc<Revision>,
+    pub selected_layer: Option<crate::psd::LayerId>,
 }
 
 impl Entry {
@@ -32,6 +33,7 @@ impl Entry {
             color_mode: self.revision.parsed.info().color_mode.clone(),
             bit_depth: self.revision.parsed.info().bit_depth,
             preview_note: self.revision.parsed.info().preview.reason.clone(),
+            selected_layer: self.selected_layer,
         }
     }
 }

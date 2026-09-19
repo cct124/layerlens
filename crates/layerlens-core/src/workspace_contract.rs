@@ -15,13 +15,30 @@ use ts_rs::TS;
 )]
 pub enum WorkspaceAction {
     Snapshot {},
-    Open { path: String },
-    Activate { document_id: String },
-    Close { document_id: String },
-    Reload { document_id: String },
+    Open {
+        path: String,
+    },
+    Activate {
+        document_id: String,
+    },
+    Close {
+        document_id: String,
+    },
+    Reload {
+        document_id: String,
+    },
+    SelectLayer {
+        document_id: String,
+        revision: String,
+        layer_id: Option<u32>,
+    },
     RetryPreview {},
-    Cancel { job_id: String },
-    DismissNotice { notice_id: String },
+    Cancel {
+        job_id: String,
+    },
+    DismissNotice {
+        notice_id: String,
+    },
 }
 
 /// 每次调用校验协议版本；结构反序列化之后仍须校验 ID、路径及资源准入。
@@ -60,6 +77,7 @@ pub enum WorkspaceErrorCode {
     OpenFailed,
     PreviewFailed,
     StalePreview,
+    StaleRevision,
     ShuttingDown,
     Internal,
 }
@@ -78,6 +96,7 @@ pub struct WorkspaceDocument {
     pub color_mode: String,
     pub bit_depth: u16,
     pub preview_note: String,
+    pub selected_layer_id: Option<u32>,
 }
 
 /// 排队、计算和取消后的收尾分别展示，不将取消请求解释为计算已停止。
@@ -158,4 +177,47 @@ pub struct WorkspaceSnapshot {
     pub notices: Vec<WorkspaceNotice>,
     pub resources: WorkspaceResources,
     pub shutting_down: bool,
+}
+
+/// 按需图层读取，不进入工作区通知。数量、文字偏移及目标修订由核心校验。
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum LayerQuery {
+    List { offset: u32, limit: u32 },
+    Details { layer_id: u32, text_start: u32 },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LayerRequest {
+    pub protocol_version: u32,
+    pub document_id: String,
+    pub revision: String,
+    pub query: LayerQuery,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LayerResult {
+    List {
+        page: crate::documents::LayerPage,
+    },
+    Details {
+        // 详情远大于列表页，装箱避免整个结果枚举按大变体移动。
+        details: Box<crate::documents::LayerDetails>,
+    },
+}
+
+/// 响应携带实际固定的目标关联，前端不能仅凭到达顺序展示属性。
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerResponse {
+    pub document_id: String,
+    pub revision: String,
+    pub result: LayerResult,
 }

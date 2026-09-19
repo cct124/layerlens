@@ -12,6 +12,7 @@ fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R>
             commands::get_app_info,
             commands::workspace_action,
             commands::read_preview,
+            commands::read_layers,
             commands::choose_psd_files
         ])
 }
@@ -171,6 +172,10 @@ mod tests {
                 json!({ "protocolVersion": 2, "documentId": "1", "revision": "1" }),
             ),
             ("choose_psd_files", json!({ "protocolVersion": 2 })),
+            (
+                "read_layers",
+                json!({"protocolVersion":2,"documentId":"1","revision":"1","query":{"kind":"list","offset":0,"limit":128}}),
+            ),
         ] {
             let blocked = invoke_command("untrusted", command, request.clone()).unwrap_err();
             assert!(blocked.as_str().unwrap().contains("not allowed"));

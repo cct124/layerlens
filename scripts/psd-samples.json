@@ -1,0 +1,422 @@
+{
+  "upstreamCommit": "51082d37f041425a9721e8a4252214a12b35cfa9",
+  "licenseNote": "仅本地测试；保留上游许可，不推定测试图的再分发权。GraphicBurger 资源不提交仓库。",
+  "files": [
+    {
+      "path": "samples/psd-tools/0layers.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/0layers.psd",
+      "size": 114064,
+      "gitSha1": "182715b5a5e36f36a7ff4f3e8a1f7de199eb8b50",
+      "scenario": "基础图层与合成图"
+    },
+    {
+      "path": "samples/psd-tools/1layer.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/1layer.psd",
+      "size": 6476,
+      "gitSha1": "2420ee826ae9c2271cd80a0b01ec394d26b38c07",
+      "scenario": "基础图层与合成图"
+    },
+    {
+      "path": "samples/psd-tools/2layers.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/2layers.psd",
+      "size": 14176,
+      "gitSha1": "8e5f89d87d7c74e0e4ec59b03a3c64c1938e5a28",
+      "scenario": "基础图层与合成图"
+    },
+    {
+      "path": "samples/psd-tools/background-red-opacity-80.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/background-red-opacity-80.psd",
+      "size": 500483,
+      "gitSha1": "1aef76f50fcd21135a52d97a7f610147a6ba3ce9",
+      "scenario": "基础图层与合成图"
+    },
+    {
+      "path": "samples/psd-tools/semi-transparent-layers.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/semi-transparent-layers.psd",
+      "size": 37746,
+      "gitSha1": "88a15171e0686a405bfd9c23531cd75d0ea1a7da",
+      "scenario": "基础图层与合成图"
+    },
+    {
+      "path": "samples/psd-tools/group.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/group.psd",
+      "size": 31480,
+      "gitSha1": "60dbe4c37171cd6d4dc7bdb81e2d49f04a108fa5",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/hidden-groups.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/hidden-groups.psd",
+      "size": 33178,
+      "gitSha1": "70c27dd2d992afc979a1a7923181c6752dd05fb9",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/hidden-layer.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/hidden-layer.psd",
+      "size": 29810,
+      "gitSha1": "efeef4074cb546d15782beeeca777536dcc6b250",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/empty-group.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/empty-group.psd",
+      "size": 26312,
+      "gitSha1": "ce2ed3a9901dfd2cfd40150621200320ea3e9701",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/empty-layer.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/empty-layer.psd",
+      "size": 27982,
+      "gitSha1": "39c520046152bfbcb56adee7abca352956c8a7fd",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/broken-groups.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/broken-groups.psd",
+      "size": 1429886,
+      "gitSha1": "a5006ba820d361123236dcdb301c6922513be20d",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/layer-name-emoji.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layer-name-emoji.psd",
+      "size": 20824,
+      "gitSha1": "ef8d2e6fa1c88aa62c920129fa172c5e39140dbc",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/artboard.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/artboard.psd",
+      "size": 563641,
+      "gitSha1": "a961a9f93408557ef9e053b5b9da372815eafc90",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/blend-modes/rgb-blend-modes.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/blend-modes/rgb-blend-modes.psd",
+      "size": 1870147,
+      "gitSha1": "dde18f880a5278bdbaee08fdfb596d3b2d3504c7",
+      "scenario": "层级、隐藏与空边界"
+    },
+    {
+      "path": "samples/psd-tools/text.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/text.psd",
+      "size": 93949,
+      "gitSha1": "c424e40ae25c8d05ab7652ce5ee83eab1ac56744",
+      "scenario": "文字、DPI 与 Unicode"
+    },
+    {
+      "path": "samples/psd-tools/layers-minimal/type-layer.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layers-minimal/type-layer.psd",
+      "size": 43944,
+      "gitSha1": "d920df70baf977c2fc04d5e47147ef831d5c53e6",
+      "scenario": "文字、DPI 与 Unicode"
+    },
+    {
+      "path": "samples/psd-tools/300dpi.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/300dpi.psd",
+      "size": 201944,
+      "gitSha1": "a61b808ec6722011600d79fe403bd4970e80673d",
+      "scenario": "文字、DPI 与 Unicode"
+    },
+    {
+      "path": "samples/psd-tools/unicode_pathname.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/unicode_pathname.psd",
+      "size": 120304,
+      "gitSha1": "6efb9ad90fd07e00e9fde652c553bbe49a6526df",
+      "scenario": "文字、DPI 与 Unicode"
+    },
+    {
+      "path": "samples/psd-tools/layers-minimal/shape-layer.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layers-minimal/shape-layer.psd",
+      "size": 24146,
+      "gitSha1": "5b33719c08d8637021deb72b14c4d8118ba86db8",
+      "scenario": "形状、填充与智能对象"
+    },
+    {
+      "path": "samples/psd-tools/layers-minimal/gradient-fill.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layers-minimal/gradient-fill.psd",
+      "size": 23370,
+      "gitSha1": "2b2f56751e27833b06e6c1ee7ad19f958c3a49fd",
+      "scenario": "形状、填充与智能对象"
+    },
+    {
+      "path": "samples/psd-tools/layers-minimal/pattern-fill.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layers-minimal/pattern-fill.psd",
+      "size": 58494,
+      "gitSha1": "e5c6cbaf00b76a75f742c227255bafee2ebabf46",
+      "scenario": "形状、填充与智能对象"
+    },
+    {
+      "path": "samples/psd-tools/layers-minimal/solid-color-fill.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layers-minimal/solid-color-fill.psd",
+      "size": 22662,
+      "gitSha1": "2cf0210dca5c1153cd94339af4ef744588c595ac",
+      "scenario": "形状、填充与智能对象"
+    },
+    {
+      "path": "samples/psd-tools/layers-minimal/smartobject-layer.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layers-minimal/smartobject-layer.psd",
+      "size": 26144,
+      "gitSha1": "b37b63466ecee1586b5d917e0b40fbf236b0e65d",
+      "scenario": "形状、填充与智能对象"
+    },
+    {
+      "path": "samples/psd-tools/smart-object-slice.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/smart-object-slice.psd",
+      "size": 1081897,
+      "gitSha1": "4727e5883f4d9dd93a1063e510cabf2ab483c795",
+      "scenario": "形状、填充与智能对象"
+    },
+    {
+      "path": "samples/psd-tools/placedLayer.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/placedLayer.psd",
+      "size": 114796,
+      "gitSha1": "707df934bb10bbcbb699c46d4bcde5580e48c036",
+      "scenario": "形状、填充与智能对象"
+    },
+    {
+      "path": "samples/psd-tools/masks/2.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/masks/2.psd",
+      "size": 25590,
+      "gitSha1": "ce71f099b7e651b6d59b7b267775441550ef8d15",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/masks2.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/masks2.psd",
+      "size": 815749,
+      "gitSha1": "3627b4fe426f79d16445d581a4d4a33392b22fd5",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/vector-mask.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/vector-mask.psd",
+      "size": 223718,
+      "gitSha1": "590314e9beabf0e400ecf044fadf780c5b4f83f4",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/vector-mask-disabled.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/vector-mask-disabled.psd",
+      "size": 222814,
+      "gitSha1": "b3a32be6d72d6814d0ccabb43f1cd0d155141625",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/clipping-mask.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/clipping-mask.psd",
+      "size": 95259,
+      "gitSha1": "9a96be9cdc59baa5b454bfb1719d0a3d987e7286",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/group-clipping/group-clipping.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/group-clipping/group-clipping.psd",
+      "size": 78020,
+      "gitSha1": "a28bb699df74ac0f57b94d6da95222f96743deee",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/layer_effects.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/layer_effects.psd",
+      "size": 735149,
+      "gitSha1": "9a3836f71c4e2a102e8040bf2eeddaf92cf3a7eb",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/effects/group-stroke-off-canvas.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/effects/group-stroke-off-canvas.psd",
+      "size": 38698,
+      "gitSha1": "233e8a5986979213a7c31b3bbfec0eac566fb2a2",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/adjustments/brightnesscontrast_rgb.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/adjustments/brightnesscontrast_rgb.psd",
+      "size": 299567,
+      "gitSha1": "41bf40d7a05856f0e6938be05243700293000baf",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/transparency/knockout-none-normal.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/transparency/knockout-none-normal.psd",
+      "size": 31320,
+      "gitSha1": "c2dc882ed29c8dc3ca9f9bd5a0fbf066cb1ea3c7",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/transparency/knockout-deep-cyanbg.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/transparency/knockout-deep-cyanbg.psd",
+      "size": 31320,
+      "gitSha1": "5d424e5058e2442841c8c165e08e74ae8b5c308c",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/transparency/knockout-deep-nobg.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/transparency/knockout-deep-nobg.psd",
+      "size": 31666,
+      "gitSha1": "eca7033a762a84979e1fad714edad4fda32f0fe9",
+      "scenario": "蒙版、效果与混合依赖"
+    },
+    {
+      "path": "samples/psd-tools/16bit5x5.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/16bit5x5.psd",
+      "size": 22592,
+      "gitSha1": "424f7cdcede181d8f389db188d3df8ac3caf93ed",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/32bit5x5.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/32bit5x5.psd",
+      "size": 20012,
+      "gitSha1": "c5dbf024ec3c665338471af29613f81bea7fef7f",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/pen-text.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/pen-text.psd",
+      "size": 1258678,
+      "gitSha1": "548eee56cdee1975861e44babca4959a2f4ff09c",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/transparentbg.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/transparentbg.psd",
+      "size": 260130,
+      "gitSha1": "0d1d5c7c142d2d40ede001ccb185a7f63faeca2f",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/1layer.psb",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/1layer.psb",
+      "size": 26636,
+      "gitSha1": "bbad7086dcf28ae1f38f7db5e9c37c1160f00641",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/colormodes/4x4_8bit_cmyk.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/colormodes/4x4_8bit_cmyk.psd",
+      "size": 577446,
+      "gitSha1": "21ffe1c124468d6991a7b71553cb9dd787c4cbfd",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/colormodes/4x4_8bit_grayscale.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/colormodes/4x4_8bit_grayscale.psd",
+      "size": 20688,
+      "gitSha1": "0af1008e1d4384568f439fa4a7694666e8d36c85",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/colormodes/4x4_8bit_lab.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/colormodes/4x4_8bit_lab.psd",
+      "size": 20100,
+      "gitSha1": "f1c065f9cbf0dfe42054753ea02af67e4600492a",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/colormodes/4x4_8bit_index_color.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/colormodes/4x4_8bit_index_color.psd",
+      "size": 22084,
+      "gitSha1": "ddf3f56ad4af9e2102533e0c1ba791f39695a9bf",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/colormodes/4x4_1bit_bitmap.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/colormodes/4x4_1bit_bitmap.psd",
+      "size": 17900,
+      "gitSha1": "fb8088475909107bf3e64eaefef4e26a79e0825e",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/colormodes/4x4_8bit_rgb.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/colormodes/4x4_8bit_rgb.psd",
+      "size": 23308,
+      "gitSha1": "444afeca20f8b424b12f9b754ba488ab250c85a5",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "samples/psd-tools/colormodes/4x4_8bit_rgba.psd",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/colormodes/4x4_8bit_rgba.psd",
+      "size": 23780,
+      "gitSha1": "5abf92653d03a9d255e0980efe1c15f369912c3a",
+      "scenario": "颜色、位深和 PSB 拒绝边界"
+    },
+    {
+      "path": "source-info/LICENSE",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/LICENSE",
+      "size": 1058,
+      "gitSha1": "0ddde68b9eaf78a88f1b990f5bc2fa2aff67c67f",
+      "scenario": "许可或独立参考"
+    },
+    {
+      "path": "source-info/brightnesscontrast_rgb.png",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_files/adjustments/brightnesscontrast_rgb.png",
+      "size": 79545,
+      "gitSha1": "36f28cbc0bef2c17ea76388396a81d9805d3823e",
+      "scenario": "许可或独立参考"
+    },
+    {
+      "path": "source-info/test_layers.py",
+      "url": "https://raw.githubusercontent.com/psd-tools/psd-tools/51082d37f041425a9721e8a4252214a12b35cfa9/tests/psd_tools/api/test_layers.py",
+      "size": 55198,
+      "gitSha1": "a01daf0c7d31f4f5813b70ff2b53897eaa4b1277",
+      "scenario": "许可或独立参考"
+    },
+    {
+      "path": "downloads/diff-template.zip",
+      "url": "https://graphicburger.com/download/diff-template.zip",
+      "size": 10789224,
+      "sha256": "c3f88798327aac689953ba64adbba6af7458879b527919d8f4c3f51d230fd5ee",
+      "scenario": "长页面模板归档"
+    },
+    {
+      "path": "downloads/Exe-Multipurpose-PSD-Template.zip",
+      "url": "https://graphicburger.com/download/Exe-Multipurpose-PSD-Template.zip",
+      "size": 126251089,
+      "sha256": "cd60a8d16989d7f155414a73acb753417064f1ce2ae03eff61880a8c5870cd45",
+      "scenario": "多页面模板归档"
+    }
+  ],
+  "archives": [
+    {
+      "id": "diff",
+      "path": "downloads/diff-template.zip",
+      "extract": [
+        {
+          "name": "Diff_Psd Template.psd",
+          "path": "samples/graphicburger/diff.psd",
+          "sha256": "1c956f3a15aade85f1c261b9ff0e0c7e981a3abd307ff319a239e2e2e85f7d56",
+          "scenario": "1600×7720 长页面、多分组文字、默认预算拒绝"
+        }
+      ]
+    },
+    {
+      "id": "exe",
+      "path": "downloads/Exe-Multipurpose-PSD-Template.zip",
+      "extract": [
+        {
+          "name": "01_home_light.psd",
+          "path": "samples/graphicburger/01_home_light.psd",
+          "sha256": "f4f62d2e5cd57761db665062a18ae7f30f984c6645a52fe722bf8783fcc318ef",
+          "scenario": "长页面、图案通道已知兼容失败"
+        },
+        {
+          "name": "12_contacts.psd",
+          "path": "samples/graphicburger/12_contacts.psd",
+          "sha256": "fd589c1966dcf4a98f783bc1c717df9c5c29a75e40601c8c2e74a01b74d0d1f0",
+          "scenario": "中型页面、221 节点、多样式文字"
+        },
+        {
+          "name": "18_coming_soon_light.psd",
+          "path": "samples/graphicburger/18_coming_soon_light.psd",
+          "sha256": "235d66513585ece512317052a71050d25f755b38002cd4bff0903816aae3ecbe",
+          "scenario": "默认预算可打开的真实页面"
+        }
+      ]
+    }
+  ]
+}

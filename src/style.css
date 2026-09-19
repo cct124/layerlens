@@ -129,7 +129,7 @@ button:focus-visible,
 }
 .workspace-layout {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 260px;
+  grid-template-columns: 48px minmax(0, 1fr) 350px;
   min-height: 0;
   flex: 1;
 }
@@ -205,7 +205,7 @@ h1 {
 .sidebar {
   background: #fafbf8;
   border-left: 1px solid #dce2db;
-  padding: 24px 21px 15px;
+  padding: 18px 16px 15px;
   display: flex;
   flex-direction: column;
   min-height: 0;
