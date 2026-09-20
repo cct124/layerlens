@@ -1,8 +1,24 @@
-import { expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import LayerTree from './LayerTree.vue';
 import { initialTree, treeRows } from './layerTree';
 import type { LayerSummary } from '../../shared/api/generated';
+
+let resize: (height: number) => void;
+const disconnect = vi.fn();
+beforeEach(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: (entries: { contentRect: { height: number } }[]) => void) {
+        resize = (height) => callback([{ contentRect: { height } }]);
+      }
+      observe() {}
+      disconnect = disconnect;
+    },
+  );
+});
+afterEach(() => vi.unstubAllGlobals());
 
 const layer = (id: number, parentId: number | null, name: string): LayerSummary => ({
   id,
@@ -105,4 +121,37 @@ it('分页失败结束加载但行数不变时，仍将过期滚动位置收敛�
   await flushPromises();
   expect(wrapper.emitted('update:view')?.at(-1)).toEqual([{ ...initialTree(), scroll: 0 }]);
   wrapper.unmount();
+});
+
+it('图层虚拟列表随面板高度扩展，隐藏期间不覆盖滚动位置', async () => {
+  const wrapper = mount(LayerTree, {
+    props: {
+      layers: Array.from({ length: 4096 }, (_, id) => layer(id, null, `Layer ${id}`)),
+      selected: null,
+      rangeIds: [],
+      rangeBusy: false,
+      loading: true,
+      view: { ...initialTree(), scroll: 560 },
+      visible: false,
+    },
+  });
+  resize(0);
+  await wrapper.setProps({ loading: false });
+  await flushPromises();
+  expect(wrapper.emitted('update:view')).toBeUndefined();
+  const viewport = wrapper.get<HTMLElement>('.tree-viewport');
+  await viewport.trigger('scroll');
+  expect(wrapper.emitted('update:view')).toBeUndefined();
+  Object.defineProperties(viewport.element, {
+    clientHeight: { get: () => 840 },
+    scrollHeight: { get: () => 4096 * 28 },
+  });
+  await wrapper.setProps({ visible: true });
+  resize(840);
+  await flushPromises();
+  expect(viewport.element.scrollTop).toBe(560);
+  expect(wrapper.findAll('[role=treeitem]')).toHaveLength(36);
+  expect(wrapper.findAll('.tree-name').at(-1)?.text()).toBe('Layer 52');
+  wrapper.unmount();
+  expect(disconnect).toHaveBeenCalled();
 });

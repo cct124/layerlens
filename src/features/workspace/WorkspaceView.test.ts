@@ -16,6 +16,12 @@ import WorkspaceView from './WorkspaceView.vue';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({
+    isMaximized: async () => false,
+    onResized: async () => () => {},
+  }),
+}));
 const doc = (id: string): WorkspaceDocument => ({
   id,
   revision: id,
@@ -78,9 +84,16 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+async function fileMenu() {
+  const trigger = wrapper!.get('[aria-label="文件"]');
+  if (trigger.attributes('aria-expanded') !== 'true') await trigger.trigger('click');
+  await flushPromises();
+  return wrapper!.get('[aria-label="打开 PSD"]');
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
+  localStorage.clear();
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -253,6 +266,10 @@ it('画布空闲 Esc 清空失败可重试，等待权威通知且始终保留�
   await wrapper.get('.task-name input').trigger('keydown', { key: 'Escape' });
   expect(attempts).toBe(0);
   const viewport = wrapper.get('.preview-viewport');
+  await fileMenu();
+  await wrapper.get('[aria-label="打开 PSD"]').trigger('keydown', { key: 'Escape' });
+  expect(attempts).toBe(0);
+  expect(wrapper.find('[role="menu"]').exists()).toBe(false);
   await viewport.trigger('keydown', { key: 'Escape' });
   await flushPromises();
   expect(wrapper.text()).toContain('暂时无法清空');
@@ -401,13 +418,161 @@ it('图层勾选经核心确认后可固定任务，关闭文档仍可查看并�
   expect(wrapper.find('[aria-label=固定范围内容]').exists()).toBe(false);
 });
 
+it('停靠面板独立切换，保留搜索、任务草稿及无文档时的任务入口', async () => {
+  current = state('1', ['1']);
+  wrapper = mount(WorkspaceView, { attachTo: document.body });
+  await flushPromises();
+  expect(wrapper.get('#inspector-panel-properties').isVisible()).toBe(true);
+  expect(wrapper.get('#resources-panel-layers').isVisible()).toBe(true);
+  expect(wrapper.get('#resources-panel-tasks').isVisible()).toBe(false);
+  await wrapper.get('[aria-label="搜索图层"]').setValue('标题');
+  await wrapper.get('#inspector-tab-document').trigger('click');
+  await wrapper.get('#resources-tab-tasks').trigger('click');
+  expect(wrapper.get('#inspector-panel-document').isVisible()).toBe(true);
+  expect(wrapper.get('#resources-panel-tasks').isVisible()).toBe(true);
+  await wrapper.get('.task-name input').setValue('首页任务');
+  await wrapper.get('#resources-tab-layers').trigger('click');
+  expect(wrapper.get<HTMLInputElement>('[aria-label="搜索图层"]').element.value).toBe('标题');
+  await wrapper.findAll('.tool-options button')[0]!.trigger('click');
+  expect(wrapper.get<HTMLInputElement>('.task-name input').element.value).toBe('首页任务');
+  const callsBeforeReset = vi.mocked(invoke).mock.calls.length;
+  await wrapper.get('[aria-label="窗口"]').trigger('click');
+  await wrapper.get('[aria-label="重置面板布局"]').trigger('click');
+  await flushPromises();
+  expect(vi.mocked(invoke).mock.calls).toHaveLength(callsBeforeReset);
+  expect(wrapper.get<HTMLInputElement>('.task-name input').element.value).toBe('首页任务');
+  expect(wrapper.get<HTMLInputElement>('[aria-label="搜索图层"]').element.value).toBe('标题');
+  current = state('2');
+  emit(current);
+  await flushPromises();
+  expect(wrapper.get('#resources-panel-tasks').isVisible()).toBe(true);
+  expect(wrapper.get('.task-name input').isVisible()).toBe(true);
+  expect(wrapper.get('[aria-label="区域选择"]').attributes('disabled')).toBeDefined();
+});
+
+it('工具快捷键经核心清空确认才切换，错误在图层面板下也可见；输入中不抢快捷键', async () => {
+  current = state('1', ['1']);
+  current.selection = {
+    ...current.selection,
+    region: { x: 0, y: 0, width: 100, height: 100 },
+    scope: {
+      snapshotId: '1',
+      documentId: '1',
+      documentRevision: '1',
+      documentName: 'design-1.psd',
+      targetCount: 1,
+      contentCount: 1,
+      textLayerCount: 0,
+    },
+  };
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  let attempts = 0;
+  vi.mocked(invoke).mockImplementation((command, args, options) => {
+    if (
+      command === 'selection_request' &&
+      (args as { request: SelectionRequest }).request.operation.kind === 'clear'
+    ) {
+      attempts++;
+      return attempts === 1
+        ? Promise.reject(new Error('清空失败'))
+        : Promise.resolve({
+            kind: 'committed',
+            sessionId: current.selection.sessionId,
+            selectionRevision: '2',
+            snapshotId: null,
+          });
+    }
+    return base(command, args, options);
+  });
+  wrapper = mount(WorkspaceView, { attachTo: document.body });
+  await flushPromises();
+  const key = (value: string, ctrlKey = false) =>
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: value, ctrlKey, cancelable: true }));
+  key('m');
+  await flushPromises();
+  expect(wrapper.get('[aria-label="区域选择"]').attributes('aria-pressed')).toBe('true');
+  await wrapper.get('[aria-label="搜索图层"]').trigger('keydown', { key: 'v' });
+  expect(attempts).toBe(0);
+  key('v');
+  await flushPromises();
+  expect(wrapper.get('.selection-feedback [role=alert]').isVisible()).toBe(true);
+  expect(wrapper.get('[aria-label="区域选择"]').attributes('aria-pressed')).toBe('true');
+  key('v');
+  await flushPromises();
+  key('v');
+  key('m');
+  await flushPromises();
+  expect(attempts).toBe(2);
+  expect(wrapper.get('[aria-label="区域选择"]').attributes('aria-pressed')).toBe('true');
+  current = state('2', ['1']);
+  emit(current);
+  await flushPromises();
+  expect(wrapper.get('[aria-label="平移画布"]').attributes('aria-pressed')).toBe('true');
+  key('1', true);
+  await flushPromises();
+  expect(wrapper.get('[aria-label="当前缩放"]').text()).toBe('100%');
+  key('0', true);
+  await flushPromises();
+  expect(wrapper.get('[aria-label="当前缩放"]').text()).not.toBe('100%');
+  key('o', true);
+  await flushPromises();
+  expect(invoke).toHaveBeenCalledWith('choose_psd_files', { request: { protocolVersion: 1 } });
+  const before = vi.mocked(invoke).mock.calls.length;
+  wrapper.unmount();
+  wrapper = undefined;
+  key('o', true);
+  expect(vi.mocked(invoke).mock.calls).toHaveLength(before);
+});
+
+it('菜单缩放与面板切换复用现有视图，文件关闭调用核心而不释放固定任务', async () => {
+  current = state('1', ['1']);
+  wrapper = mount(WorkspaceView, { attachTo: document.body });
+  await flushPromises();
+  await wrapper.get('[aria-label="视图"]').trigger('click');
+  await wrapper.get('[aria-label="实际像素（100%）"]').trigger('click');
+  expect(wrapper.get('[aria-label="当前缩放"]').text()).toBe('100%');
+  await wrapper.get('[aria-label="视图"]').trigger('click');
+  await wrapper.get('.menu-popup [aria-label="适应窗口"]').trigger('click');
+  expect(wrapper.get('[aria-label="当前缩放"]').text()).not.toBe('100%');
+  await wrapper.get('[aria-label="窗口"]').trigger('click');
+  await wrapper.get('.menu-popup [aria-label="任务"]').trigger('click');
+  expect(wrapper.get('#resources-panel-tasks').isVisible()).toBe(true);
+  await wrapper.get('[aria-label="窗口"]').trigger('click');
+  expect(wrapper.get('.menu-popup [aria-label="任务"]').attributes('aria-checked')).toBe('true');
+  await wrapper.get('.menu-popup [aria-label="文档信息"]').trigger('click');
+  expect(wrapper.get('#inspector-panel-document').isVisible()).toBe(true);
+  await fileMenu();
+  await wrapper.get('[aria-label="重新载入"]').trigger('click');
+  expect(invoke).toHaveBeenCalledWith('workspace_action', {
+    request: { protocolVersion: 1, action: { kind: 'reload', documentId: '1' } },
+  });
+  await flushPromises();
+  await fileMenu();
+  await wrapper.get('[aria-label="关闭当前文档"]').trigger('click');
+  expect(invoke).toHaveBeenCalledWith('workspace_action', {
+    request: { protocolVersion: 1, action: { kind: 'close', documentId: '1' } },
+  });
+  current = state('2');
+  emit(current);
+  await flushPromises();
+  await fileMenu();
+  expect(wrapper.get('[aria-label="重新载入"]').attributes('disabled')).toBeDefined();
+  expect(wrapper.get('[aria-label="关闭当前文档"]').attributes('disabled')).toBeDefined();
+  expect(
+    vi
+      .mocked(invoke)
+      .mock.calls.filter((call) => call[0] === 'selection_request')
+      .map((call) => (call[1] as { request: SelectionRequest }).request.operation.kind),
+  ).toEqual(['tasks']);
+});
+
 describe('只读桌面工作区', () => {
   it('先订阅再读取状态，文件选择只转发到核心', async () => {
     wrapper = mount(WorkspaceView);
     await flushPromises();
-    expect(wrapper.text()).toContain('桌面工作区已连接');
+    expect(wrapper.text()).toContain('工作区已连接');
     expect(wrapper.text()).toContain('v0.1.0');
-    await wrapper.get('.app-header .primary-button').trigger('click');
+    await (await fileMenu()).trigger('click');
     await flushPromises();
     expect(invoke).toHaveBeenCalledWith('workspace_action', {
       request: { protocolVersion: 1, action: { kind: 'open', path: 'C:/picked.psd' } },
@@ -435,13 +600,13 @@ describe('只读桌面工作区', () => {
     const actions = () =>
       vi.mocked(invoke).mock.calls.filter((call) => call[0] === 'workspace_action');
     const before = actions().length;
-    await wrapper.get('.app-header .primary-button').trigger('click');
+    await (await fileMenu()).trigger('click');
     await flushPromises();
     expect(actions()).toHaveLength(before);
     expect(wrapper.findAll('.document-tab')).toHaveLength(1);
     expect(wrapper.get('img').attributes('style')).toBe(transform);
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
-    expect(wrapper.get('.app-header .primary-button').attributes('disabled')).toBeUndefined();
+    expect((await fileMenu()).attributes('disabled')).toBeUndefined();
   });
   it('多选按序提交，队列拒绝后停止后续文件并保留已打开文档', async () => {
     current = state('1', ['1']);
@@ -471,10 +636,10 @@ describe('只读桌面工作区', () => {
             (call[1] as { request: { action: { kind: string; path?: string } } }).request.action,
         )
         .filter((action) => action.kind === 'open');
-    await wrapper.get('.app-header .primary-button').trigger('click');
+    await (await fileMenu()).trigger('click');
     await flushPromises();
     expect(actions()).toEqual([{ kind: 'open', path: 'C:/first.psd' }]);
-    expect(wrapper.get('.app-header .primary-button').attributes('disabled')).toBeDefined();
+    expect((await fileMenu()).attributes('disabled')).toBeDefined();
     first.resolve(state('2', ['1', '2'], '2'));
     await flushPromises();
     expect(actions()).toEqual([
@@ -485,7 +650,7 @@ describe('只读桌面工作区', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('C:/second.psd');
     expect(wrapper.get('[role="alert"]').text()).toContain('队列已满');
     expect(wrapper.get('[role="alert"]').text()).toContain('本批后续文件尚未打开');
-    expect(wrapper.get('.app-header .primary-button').attributes('disabled')).toBeUndefined();
+    expect((await fileMenu()).attributes('disabled')).toBeUndefined();
   });
   it('晚到的初始化响应和旧事件不能覆盖新快照', async () => {
     const response = deferred<WorkspaceSnapshot>();
@@ -505,7 +670,7 @@ describe('只读桌面工作区', () => {
     response.resolve(state('1'));
     emit(state('9007199254740993', ['2']));
     await flushPromises();
-    expect(wrapper.get('.document-details summary').text()).toContain('design-1.psd');
+    expect(wrapper.get('.document-details .document-name').text()).toContain('design-1.psd');
   });
   it('拒绝修订关联失配的通知并保留有效状态', async () => {
     current = state('1', ['1']);
@@ -516,7 +681,7 @@ describe('只读桌面工作区', () => {
       preview: { documentId: '1', revision: '1', state: { phase: 'ready', cacheHit: false } },
     });
     await flushPromises();
-    expect(wrapper.get('.document-details summary').text()).toContain('design-1.psd');
+    expect(wrapper.get('.document-details .document-name').text()).toContain('design-1.psd');
     expect(wrapper.get('[role="alert"]').text()).toContain('通知无效');
   });
   it('图像串行读取，切换后丢弃旧结果并在关闭时撤销 URL', async () => {

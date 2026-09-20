@@ -13,8 +13,8 @@ function copyTask(task: TaskDto) {
 
 <template>
   <section class="selection-panel" aria-label="选区与固定任务">
-    <h2>任务范围</h2>
-    <p class="subtle">勾选图层，或用左侧区域工具框选要处理的模块。点击图层名称可查看属性。</p>
+    <h2>当前任务范围</h2>
+    <p class="subtle">勾选图层，或用区域工具框选模块，再固定为任务。</p>
     <template v-if="model.summary?.scope">
       <p>
         <template v-if="model.summary.region"
@@ -49,19 +49,14 @@ function copyTask(task: TaskDto) {
       >任务名称<input v-model="name" maxlength="256" :disabled="model.busy"
     /></label>
     <button
+      class="primary-button"
       :disabled="model.busy || !model.summary?.scope?.targetCount || !name.trim()"
       @click="model.createTask(name)"
     >
       固定任务
     </button>
     <button :disabled="model.running" @click="model.sync">同步状态</button>
-    <p class="subtle">
-      固定任务会保留本次范围，后续改选不会影响它。当前尚未接入 AI
-      自动执行；任务仅在本次软件运行期间保留。
-    </p>
-    <p v-if="model.busy" role="status">正在确认选区／任务操作…</p>
-    <p v-if="model.notice" role="status">{{ model.notice }}</p>
-    <p v-if="model.error" class="layer-error" role="alert">{{ model.error }}</p>
+    <p class="subtle">固定后改选不影响任务 · 仅本次运行有效 · 尚未接入 AI 执行</p>
     <details v-if="model.reference" class="technical-details" :open="showReference">
       <summary>任务引用（供后续 Agent 接入）</summary>
       <label class="task-reference"
@@ -152,12 +147,10 @@ function copyTask(task: TaskDto) {
 
 <style scoped>
 .selection-panel {
-  border-top: 1px solid #dcded9;
-  padding-top: 16px;
-  margin-top: 16px;
+  font-size: 12px;
 }
 .selection-panel h2 {
-  font-size: 15px;
+  font-size: 12px;
 }
 .selection-panel button {
   margin: 3px 5px 3px 0;
@@ -173,7 +166,7 @@ textarea {
   width: 100%;
   box-sizing: border-box;
   padding: 7px;
-  border: 1px solid #dcded9;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font: inherit;
 }
@@ -184,13 +177,11 @@ textarea {
 .task-list {
   list-style: none;
   padding: 0;
-  max-height: 360px;
-  overflow-y: auto;
 }
 .technical-details {
   margin: 8px 0;
   font-size: 12px;
-  color: #66776b;
+  color: var(--muted);
   overflow-wrap: anywhere;
 }
 .technical-details summary {
@@ -198,8 +189,11 @@ textarea {
 }
 .task-list li,
 .scope-content article {
-  padding: 10px 0;
-  border-bottom: 1px solid #dcded9;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-input);
   overflow-wrap: anywhere;
 }
 .task-list li > span {

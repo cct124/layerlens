@@ -8,11 +8,28 @@ import type { SelectionBounds } from '../../shared/api/generated';
 
 let wrapper: VueWrapper<InstanceType<typeof PreviewCanvas>>;
 const original = { x: 200, y: 200, width: 300, height: 200 };
+let resizeViewport: (width: number, height: number) => void;
 beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
     class {
-      observe() {}
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        resizeViewport = (width, height) =>
+          this.callback(
+            [
+              {
+                target,
+                contentRect: new DOMRect(0, 0, width, height),
+                borderBoxSize: [],
+                contentBoxSize: [],
+                devicePixelContentBoxSize: [],
+              },
+            ],
+            this,
+          );
+      }
+      unobserve() {}
       disconnect() {}
     },
   );
@@ -97,7 +114,7 @@ it('框内移动保持尺寸，控制点调整尺寸，重新框选支持从原�
   await pointer(wrapper.get('[data-region-handle="se"]'), 'pointerdown', 500, 400);
   await pointer(viewport, 'pointerup', 570, 480);
   expect(wrapper.emitted('region')?.[1]?.[0]).toEqual({ x: 200, y: 200, width: 370, height: 280 });
-  await wrapper.get('.zoom-controls button').trigger('click');
+  await wrapper.get('.region-controls button').trigger('click');
   expect(wrapper.find('.region-editable').exists()).toBe(false);
   await pointer(viewport, 'pointerdown', 250, 250);
   await pointer(viewport, 'pointerup', 350, 350);
@@ -250,6 +267,7 @@ it.each([
   'zoom',
   'view',
   'explicit',
+  'resize',
 ])('%s 取消草稿，保留已提交范围且晚到 pointerup 不提交', async (kind) => {
   const viewport = setup();
   const before = wrapper.get('.region-boundary').attributes('style');
@@ -268,6 +286,7 @@ it.each([
   else if (kind === 'view')
     await wrapper.setProps({ view: { mode: 'manual', zoom: 1, x: 0, y: 0 } });
   else if (kind === 'explicit') wrapper.vm.cancel();
+  else if (kind === 'resize') resizeViewport(900, 700);
   else await pointer(viewport, kind, 160, 170);
   await pointer(viewport, 'pointerup', 180, 190);
   expect(wrapper.emitted('region')).toBeUndefined();
@@ -294,4 +313,25 @@ it('点击、画布外起点、第二指针与无预览不能生成区域；平�
   await pointer(viewport, 'pointerup', 200, 200);
   expect(wrapper.emitted('update:view')?.[0]?.[0]).toMatchObject({ x: 100, y: 100 });
   expect(wrapper.emitted('region')).toBeUndefined();
+});
+
+it('面板改变视口尺寸时保持手动缩放和关注位置，适应窗口模式才自动重算', async () => {
+  setup();
+  await wrapper.setProps({ view: { mode: 'manual', zoom: 1.25, x: 170, y: -30 } });
+  resizeViewport(1000, 800);
+  await nextTick();
+  const before = wrapper.get('.preview-image').attributes('style');
+  resizeViewport(750, 800);
+  await nextTick();
+  expect(wrapper.get('.preview-image').attributes('style')).toBe(before);
+  expect(wrapper.get('[aria-label="当前缩放"]').text()).toBe('125%');
+  expect(wrapper.emitted('update:view')).toBeUndefined();
+  expect(wrapper.emitted('clearSelection')).toBeUndefined();
+  expect(wrapper.emitted('region')).toBeUndefined();
+  await wrapper.setProps({ view: { mode: 'fit', zoom: 1, x: 0, y: 0 } });
+  const fitBefore = wrapper.get('[aria-label="当前缩放"]').text();
+  resizeViewport(450, 800);
+  await nextTick();
+  expect(wrapper.get('[aria-label="当前缩放"]').text()).not.toBe(fitBefore);
+  expect(wrapper.find('.region-boundary').exists()).toBe(true);
 });

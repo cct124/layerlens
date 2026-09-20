@@ -273,13 +273,22 @@ function locate() {
       locateBounds(props.width, props.height, props.bounds, size.value.width, size.value.height),
     );
 }
-defineExpose({ locate, cancel });
+function fit() {
+  setView(initialView());
+}
+function actualSize() {
+  setView({ mode: 'manual', zoom: 1, x: 0, y: 0 });
+}
+defineExpose({ locate, cancel, fit, actualSize });
 </script>
 <template>
   <div class="preview-pane">
-    <div class="canvas-controls" aria-label="画布视图">
-      <span>{{ tool === 'region' ? '区域选择 · 松开确认，Esc 取消' : '保存时合成预览' }}</span>
-      <div class="zoom-controls">
+    <div class="canvas-controls" aria-label="选区操作">
+      <span class="preview-label">保存时合成预览</span>
+      <div class="region-controls">
+        <span v-if="tool === 'region'">{{
+          drawingNew ? '在原选框内也可开始新范围' : '松开确认 · 拖动时 Esc 取消，空闲时清空'
+        }}</span>
         <button
           v-if="tool === 'region' && region"
           :disabled="disabled"
@@ -291,11 +300,6 @@ defineExpose({ locate, cancel });
         >
           重新框选
         </button>
-        <button aria-label="缩小" @click="zoom(0.8)">−</button
-        ><output aria-label="当前缩放">{{ (effective.zoom * 100).toFixed(0) }}%</output
-        ><button aria-label="放大" @click="zoom(1.25)">+</button
-        ><button @click="setView({ mode: 'manual', zoom: 1, x: 0, y: 0 })">100%</button
-        ><button @click="setView(initialView())">适应窗口</button>
       </div>
     </div>
     <div
@@ -375,12 +379,14 @@ defineExpose({ locate, cancel });
       <div v-if="!url" class="canvas-message"><slot /></div>
     </div>
     <div class="canvas-footer">
-      <span>{{ width }} × {{ height }} 原稿像素</span
-      ><span>{{
-        tool === 'region'
-          ? '左键框选／调整 · 中键平移 · Esc 取消拖动／空闲时清空'
-          : '拖动平移 · 滚轮缩放 · 方向键移动'
-      }}</span>
+      <div class="zoom-controls" aria-label="画布视图">
+        <button aria-label="缩小" @click="zoom(0.8)">−</button>
+        <output aria-label="当前缩放">{{ Number((effective.zoom * 100).toFixed(2)) }}%</output>
+        <button aria-label="放大" @click="zoom(1.25)">+</button>
+        <button title="实际像素（Ctrl+1）" @click="actualSize">100%</button>
+        <button title="适应窗口（Ctrl+0）" @click="fit">适应窗口</button>
+      </div>
+      <span class="canvas-dimensions">{{ width }} × {{ height }} px</span>
     </div>
   </div>
 </template>
@@ -394,7 +400,7 @@ defineExpose({ locate, cancel });
   position: absolute;
   z-index: 2;
   box-sizing: border-box;
-  border: 1px solid #287149;
+  border: 1px solid var(--accent);
   box-shadow: 0 0 0 100000px #0006;
   pointer-events: none;
 }
@@ -411,7 +417,7 @@ defineExpose({ locate, cancel });
   height: 9px;
   box-sizing: border-box;
   background: #fff;
-  border: 1px solid #287149;
+  border: 1px solid var(--accent);
   transform: translate(-50%, -50%);
 }
 .region-size {
@@ -419,7 +425,7 @@ defineExpose({ locate, cancel });
   left: 0;
   bottom: calc(100% + 7px);
   padding: 2px 5px;
-  background: #21432f;
+  background: #264b71;
   color: #fff;
   font-size: 11px;
   white-space: nowrap;

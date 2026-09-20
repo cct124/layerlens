@@ -80,6 +80,10 @@ mod tests {
     }
 
     fn invoke_command(window_label: &str, command: &str, request: Value) -> Result<Value, Value> {
+        invoke_raw(window_label, command, json!({ "request": request }))
+    }
+
+    fn invoke_raw(window_label: &str, command: &str, body: Value) -> Result<Value, Value> {
         // 使用正式配置生成的 ACL，验证实际命令派发与窗口授权，而非直调函数。
         let (exited, exit) = std::sync::mpsc::channel();
         let host = crate::workspace::WorkspaceHost::start(
@@ -107,7 +111,7 @@ mod tests {
                 callback: CallbackFn(0),
                 error: CallbackFn(1),
                 url: "http://tauri.localhost".parse().expect("固定测试 URL 有效"),
-                body: InvokeBody::Json(json!({ "request": request })),
+                body: InvokeBody::Json(body),
                 headers: Default::default(),
                 invoke_key: INVOKE_KEY.to_owned(),
             },
@@ -159,6 +163,27 @@ mod tests {
                 text.contains("get_app_info") && text.contains("not allowed")
             })
         );
+    }
+
+    #[test]
+    fn custom_titlebar_commands_are_main_window_only() {
+        for command in [
+            "is_maximized",
+            "minimize",
+            "toggle_maximize",
+            "start_dragging",
+            "close",
+        ] {
+            let command = format!("plugin:window|{command}");
+            let blocked = invoke_raw("untrusted", &command, json!({})).unwrap_err();
+            assert!(blocked.as_str().unwrap().contains("not allowed"));
+            invoke_raw("main", &command, json!({})).expect("主窗口应具有标题栏所需的最小权限");
+        }
+        for command in ["destroy", "set_decorations", "set_fullscreen", "create"] {
+            let blocked =
+                invoke_raw("main", &format!("plugin:window|{command}"), json!({})).unwrap_err();
+            assert!(blocked.as_str().unwrap().contains("not allowed"));
+        }
     }
 
     #[test]

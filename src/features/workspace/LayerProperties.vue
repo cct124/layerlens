@@ -22,7 +22,10 @@ async function copy(text: string) {
       <button v-if="details" @click="copy(JSON.stringify(details, null, 2))">复制本页属性</button>
     </div>
     <p v-if="loading" role="status" class="subtle">正在读取属性…</p>
-    <p v-else-if="!details" class="subtle">选择图层，查看原稿数据与能力说明。</p>
+    <div v-else-if="!details" class="panel-empty">
+      <p>尚未检查图层</p>
+      <span>在下方点击图层名称，查看位置、尺寸和文字样式。勾选框仅用于选择任务范围。</span>
+    </div>
     <template v-else>
       <h3>{{ details.layer.name || '（空名称）' }}</h3>
       <p v-if="details.layer.nameTruncated" class="subtle">名称显示前 256 个字符。</p>
