@@ -151,6 +151,7 @@ fn compute(shared: &Shared, work: &Work, loader: &Loader) -> Result<Computed, Do
 fn publish(shared: &Shared, work: Work, result: Result<Computed, DocumentError>) {
     // 任何未发布的新修订或被替换的旧修订都必须在离开状态锁后销毁。
     let mut discarded = None;
+    let mut retired_selections = Vec::new();
     let mut cleanup = preview::Cleanup::default();
     let outcome = {
         let mut state = lock(&shared.state);
@@ -187,13 +188,18 @@ fn publish(shared: &Shared, work: Work, result: Result<Computed, DocumentError>)
                         .iter()
                         .any(|entry| entry.revision.document_id == document)
                     {
-                        if state.activation == Some(work.id) {
-                            state.active = Some(document);
-                        }
-                        OpenOutcome::Opened {
-                            document_id: document,
-                            revision_id: revision,
-                            reused: true,
+                        let activation = if state.activation == Some(work.id) {
+                            state.set_active(Some(document))
+                        } else {
+                            Ok(())
+                        };
+                        match activation {
+                            Ok(()) => OpenOutcome::Opened {
+                                document_id: document,
+                                revision_id: revision,
+                                reused: true,
+                            },
+                            Err(error) => OpenOutcome::Failed(Arc::new(error)),
                         }
                     } else {
                         OpenOutcome::Cancelled
@@ -201,30 +207,46 @@ fn publish(shared: &Shared, work: Work, result: Result<Computed, DocumentError>)
                 }
                 Ok(Computed::Loaded { path, revision }) => {
                     let revision_id = revision.id;
-                    if work.kind == OpenKind::Reload {
-                        let entry = state
-                            .documents
-                            .iter_mut()
-                            .find(|entry| entry.revision.document_id == work.document)
-                            .expect("未取消重载的目标必须存在");
-                        discarded = Some(std::mem::replace(&mut entry.revision, revision));
-                        entry.selected_layer = None;
-                        cleanup = state.previews.invalidate(Some(work.document));
+                    let selection_change =
+                        if work.kind == OpenKind::Reload && state.active == Some(work.document) {
+                            state.selections.advance()
+                        } else if work.kind == OpenKind::Open && state.activation == Some(work.id) {
+                            state.set_active(Some(work.document))
+                        } else {
+                            Ok(())
+                        };
+                    if let Err(error) = selection_change {
+                        discarded = Some(revision);
+                        OpenOutcome::Failed(Arc::new(error))
                     } else {
-                        state.documents.push(Entry {
-                            path,
-                            request_path: work.path,
-                            revision,
-                            selected_layer: None,
-                        });
-                        if state.activation == Some(work.id) {
-                            state.active = Some(work.document);
+                        if work.kind == OpenKind::Reload {
+                            let entry = state
+                                .documents
+                                .iter_mut()
+                                .find(|entry| entry.revision.document_id == work.document)
+                                .expect("未取消重载的目标必须存在");
+                            discarded = Some(std::mem::replace(&mut entry.revision, revision));
+                            entry.selected_layer = None;
+                            if let Some(selection) = entry.selection.take() {
+                                retired_selections.push(selection);
+                            }
+                            retired_selections
+                                .extend(state.selections.retire_document(work.document));
+                            cleanup = state.previews.invalidate(Some(work.document));
+                        } else {
+                            state.documents.push(Entry {
+                                path,
+                                request_path: work.path,
+                                revision,
+                                selected_layer: None,
+                                selection: None,
+                            });
                         }
-                    }
-                    OpenOutcome::Opened {
-                        document_id: work.document,
-                        revision_id,
-                        reused: false,
+                        OpenOutcome::Opened {
+                            document_id: work.document,
+                            revision_id,
+                            reused: false,
+                        }
                     }
                 }
             }
@@ -235,6 +257,7 @@ fn publish(shared: &Shared, work: Work, result: Result<Computed, DocumentError>)
         outcome
     };
     drop(discarded);
+    drop(retired_selections);
     cleanup.release(shared);
     let mut state = lock(&shared.state);
     // 释放结束前保留作业占位，避免销毁大修订时提前归还执行名额。

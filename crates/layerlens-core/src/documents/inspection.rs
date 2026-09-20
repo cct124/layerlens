@@ -132,7 +132,7 @@ impl DocumentLease {
 
 impl DocumentService {
     /// 提交查看器单图层选择；隐藏层可检查，None 清空。重载与提交在同一锁中裁决。
-    /// 本选择尚不创建 M2 任务快照，也不授权导出。
+    /// 本选择仅用于检查，不创建任务快照，也不授权导出。
     ///
     /// # Errors
     /// 关闭、退出、旧修订或跨修订图层引用被拒绝，原选择保持不变。
@@ -197,7 +197,7 @@ fn inspect_layer(layer: &LayerInfo, text_start: u32) -> Result<LayerDetails, Doc
     Ok(details)
 }
 
-fn shorten_text_slice(text: &mut TextSlice) -> bool {
+pub(super) fn shorten_text_slice(text: &mut TextSlice) -> bool {
     let mut units = (text.end - text.start) / 2;
     let byte = match utf16_byte(&text.text, units) {
         Some(byte) => byte,
@@ -317,7 +317,7 @@ fn bounded_clone<T: Clone + Serialize>(value: &T) -> Result<T, DocumentError> {
 }
 
 // 只计数、不先分配完整 JSON；单项在克隆前检查，避免大字体名被重复复制。
-fn check_size(value: &impl Serialize, limit: u64) -> Result<(), DocumentError> {
+pub(super) fn check_size(value: &impl Serialize, limit: u64) -> Result<(), DocumentError> {
     struct Counter(u64);
     impl std::io::Write for Counter {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {

@@ -25,6 +25,12 @@ macro_rules! identifier {
                 self.0
             }
         }
+        // 内容页计费也使用此表示；u64 不作为可能丢精度的 JSON 数字传输。
+        impl serde::Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_str(&self.0)
+            }
+        }
     };
 }
 identifier!(DocumentId, "文档查看入口的稳定标识；重载不改变它。");
@@ -46,6 +52,8 @@ pub struct DocumentServiceConfig {
     pub max_declared_pixels: u64,
     /// 解码、PNG 输出及其缓存的独立额度。
     pub preview: PreviewConfig,
+    /// 用户选区、不可变范围及设计任务记录的独立额度。
+    pub selection: super::selection::SelectionConfig,
 }
 
 impl Default for DocumentServiceConfig {
@@ -57,6 +65,7 @@ impl Default for DocumentServiceConfig {
             max_source_bytes: 256 * 1024 * 1024,
             max_declared_pixels: 64 * 1024 * 1024,
             preview: PreviewConfig::default(),
+            selection: super::selection::SelectionConfig::default(),
         }
     }
 }
@@ -84,6 +93,7 @@ impl DocumentServiceConfig {
             ));
         }
         self.preview.validate(limits.max_decoded_bytes)?;
+        self.selection.validate()?;
         Ok(self)
     }
 }

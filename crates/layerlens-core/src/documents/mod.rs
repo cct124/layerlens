@@ -9,6 +9,7 @@ mod error;
 mod inspection;
 mod model;
 mod preview;
+pub mod selection;
 mod state;
 mod worker;
 
@@ -68,6 +69,7 @@ impl DocumentService {
             config,
             budget: Budget::new(config),
             preview_budget: preview::budget::Budget::new(config.preview),
+            selection_budget: selection::Budget::new(config.selection),
         });
         let worker_state = Arc::clone(&shared);
         let worker = std::thread::Builder::new()
@@ -109,7 +111,7 @@ impl DocumentService {
                 queued_for: Duration::ZERO,
                 executed_for: Duration::ZERO,
             })));
-            state.active = Some(summary.id);
+            state.set_active(Some(summary.id))?;
             state.activation = None;
             return Ok(OpenJob { id, signal });
         }
@@ -183,7 +185,7 @@ impl DocumentService {
         {
             return Err(DocumentError::NotFound(document));
         }
-        state.active = Some(document);
+        state.set_active(Some(document))?;
         state.activation = None;
         Ok(())
     }
@@ -191,7 +193,7 @@ impl DocumentService {
     /// 关闭查看入口、取消关联加载和预览并使缓存失效；外部修订与 PNG 引用继续有效并计费。
     /// 活动标签优先切换到右邻，否则左邻；解析数据和缓存图像在状态锁外销毁。
     pub fn close(&self, document: DocumentId) -> Result<(), DocumentError> {
-        let (removed, cleanup) = {
+        let (removed, cleanup, selections) = {
             let mut state = lock(&self.shared.state);
             state.ensure_running()?;
             let index = state
@@ -199,6 +201,19 @@ impl DocumentService {
                 .iter()
                 .position(|entry| entry.revision.document_id == document)
                 .ok_or(DocumentError::NotFound(document))?;
+            if state.active == Some(document) {
+                let next = state
+                    .documents
+                    .get(index + 1)
+                    .or_else(|| {
+                        index
+                            .checked_sub(1)
+                            .and_then(|left| state.documents.get(left))
+                    })
+                    .map(|entry| entry.revision.document_id);
+                state.set_active(next)?;
+                state.activation = None;
+            }
             let removed = state.documents.remove(index);
             let related: Vec<_> = state
                 .pending
@@ -215,18 +230,12 @@ impl DocumentService {
                 state.cancel(id);
             }
             state.record_close(removed.path.clone());
-            if state.active == Some(document) {
-                state.active = state
-                    .documents
-                    .get(index)
-                    .or_else(|| state.documents.last())
-                    .map(|entry| entry.revision.document_id);
-                state.activation = None;
-            }
             let cleanup = state.previews.invalidate(Some(document));
-            (removed, cleanup)
+            let selections = state.selections.retire_document(document);
+            (removed, cleanup, selections)
         };
         drop(removed);
+        drop(selections);
         cleanup.release(&self.shared);
         Ok(())
     }
@@ -292,12 +301,16 @@ impl DocumentService {
     pub fn shutdown(&mut self) -> Result<(), DocumentError> {
         self.request_shutdown();
         let joined = self.worker.take().map(|worker| worker.join());
-        let removed = {
+        let (removed, selections) = {
             let mut state = lock(&self.shared.state);
             state.active = None;
-            std::mem::take(&mut state.documents)
+            (
+                std::mem::take(&mut state.documents),
+                state.selections.drain_references(),
+            )
         };
         drop(removed);
+        drop(selections);
         if matches!(joined, Some(Err(_))) {
             return Err(DocumentError::WorkerPanicked);
         }

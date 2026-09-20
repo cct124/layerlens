@@ -19,6 +19,7 @@ pub(super) struct Entry {
     pub request_path: PathBuf,
     pub revision: Arc<Revision>,
     pub selected_layer: Option<crate::psd::LayerId>,
+    pub selection: Option<super::selection::SnapshotLease>,
 }
 
 impl Entry {
@@ -98,6 +99,7 @@ pub(super) struct State {
     pub pending: BTreeMap<OpenJobId, Pending>,
     pub queue: VecDeque<OpenJobId>,
     pub previews: super::preview::State,
+    pub selections: super::selection::State,
     pub stopping: bool,
     next_job: u64,
     /// 关闭时尚未规范化的路径别名不得重新打开标签。仅保留仍有早期作业的记录。
@@ -192,4 +194,5 @@ pub(super) struct Shared {
     pub config: DocumentServiceConfig,
     pub budget: Arc<Budget>,
     pub preview_budget: Arc<super::preview::budget::Budget>,
+    pub selection_budget: Arc<super::selection::Budget>,
 }

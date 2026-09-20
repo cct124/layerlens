@@ -13,6 +13,10 @@ use super::*;
 
 const DEADLINE: Duration = Duration::from_secs(10);
 
+// 复用通道检查点，覆盖选区与加载发布之间的竞态。
+#[path = "selection/lifecycle_tests.rs"]
+mod selection_lifecycle;
+
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/psd")
