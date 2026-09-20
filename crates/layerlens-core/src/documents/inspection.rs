@@ -111,9 +111,10 @@ impl DocumentLease {
     }
 
     /// 读取一个图层及从 text_start 开始的有界文字片段（原文 UTF-16 单位）。
+    /// 文字页按样式数量和完整详情的 JSON 字节预算缩短，续页沿用绝对索引。
     ///
     /// # Errors
-    /// 图层不存在、起点拆分代理对或超过原文时拒绝；过大的单个属性明确报资源限制。
+    /// 图层不存在、起点拆分代理对或超过原文时拒绝；单项属性或不可分页元数据超限时报资源限制。
     pub fn layer_details(
         &self,
         id: LayerId,
@@ -125,33 +126,7 @@ impl DocumentLease {
             .iter()
             .find(|layer| layer.id == id)
             .ok_or(DocumentError::LayerNotFound(id))?;
-        let text = match &layer.text {
-            Some(text) => Some(text_slice(text, text_start)?),
-            None if text_start != 0 => {
-                return Err(DocumentError::InvalidQuery("非文字图层不能指定文字偏移"));
-            }
-            None => None,
-        };
-        let details = LayerDetails {
-            layer: layer.into(),
-            export: layer.export.clone(),
-            export_blockers: layer.export_blockers.clone(),
-            diagnostics: layer
-                .diagnostics
-                .iter()
-                .take(32)
-                .map(|d| d.message.chars().take(1024).collect())
-                .collect(),
-            diagnostics_truncated: layer.diagnostics.len() > 32
-                || layer
-                    .diagnostics
-                    .iter()
-                    .take(32)
-                    .any(|d| d.message.chars().nth(1024).is_some()),
-            text,
-        };
-        check_size(&details, RESPONSE_BYTES)?;
-        Ok(details)
+        inspect_layer(layer, text_start)
     }
 }
 
@@ -184,6 +159,70 @@ impl DocumentService {
         entry.selected_layer = layer;
         Ok(())
     }
+}
+
+fn inspect_layer(layer: &LayerInfo, text_start: u32) -> Result<LayerDetails, DocumentError> {
+    let text = match &layer.text {
+        Some(text) => Some(text_slice(text, text_start)?),
+        None if text_start != 0 => {
+            return Err(DocumentError::InvalidQuery("非文字图层不能指定文字偏移"));
+        }
+        None => None,
+    };
+    let mut details = LayerDetails {
+        layer: layer.into(),
+        export: layer.export.clone(),
+        export_blockers: layer.export_blockers.clone(),
+        diagnostics: layer
+            .diagnostics
+            .iter()
+            .take(32)
+            .map(|d| d.message.chars().take(1024).collect())
+            .collect(),
+        diagnostics_truncated: layer.diagnostics.len() > 32
+            || layer
+                .diagnostics
+                .iter()
+                .take(32)
+                .any(|d| d.message.chars().nth(1024).is_some()),
+        text,
+    };
+    // 数量上限不能保证序列化字节上限；每次至少减去一个 Unicode 标量，
+    // 直到整页可容纳，或不可再分的属性／元数据明确失败，不丢弃样式冒充成功。
+    while let Err(error) = check_size(&details, RESPONSE_BYTES) {
+        if !details.text.as_mut().is_some_and(shorten_text_slice) {
+            return Err(error);
+        }
+    }
+    Ok(details)
+}
+
+fn shorten_text_slice(text: &mut TextSlice) -> bool {
+    let mut units = (text.end - text.start) / 2;
+    let byte = match utf16_byte(&text.text, units) {
+        Some(byte) => byte,
+        None => {
+            // 中点落在代理对内部时向后取整，保留至少一个完整标量。
+            units += 1;
+            let Some(byte) = utf16_byte(&text.text, units) else {
+                return false;
+            };
+            byte
+        }
+    };
+    if byte == 0 || byte == text.text.len() {
+        return false;
+    }
+    text.text.truncate(byte);
+    text.end = text.start + units;
+    text.next_start = Some(text.end);
+    if let Some(runs) = &mut text.style_runs {
+        runs.retain(|run| run.start < text.end);
+    }
+    if let Some(runs) = &mut text.paragraph_runs {
+        runs.retain(|run| run.start < text.end);
+    }
+    true
 }
 
 fn text_slice(text: &crate::psd::TextData, start: u32) -> Result<TextSlice, DocumentError> {

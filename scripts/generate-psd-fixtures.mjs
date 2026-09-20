@@ -4,8 +4,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { encodeEngineData, textFixtures } from './psd-text-fixtures.mjs';
+import { viewerGrid, viewerTextFixtures } from './psd-viewer-fixtures.mjs';
 
-// 只编码本文件声明的极小样本；不调用待验证的 PSD 解析器或写入器。
+// 只编码人工声明的最小／查看器规模样本；不调用待验证的 PSD 解析器或写入器。
 // 字段布局依据 Adobe Photoshop File Formats Specification 的 PSD v1 章节。
 const output = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -488,6 +489,72 @@ for (const dpi of [72, 300, null]) {
     note: '独立 EngineData 语法与属性预期；验证 UTF-16、显式来源和原始值，不证明 Photoshop 排版或度量单位。',
   });
 }
+
+// 独立、低像素预算的 512 层网格；记录底到顶编号，画布按几何位置存色块。
+const { columns, rows, tileSize } = viewerGrid;
+const gridWidth = columns * tileSize;
+const gridHeight = rows * tileSize;
+const gridPixels = Buffer.alloc(gridWidth * gridHeight * 4);
+const gridLayers = Array.from({ length: columns * rows }, (_, index) => {
+  const column = index % columns;
+  const row = Math.floor(index / columns);
+  const color = Buffer.from([32 + column * 7, 48 + row * 11, 160, 255]);
+  for (let y = row * tileSize; y < (row + 1) * tileSize; y++) {
+    for (let x = column * tileSize; x < (column + 1) * tileSize; x++) {
+      color.copy(gridPixels, (y * gridWidth + x) * 4);
+    }
+  }
+  return {
+    name: 'tile-' + String(index).padStart(3, '0'),
+    visible: true,
+    bounds: { x: column * tileSize, y: row * tileSize, width: tileSize, height: tileSize },
+    rgbaHex: color.toString('hex').repeat(tileSize * tileSize),
+  };
+});
+cases.push({
+  file: 'viewer-scale.psd',
+  compression: 'raw',
+  bytes: Buffer.concat([
+    header(gridWidth, gridHeight, 8),
+    unsigned32(0),
+    section(resolutionResource()),
+    layerSection(gridLayers, 'raw'),
+    compositeData('raw', {
+      width: gridWidth,
+      height: gridHeight,
+      rgbaHex: gridPixels.toString('hex'),
+    }),
+  ]),
+  document: { ...document, width: gridWidth, height: gridHeight },
+  viewerGrid: { ...viewerGrid, layerCount: 512, firstRecord: 'tile-000', lastRecord: 'tile-511' },
+  note: '512 个可见位图层，8×8 不透明色块；RGBA=(32+列×7,48+行×11,160,255)。清单用确定性规则避免重复全部像素。',
+});
+
+const viewerTextBounds = { x: 16, y: 16, width: 224, height: 96 };
+cases.push({
+  file: 'viewer-text.psd',
+  compression: 'raw',
+  bytes: Buffer.concat([
+    header(256, 128, 8),
+    unsigned32(0),
+    section(resolutionResource()),
+    layerSection(
+      viewerTextFixtures.map((sample) => ({
+        name: sample.name,
+        visible: true,
+        bounds: viewerTextBounds,
+        additionalInfo: [additionalInfo('TySh', typeToolData(sample.rawText, sample.engineData))],
+      })),
+      'raw',
+    ),
+    compositeData('raw', { width: 256, height: 128, rgbaHex: 'ffffffff'.repeat(256 * 128) }),
+  ]),
+  document: { ...document, width: 256, height: 128 },
+  textCases: viewerTextFixtures.map(({ name, expected }) => ({ name, expected })),
+  textTransform,
+  bounds: viewerTextBounds,
+  note: '长文字、300 段样式、单段合法但合计超 256 KiB 的样式；合成图为纯白，不是文字渲染参考。',
+});
 
 const manifest = {
   schemaVersion: 1,

@@ -1,4 +1,4 @@
-import { onScopeDispose, ref, shallowRef, watch } from 'vue';
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import type {
   LayerDetails,
@@ -13,7 +13,11 @@ import { workspaceMessage } from '../../shared/api/workspace';
 export function useLayers(active: Readonly<Ref<WorkspaceDocument | null>>) {
   const layers = shallowRef<LayerSummary[]>([]);
   const details = shallowRef<LayerDetails | null>(null);
-  const error = ref<string | null>(null);
+  const listError = ref<string | null>(null);
+  const detailError = ref<string | null>(null);
+  const error = computed(
+    () => [listError.value, detailError.value].filter((value) => value !== null).join('；') || null,
+  );
   const loading = ref(false);
   const detailLoading = ref(false);
   let disposed = false,
@@ -60,9 +64,13 @@ export function useLayers(active: Readonly<Ref<WorkspaceDocument | null>>) {
             current === generation &&
             (query.kind === 'list' || detailCurrent === detailGeneration)
           ) {
-            error.value = workspaceMessage(cause);
-            if (query.kind === 'list') loading.value = false;
-            else detailLoading.value = false;
+            if (query.kind === 'list') {
+              listError.value = workspaceMessage(cause);
+              loading.value = false;
+            } else {
+              detailError.value = workspaceMessage(cause);
+              detailLoading.value = false;
+            }
           }
         }
       }
@@ -73,7 +81,7 @@ export function useLayers(active: Readonly<Ref<WorkspaceDocument | null>>) {
   function readText(start = 0) {
     detailGeneration++;
     details.value = null;
-    error.value = null;
+    detailError.value = null;
     const id = active.value?.selectedLayerId;
     wantedDetail = id === undefined || id === null ? null : { layerId: id, textStart: start };
     detailLoading.value = wantedDetail !== null;
@@ -82,6 +90,7 @@ export function useLayers(active: Readonly<Ref<WorkspaceDocument | null>>) {
   function reload() {
     generation++;
     layers.value = [];
+    listError.value = null;
     nextOffset = active.value ? 0 : null;
     loading.value = active.value !== null;
     readText();

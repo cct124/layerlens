@@ -11,8 +11,10 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'update:view': [view: LayerTreeView]; select: [id: number | null] }>();
 const viewport = ref<HTMLElement | null>(null);
+const visibleScroll = ref(0);
+let restoredScroll: number | null = null;
 const rows = computed(() => treeRows(props.layers, props.view));
-const first = computed(() => Math.max(0, Math.floor(props.view.scroll / 28) - 3));
+const first = computed(() => Math.max(0, Math.floor(visibleScroll.value / 28) - 3));
 const windowRows = computed(() => rows.value.slice(first.value, first.value + 18));
 const update = (value: Partial<LayerTreeView>) => emit('update:view', { ...props.view, ...value });
 function toggle(id: number) {
@@ -26,23 +28,27 @@ function search(event: Event) {
   if (event.target instanceof HTMLInputElement) update({ search: event.target.value, scroll: 0 });
 }
 function scroll(event: Event) {
-  if (event.target instanceof HTMLElement) update({ scroll: event.target.scrollTop });
+  if (!(event.target instanceof HTMLElement)) return;
+  const position = event.target.scrollTop;
+  visibleScroll.value = position;
+  // 恢复大列表时浏览器会按已加载行数截短位置；这不是用户的新视图。
+  if (position === restoredScroll) return;
+  restoredScroll = null;
+  update({ scroll: position });
 }
 async function restore() {
   await nextTick();
-  if (viewport.value) viewport.value.scrollTop = props.view.scroll;
+  const element = viewport.value;
+  if (!element) return;
+  const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
+  element.scrollTop = Math.min(props.view.scroll, maxScroll);
+  restoredScroll = element.scrollTop;
+  visibleScroll.value = restoredScroll;
+  // 完整加载或失败结束后才收敛保存值，分页中始终保留原恢复目标。
+  if (!props.loading && restoredScroll !== props.view.scroll) update({ scroll: restoredScroll });
 }
 onMounted(restore);
-watch(() => props.view.scroll, restore);
-watch(
-  () => rows.value.length,
-  () => {
-    // 分页加载期间保留待恢复滚动位置，最终列表或搜索变化后才收敛到合法范围。
-    if (!props.loading && props.view.scroll > Math.max(0, rows.value.length * 28 - 280))
-      update({ scroll: Math.max(0, rows.value.length * 28 - 280) });
-    else void restore();
-  },
-);
+watch([() => props.view.scroll, () => rows.value.length, () => props.loading], restore);
 </script>
 <template>
   <section class="layer-tree" aria-label="图层树">
