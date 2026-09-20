@@ -12,7 +12,7 @@ use crate::documents::{
 };
 
 /// 原始详情和选区交集分开保存；同一文字图层可跨页重复，计数始终是唯一图层数。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentLayer {
     pub stack_index: u32,
@@ -48,6 +48,20 @@ impl SnapshotLease {
         cursor: Option<&ContentCursor>,
         limit: u32,
     ) -> Result<ContentPage, SelectionError> {
+        self.content_page_with_budget(cursor, limit, self.0.page_bytes)
+    }
+
+    /// 为外层响应预留空间后的内容预算；不提高服务配置，也不改变游标及范围。
+    pub fn content_page_with_budget(
+        &self,
+        cursor: Option<&ContentCursor>,
+        limit: u32,
+        available_bytes: u64,
+    ) -> Result<ContentPage, SelectionError> {
+        let page_bytes = self.0.page_bytes.min(available_bytes);
+        if page_bytes < 1024 {
+            return Err(SelectionError::InvalidInput("内容页可用预算应至少为 1 KiB"));
+        }
         if limit == 0 || limit > 128 {
             return Err(SelectionError::InvalidInput("内容页条数应为 1–128"));
         }
@@ -101,7 +115,7 @@ impl SnapshotLease {
                     text_start: next_text.unwrap_or(0),
                 });
                 page.truncated = page.next_cursor.is_some();
-                match check_size(&page, self.0.page_bytes) {
+                match check_size(&page, page_bytes) {
                     Ok(()) => {
                         index = next_index;
                         text_start = next_text.unwrap_or(0);
@@ -126,7 +140,7 @@ impl SnapshotLease {
                             text_start,
                         });
                         page.truncated = true;
-                        check_size(&page, self.0.page_bytes)?;
+                        check_size(&page, page_bytes)?;
                         return Ok(page);
                     }
                 }
@@ -136,7 +150,7 @@ impl SnapshotLease {
                 break;
             }
         }
-        check_size(&page, self.0.page_bytes)?;
+        check_size(&page, page_bytes)?;
         Ok(page)
     }
 }

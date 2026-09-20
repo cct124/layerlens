@@ -6,10 +6,16 @@ import type { LayerTreeView } from './layerTree';
 const props = defineProps<{
   layers: LayerSummary[];
   selected: number | null;
+  rangeIds: number[];
+  rangeBusy: boolean;
   view: LayerTreeView;
   loading: boolean;
 }>();
-const emit = defineEmits<{ 'update:view': [view: LayerTreeView]; select: [id: number | null] }>();
+const emit = defineEmits<{
+  'update:view': [view: LayerTreeView];
+  select: [id: number | null];
+  toggleRange: [id: number];
+}>();
 const viewport = ref<HTMLElement | null>(null);
 const visibleScroll = ref(0);
 let restoredScroll: number | null = null;
@@ -17,6 +23,11 @@ const rows = computed(() => treeRows(props.layers, props.view));
 const first = computed(() => Math.max(0, Math.floor(visibleScroll.value / 28) - 3));
 const windowRows = computed(() => rows.value.slice(first.value, first.value + 18));
 const update = (value: Partial<LayerTreeView>) => emit('update:view', { ...props.view, ...value });
+function toggleRange(event: Event, id: number) {
+  // DOM 默认切换不等于核心已确认；保持旧勾选状态直到权威摘要返回。
+  if (event.target instanceof HTMLInputElement) event.target.checked = props.rangeIds.includes(id);
+  emit('toggleRange', id);
+}
 function toggle(id: number) {
   update({
     collapsed: props.view.collapsed.includes(id)
@@ -55,7 +66,7 @@ watch([() => props.view.scroll, () => rows.value.length, () => props.loading], r
     <div class="panel-heading">
       <h2>图层</h2>
       <span>{{ layers.length }}{{ loading ? ' · 读取中' : '' }}</span
-      ><button :disabled="selected === null" @click="emit('select', null)">清空</button>
+      ><button :disabled="selected === null" @click="emit('select', null)">清空检查</button>
     </div>
     <input
       class="layer-search"
@@ -87,6 +98,13 @@ watch([() => props.view.scroll, () => rows.value.length, () => props.loading], r
           >
             {{ view.collapsed.includes(row.layer.id) ? '▸' : '▾' }}</button
           ><span v-else class="tree-leaf">·</span>
+          <input
+            type="checkbox"
+            :aria-label="`加入任务范围：${row.layer.name || '（空名称）'}`"
+            :checked="rangeIds.includes(row.layer.id)"
+            :disabled="rangeBusy"
+            @change="toggleRange($event, row.layer.id)"
+          />
           <button
             class="tree-name"
             :title="`${row.layer.name}${row.layer.nameTruncated ? '（名称已截断）' : ''} · ${layerLabels[row.layer.kind]}${row.layer.effectiveVisible ? '' : ' · 有效隐藏'}`"

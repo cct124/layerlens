@@ -18,6 +18,7 @@ fn main() {
             "workspace_action",
             "read_preview",
             "read_layers",
+            "selection_request",
             "choose_psd_files",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {

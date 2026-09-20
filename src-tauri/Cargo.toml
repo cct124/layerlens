@@ -22,9 +22,10 @@ layerlens-core.workspace = true
 tauri.workspace = true
 tauri-plugin-dialog.workspace = true
 tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
 tauri = { workspace = true, features = ["test"] }
 
 [lints]

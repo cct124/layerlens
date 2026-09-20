@@ -78,6 +78,13 @@ pub enum WorkspaceErrorCode {
     PreviewFailed,
     StalePreview,
     StaleRevision,
+    ForeignSession,
+    StaleSelection,
+    InactiveDocument,
+    SnapshotExpired,
+    EmptyTargets,
+    TaskReleased,
+    RequestConflict,
     ShuttingDown,
     Internal,
 }
@@ -165,9 +172,10 @@ pub struct WorkspaceResources {
 }
 
 /// 原子文档摘要及适配层作业状态。前端仅接受更大的 sequence；重连重新读取快照。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {
+    pub selection: crate::selection_contract::SelectionSummaryDto,
     pub protocol_version: u32,
     pub sequence: String,
     pub documents: Vec<WorkspaceDocument>,

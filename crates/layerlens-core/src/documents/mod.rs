@@ -261,6 +261,7 @@ impl DocumentService {
     pub fn snapshot(&self) -> ServiceSnapshot {
         let state = lock(&self.shared.state);
         ServiceSnapshot {
+            selection: state.selection_summary(),
             documents: state
                 .documents
                 .iter()

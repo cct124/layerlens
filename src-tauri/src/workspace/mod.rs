@@ -3,6 +3,7 @@
 
 mod engine;
 mod runtime;
+mod selection;
 
 pub(crate) use runtime::WorkspaceHost;
 

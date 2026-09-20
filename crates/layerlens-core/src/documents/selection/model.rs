@@ -28,8 +28,41 @@ impl SessionId {
     }
 }
 
+impl std::str::FromStr for SessionId {
+    type Err = SelectionError;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value.len() != 32
+            || !value
+                .bytes()
+                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+        {
+            return Err(SelectionError::InvalidInput(
+                "会话 ID 应为 32 位小写十六进制",
+            ));
+        }
+        Ok(Self(value.to_owned()))
+    }
+}
+
+pub(super) fn decimal(value: &str, zero: bool) -> Result<u64, SelectionError> {
+    if value.is_empty()
+        || value.len() > 20
+        || !value.bytes().all(|c| c.is_ascii_digit())
+        || (value.len() > 1 && value.starts_with('0'))
+    {
+        return Err(SelectionError::InvalidInput("标识符应为规范十进制字符串"));
+    }
+    let parsed = value
+        .parse::<u64>()
+        .map_err(|_| SelectionError::InvalidInput("标识符超出 u64 范围"))?;
+    if parsed == 0 && !zero {
+        return Err(SelectionError::InvalidInput("标识符不能为零"));
+    }
+    Ok(parsed)
+}
+
 macro_rules! identifier {
-    ($name:ident, $doc:literal) => {
+    ($name:ident, $doc:literal, $zero:expr) => {
         #[doc = $doc]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $name(pub(super) u64);
@@ -44,20 +77,45 @@ macro_rules! identifier {
                 serializer.collect_str(&self.0)
             }
         }
+        impl std::str::FromStr for $name {
+            type Err = SelectionError;
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                decimal(value, $zero).map(Self)
+            }
+        }
     };
 }
 identifier!(
     SelectionRevision,
-    "活动文档／修订／选区的全局单调版本，与快照 ID 无数值对应关系。"
+    "活动文档／修订／选区的全局单调版本，与快照 ID 无数值对应关系。",
+    true
 );
-identifier!(SnapshotId, "一份不可变选区的实例内标识。");
+identifier!(SnapshotId, "一份不可变选区的实例内标识。", false);
 identifier!(
     TaskId,
-    "设计范围绑定标识；不代表 Agent 或导出作业执行状态。"
+    "设计范围绑定标识；不代表 Agent 或导出作业执行状态。",
+    false
 );
 
+/// 外部文档引用经过规范化解析后才能用于当前修订查找。
+#[derive(Debug, Clone, Copy)]
+pub struct DocumentReference {
+    pub document_id: DocumentId,
+    pub revision_id: RevisionId,
+}
+impl DocumentReference {
+    /// 只接受非零规范十进制；引用是否仍存活须由服务校验。
+    pub fn parse(document: &str, revision: &str) -> Result<Self, SelectionError> {
+        Ok(Self {
+            document_id: DocumentId(decimal(document, false)?),
+            revision_id: RevisionId(decimal(revision, false)?),
+        })
+    }
+}
+
 /// 文档像素坐标，保留小数；核心提交时验证有限、正面积且位于画布内。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, serde::Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
 pub struct SelectionBounds {
     pub x: f64,
     pub y: f64,
@@ -107,7 +165,7 @@ pub enum SelectionItem {
 }
 
 /// 固定的范围与能力限制；不是可通过续页消除的截断。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum SelectionWarning {
     GeometricBoundsOnly,
@@ -116,7 +174,7 @@ pub enum SelectionWarning {
 }
 
 /// 有效目标与仅供解释层级的结构记录；结构记录不增加授权。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum LayerRole {
     Target,
@@ -124,7 +182,7 @@ pub enum LayerRole {
 }
 
 /// 图层用于命中的完整边界是否全部位于所选矩形中。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum IntersectionKind {
     Contained,
@@ -132,7 +190,7 @@ pub enum IntersectionKind {
 }
 
 /// 交集基于当前适配器的几何边界；绝不覆盖图层原始 bounds。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, ts_rs::TS)]
 pub struct LayerIntersection {
     pub kind: IntersectionKind,
     pub bounds: SelectionBounds,
@@ -176,6 +234,7 @@ impl SelectionScope {
 }
 
 pub(super) struct Snapshot {
+    pub document_name: String,
     pub id: SnapshotId,
     pub session_id: SessionId,
     pub document: DocumentLease,
@@ -213,6 +272,18 @@ impl std::fmt::Debug for SnapshotLease {
 }
 
 impl SnapshotLease {
+    /// 有界范围摘要；不含完整选择项、文字、像素或源引用，可保留在终态任务中。
+    pub fn brief(&self) -> SnapshotBrief {
+        SnapshotBrief {
+            snapshot_id: self.id(),
+            document_id: self.document_id(),
+            revision_id: self.revision_id(),
+            document_name: self.0.document_name.clone(),
+            target_count: self.scope().target_layer_ids.len() as u32,
+            content_count: self.scope().records.len() as u32,
+            text_layer_count: self.scope().text_layer_count,
+        }
+    }
     /// 本会话中的快照 ID。
     pub fn id(&self) -> SnapshotId {
         self.0.id
@@ -267,6 +338,7 @@ pub struct UserSelection {
 
 /// 锁外计算的待提交结果，携带提交前置版本。不能直接作为任务授权。
 pub struct PreparedSelection {
+    pub(super) document_name: String,
     pub(super) document: DocumentLease,
     pub(super) expected_revision: SelectionRevision,
     pub(super) scope: SelectionScope,
@@ -282,11 +354,44 @@ pub enum TaskStatus {
 /// 有界任务记录；释放后保留小型终态和请求去重信息，不保留源修订。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DesignTask {
+    pub scope: SnapshotBrief,
     pub id: TaskId,
     pub snapshot_id: SnapshotId,
     pub name: String,
     pub created_at: SystemTime,
     pub status: TaskStatus,
+}
+
+/// 固定修订与范围计数；显示名称最多 256 UTF-8 字节，可能截短，不用于唯一定位。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotBrief {
+    pub snapshot_id: SnapshotId,
+    pub document_id: DocumentId,
+    pub revision_id: RevisionId,
+    pub document_name: String,
+    pub target_count: u32,
+    pub content_count: u32,
+    pub text_layer_count: u32,
+}
+
+/// 与文档列表原子采样的轻量选择投影，不持有快照／修订强引用。
+#[derive(Debug, Clone)]
+pub struct SelectionSummary {
+    pub session_id: SessionId,
+    pub revision: SelectionRevision,
+    pub document_id: Option<DocumentId>,
+    pub document_revision: Option<RevisionId>,
+    pub snapshot: Option<SnapshotBrief>,
+    pub items: Vec<SelectionItem>,
+}
+
+/// 按单调任务 ID 续读；终态不移除，不因释放造成分页偏移。
+#[derive(Debug)]
+pub struct TaskPage {
+    pub tasks: Vec<DesignTask>,
+    pub next_after: Option<TaskId>,
+    pub total: usize,
+    pub capacity: usize,
 }
 
 /// 新增选区额度，不改变 M1 解析／预览默认值；内存数字仅是范围对象计费。
@@ -354,6 +459,31 @@ pub struct ContentCursor {
     pub(super) snapshot_id: SnapshotId,
     pub(super) record: u32,
     pub(super) text_start: u32,
+}
+impl ContentCursor {
+    /// 从已校验边界字段恢复游标；content_page 继续校验快照、记录及 UTF-16 偏移。
+    pub fn from_parts(
+        session_id: SessionId,
+        snapshot_id: SnapshotId,
+        record: u32,
+        text_start: u32,
+    ) -> Self {
+        Self {
+            session_id,
+            snapshot_id,
+            record,
+            text_start,
+        }
+    }
+    /// 借用组成字段供协议适配，不开放内部可变访问。
+    pub fn parts(&self) -> (&SessionId, SnapshotId, u32, u32) {
+        (
+            &self.session_id,
+            self.snapshot_id,
+            self.record,
+            self.text_start,
+        )
+    }
 }
 
 pub(super) fn limit(resource: &'static str, limit: u64) -> SelectionError {

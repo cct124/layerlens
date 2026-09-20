@@ -1706,6 +1706,7 @@ name = "layerlens-desktop"
 version = "0.1.0"
 dependencies = [
  "layerlens-core",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",

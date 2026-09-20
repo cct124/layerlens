@@ -41,7 +41,7 @@ export type WorkspaceRequest = { protocolVersion: number, action: WorkspaceActio
 
 export type PreviewRequest = { protocolVersion: number, documentId: string, revision: string, };
 
-export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "STALE_REVISION" | "SHUTTING_DOWN" | "INTERNAL";
+export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "STALE_REVISION" | "FOREIGN_SESSION" | "STALE_SELECTION" | "INACTIVE_DOCUMENT" | "SNAPSHOT_EXPIRED" | "EMPTY_TARGETS" | "TASK_RELEASED" | "REQUEST_CONFLICT" | "SHUTTING_DOWN" | "INTERNAL";
 
 export type WorkspaceError = { code: WorkspaceErrorCode, message: string, };
 
@@ -59,7 +59,7 @@ export type WorkspaceNotice = { id: string, message: string, };
 
 export type WorkspaceResources = { sourceBytes: string, decodedBytes: string, outputBytes: string, cacheBytes: string, };
 
-export type WorkspaceSnapshot = { protocolVersion: number, sequence: string, documents: Array<WorkspaceDocument>, activeDocumentId: string | null, jobs: Array<WorkspaceJob>, preview: WorkspacePreview | null, notices: Array<WorkspaceNotice>, resources: WorkspaceResources, shuttingDown: boolean, };
+export type WorkspaceSnapshot = { selection: SelectionSummaryDto, protocolVersion: number, sequence: string, documents: Array<WorkspaceDocument>, activeDocumentId: string | null, jobs: Array<WorkspaceJob>, preview: WorkspacePreview | null, notices: Array<WorkspaceNotice>, resources: WorkspaceResources, shuttingDown: boolean, };
 
 export type LayerId = number;
 
@@ -118,3 +118,37 @@ export type LayerRequest = { protocolVersion: number, documentId: string, revisi
 export type LayerResult = { "kind": "list", page: LayerPage, } | { "kind": "details", details: LayerDetails, };
 
 export type LayerResponse = { documentId: string, revision: string, result: LayerResult, };
+
+export type SelectionBounds = { x: number, y: number, width: number, height: number, };
+
+export type LayerIntersection = { kind: IntersectionKind, bounds: SelectionBounds, };
+
+export type IntersectionKind = "contained" | "partial";
+
+export type LayerRole = "target" | "structure";
+
+export type SelectionWarning = "geometricBoundsOnly" | "noReferenceBounds" | "pixelDependenciesUnresolved";
+
+export type ContentLayer = { stackIndex: number, role: LayerRole, intersection: LayerIntersection | null, details: LayerDetails, };
+
+export type ScopeDto = { snapshotId: string, documentId: string, documentRevision: string, documentName: string, targetCount: number, contentCount: number, textLayerCount: number, };
+
+export type SelectionSummaryDto = { sessionId: string, selectionRevision: string, documentId: string | null, documentRevision: string | null, scope: ScopeDto | null, layerIds: Array<number>, region: SelectionBounds | null, };
+
+export type TaskStatusDto = "active" | "released";
+
+export type TaskDto = { id: string, name: string, status: TaskStatusDto, scope: ScopeDto, };
+
+export type TaskPageDto = { sessionId: string, tasks: Array<TaskDto>, nextAfter: string | null, total: number, capacity: number, };
+
+export type SelectionCursorDto = { sessionId: string, snapshotId: string, record: number, textStart: number, };
+
+export type SelectionContentDto = { sessionId: string, snapshotId: string, documentId: string, documentRevision: string, layerCount: number, textLayerCount: number, layers: Array<ContentLayer>, warnings: Array<SelectionWarning>, truncated: boolean, nextCursor: SelectionCursorDto | null, };
+
+export type SelectionTarget = { "kind": "snapshot", snapshotId: string, } | { "kind": "task", taskId: string, };
+
+export type SelectionOperation = { "kind": "layers", documentId: string, documentRevision: string, expectedRevision: string, layerIds: Array<number>, } | { "kind": "region", documentId: string, documentRevision: string, expectedRevision: string, bounds: SelectionBounds, } | { "kind": "clear", documentId: string, documentRevision: string, expectedRevision: string, } | { "kind": "createTask", snapshotId: string, requestId: string, name: string, } | { "kind": "releaseTask", taskId: string, } | { "kind": "tasks", after: string | null, limit: number, } | { "kind": "content", target: SelectionTarget, cursor: SelectionCursorDto | null, limit: number, };
+
+export type SelectionRequest = { protocolVersion: number, sessionId: string, operation: SelectionOperation, };
+
+export type SelectionReply = { "kind": "committed", sessionId: string, selectionRevision: string, snapshotId: string | null, } | { "kind": "task", sessionId: string, task: TaskDto, } | { "kind": "tasks", page: TaskPageDto, } | { "kind": "content", target: SelectionTarget, page: SelectionContentDto, };

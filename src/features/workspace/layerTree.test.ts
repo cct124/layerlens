@@ -25,18 +25,40 @@ it('搜索保留祖先并能找到折叠组中的后代，不修改展开状态'
 it('4096 项图层只渲染视口附近的行，选择通过事件提交', async () => {
   const layers = Array.from({ length: 4096 }, (_, id) => layer(id, null, `Layer ${id}`));
   const wrapper = mount(LayerTree, {
-    props: { layers, selected: 0, view: initialTree(), loading: false },
+    props: {
+      layers,
+      selected: 0,
+      rangeIds: [],
+      rangeBusy: false,
+      view: initialTree(),
+      loading: false,
+    },
   });
   expect(wrapper.findAll('[role=treeitem]').length).toBeLessThanOrEqual(18);
   await wrapper.findAll('.tree-name')[1]!.trigger('click');
   expect(wrapper.emitted('select')).toEqual([[1]]);
+  const checkbox = wrapper.findAll<HTMLInputElement>('input[type=checkbox]')[1]!;
+  await checkbox.setValue(true);
+  expect(wrapper.emitted('toggleRange')).toEqual([[1]]);
+  expect(checkbox.element.checked).toBe(false);
+  expect(wrapper.emitted('select')).toEqual([[1]]);
+  await wrapper.setProps({ rangeIds: [1], rangeBusy: true });
+  expect(checkbox.element.checked).toBe(true);
+  expect(checkbox.element.disabled).toBe(true);
   expect(wrapper.find('[aria-selected=true]').text()).toContain('Layer 0');
   wrapper.unmount();
 });
 it('分页恢复滚动时不把浏览器暂时截短的位置保存为文档视图', async () => {
   const layers = Array.from({ length: 512 }, (_, id) => layer(id, null, `Layer ${id}`));
   const wrapper = mount(LayerTree, {
-    props: { layers: [], selected: null, view: { ...initialTree(), scroll: 10000 }, loading: true },
+    props: {
+      layers: [],
+      selected: null,
+      rangeIds: [],
+      rangeBusy: false,
+      view: { ...initialTree(), scroll: 10000 },
+      loading: true,
+    },
   });
   const viewport = wrapper.get<HTMLElement>('.tree-viewport');
   let position = 0;
@@ -72,6 +94,8 @@ it('分页失败结束加载但行数不变时，仍将过期滚动位置收敛�
     props: {
       layers: [layer(0, null, 'only')],
       selected: null,
+      rangeIds: [],
+      rangeBusy: false,
       view: { ...initialTree(), scroll: 10000 },
       loading: true,
     },

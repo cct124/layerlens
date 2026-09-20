@@ -1,6 +1,10 @@
 //! 有界桌面邮箱。一个观察线程查询核心作业，不为每个作业创建阻塞等待线程。
 
-use super::{engine::Engine, error};
+use super::{
+    engine::Engine,
+    error,
+    selection::{SelectionClient, SelectionWorker},
+};
 use layerlens_core::{
     documents::{DocumentLease, DocumentServiceConfig, PreviewLease},
     workspace_contract::*,
@@ -35,6 +39,7 @@ enum Message {
 
 /// 应用持有的适配入口；退出只发信号，由后台释放全部对象后通知事件循环退出。
 pub(crate) struct WorkspaceHost {
+    pub(crate) selection: SelectionClient,
     sender: mpsc::SyncSender<Message>,
     stopping: Arc<AtomicBool>,
     stopped: Arc<AtomicBool>,
@@ -50,6 +55,8 @@ impl WorkspaceHost {
         on_exit: impl FnOnce(Result<(), WorkspaceError>) + Send + 'static,
     ) -> Result<Self, WorkspaceError> {
         let mut engine = Engine::new(config)?;
+        let (selection, mut selection_worker) =
+            SelectionWorker::start(engine.service.selection_handle())?;
         let (sender, receiver) = mpsc::sync_channel(MAILBOX_LIMIT);
         let stopping = Arc::new(AtomicBool::new(false));
         let stopped = Arc::new(AtomicBool::new(false));
@@ -102,9 +109,11 @@ impl WorkspaceHost {
                 stop_signal.store(true, Ordering::Release);
                 // 丢弃邮箱会唤醒所有尚未完成的异步调用，不遗留请求。
                 drop(receiver);
+                engine.service.request_shutdown();
+                let selection_cleanup = selection_worker.finish();
                 let cleanup = engine.shutdown();
                 exit_signal.store(true, Ordering::Release);
-                on_exit(result.and(cleanup));
+                on_exit(result.and(selection_cleanup).and(cleanup));
             })
             .map_err(|e| {
                 error(
@@ -113,6 +122,7 @@ impl WorkspaceHost {
                 )
             })?;
         Ok(Self {
+            selection,
             sender,
             stopping,
             stopped,
@@ -159,6 +169,7 @@ impl WorkspaceHost {
     }
 
     pub(crate) fn stop(&self) {
+        self.selection.stop();
         self.stopping.store(true, Ordering::Release);
     }
     pub(crate) async fn inspection(

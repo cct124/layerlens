@@ -2,8 +2,12 @@
 
 use std::{env, error::Error, fs, io, path::PathBuf};
 
+use layerlens_core::documents::selection::{
+    ContentLayer, IntersectionKind, LayerIntersection, LayerRole, SelectionBounds, SelectionWarning,
+};
 use layerlens_core::documents::{LayerDetails, LayerPage, LayerSummary, TextSlice};
 use layerlens_core::psd::*;
+use layerlens_core::selection_contract::*;
 use layerlens_core::workspace_contract::*;
 use layerlens_core::{
     AppInfo, AppInfoRequest, CommandError, CommandErrorCode, IPC_PROTOCOL_VERSION,
@@ -73,6 +77,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         LayerRequest::decl(&config),
         LayerResult::decl(&config),
         LayerResponse::decl(&config),
+        SelectionBounds::decl(&config),
+        LayerIntersection::decl(&config),
+        IntersectionKind::decl(&config),
+        LayerRole::decl(&config),
+        SelectionWarning::decl(&config),
+        ContentLayer::decl(&config),
+        ScopeDto::decl(&config),
+        SelectionSummaryDto::decl(&config),
+        TaskStatusDto::decl(&config),
+        TaskDto::decl(&config),
+        TaskPageDto::decl(&config),
+        SelectionCursorDto::decl(&config),
+        SelectionContentDto::decl(&config),
+        SelectionTarget::decl(&config),
+        SelectionOperation::decl(&config),
+        SelectionRequest::decl(&config),
+        SelectionReply::decl(&config),
     ];
     let mut expected = String::from(
         "// 此文件由 Rust DTO 自动生成，请勿手工编辑。\n\

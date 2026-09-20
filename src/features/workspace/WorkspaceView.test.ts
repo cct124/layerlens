@@ -8,6 +8,9 @@ import type {
   LayerResponse,
   WorkspaceDocument,
   WorkspaceSnapshot,
+  SelectionRequest,
+  TaskDto,
+  LayerDetails,
 } from '../../shared/api/generated';
 import WorkspaceView from './WorkspaceView.vue';
 
@@ -32,6 +35,15 @@ const state = (
   active = ids[0] ?? null,
 ): WorkspaceSnapshot => ({
   protocolVersion: 1,
+  selection: {
+    sessionId: 'a'.repeat(32),
+    selectionRevision: sequence,
+    documentId: active,
+    documentRevision: active,
+    scope: null,
+    layerIds: [],
+    region: null,
+  },
   sequence,
   documents: ids.map(doc),
   activeDocumentId: active,
@@ -88,6 +100,11 @@ beforeEach(() => {
       return { appName: 'LayerLens', appVersion: '0.1.0', protocolVersion: 1 };
     if (command === 'read_preview') return png();
     if (command === 'choose_psd_files') return ['C:/picked.psd'];
+    if (command === 'selection_request')
+      return {
+        kind: 'tasks',
+        page: { sessionId: 'a'.repeat(32), tasks: [], nextAfter: null, total: 0, capacity: 128 },
+      };
     if (command === 'read_layers') {
       const request = layerRequest(args);
       return emptyLayers(request.documentId, request.revision);
@@ -99,6 +116,289 @@ afterEach(() => {
   wrapper?.unmount();
   wrapper = undefined;
   vi.unstubAllGlobals();
+});
+
+it('画布区域通过桌面接口确认，切换恢复各文档范围；重载发起即取消草稿', async () => {
+  current = state('1', ['1', '2']);
+  const regionRequests: SelectionRequest[] = [];
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((command, args, options) => {
+    if (command === 'selection_request') {
+      const { request } = args as { request: SelectionRequest };
+      if (request.operation.kind === 'region') {
+        regionRequests.push(request);
+        const region = request.operation.bounds;
+        current = state('2', ['1', '2']);
+        current.selection = {
+          ...current.selection,
+          region,
+          scope: {
+            snapshotId: '8',
+            documentId: '1',
+            documentRevision: '1',
+            documentName: 'design-1.psd',
+            targetCount: 2,
+            contentCount: 2,
+            textLayerCount: 1,
+          },
+        };
+        return Promise.resolve({
+          kind: 'committed',
+          sessionId: current.selection.sessionId,
+          selectionRevision: '2',
+          snapshotId: '8',
+        });
+      }
+    }
+    return base(command, args, options);
+  });
+  wrapper = mount(WorkspaceView);
+  await flushPromises();
+  await wrapper.get('[aria-label="区域选择"]').trigger('click');
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === '100%')!
+    .trigger('click');
+  function viewport() {
+    const element = wrapper!.get<HTMLElement>('.preview-viewport').element;
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1000, 800));
+    element.setPointerCapture = vi.fn();
+    element.hasPointerCapture = () => false;
+    return element;
+  }
+  async function pointer(element: Element, type: string, x: number, y: number) {
+    element.dispatchEvent(
+      new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }),
+    );
+    await flushPromises();
+  }
+  const first = viewport();
+  await pointer(first, 'pointerdown', 100, 120);
+  await pointer(first, 'pointermove', 220, 240);
+  expect(regionRequests).toHaveLength(0);
+  await pointer(first, 'pointerup', 220, 240);
+  expect(regionRequests[0]?.operation).toEqual({
+    kind: 'region',
+    documentId: '1',
+    documentRevision: '1',
+    expectedRevision: '1',
+    bounds: { x: 100, y: 120, width: 120, height: 120 },
+  });
+  expect(wrapper.text()).toContain('已框选区域');
+  expect(wrapper.get('.region-boundary').attributes('style')).toContain('width: 120px');
+  const selected = current.selection;
+  emit(state('3', ['1', '2'], '2'));
+  await flushPromises();
+  expect(wrapper.find('.region-boundary').exists()).toBe(false);
+  current = { ...state('4', ['1', '2']), selection: { ...selected, selectionRevision: '4' } };
+  emit(current);
+  await flushPromises();
+  expect(wrapper.get('.region-boundary').attributes('style')).toContain('width: 120px');
+  const restored = viewport();
+  await pointer(restored, 'pointerdown', 300, 300);
+  await pointer(restored, 'pointermove', 350, 350);
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === '从磁盘重新加载')!
+    .trigger('click');
+  await pointer(restored, 'pointerup', 360, 360);
+  expect(regionRequests).toHaveLength(1);
+  expect(wrapper.find('.region-draft').exists()).toBe(false);
+});
+
+it('画布空闲 Esc 清空失败可重试，等待权威通知且始终保留区域工具', async () => {
+  current = state('1', ['1', '2']);
+  const region = { x: 100, y: 100, width: 200, height: 200 };
+  current.selection = {
+    ...current.selection,
+    region,
+    scope: {
+      snapshotId: '1',
+      documentId: '1',
+      documentRevision: '1',
+      documentName: 'design-1.psd',
+      targetCount: 1,
+      contentCount: 1,
+      textLayerCount: 0,
+    },
+  };
+  let attempts = 0;
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((command, args, options) => {
+    if (command === 'selection_request') {
+      const { request } = args as { request: SelectionRequest };
+      if (request.operation.kind === 'clear') {
+        attempts++;
+        expect(request.operation).toEqual({
+          kind: 'clear',
+          documentId: '1',
+          documentRevision: '1',
+          expectedRevision: '1',
+        });
+        return attempts === 1
+          ? Promise.reject(new Error('暂时无法清空'))
+          : Promise.resolve({
+              kind: 'committed',
+              sessionId: current.selection.sessionId,
+              selectionRevision: '2',
+              snapshotId: null,
+            });
+      }
+    }
+    return base(command, args, options);
+  });
+  wrapper = mount(WorkspaceView);
+  await flushPromises();
+  await wrapper.get('[aria-label="区域选择"]').trigger('click');
+  await wrapper.get('.task-name input').trigger('keydown', { key: 'Escape' });
+  expect(attempts).toBe(0);
+  const viewport = wrapper.get('.preview-viewport');
+  await viewport.trigger('keydown', { key: 'Escape' });
+  await flushPromises();
+  expect(wrapper.text()).toContain('暂时无法清空');
+  expect(wrapper.find('.region-boundary').exists()).toBe(true);
+  expect(wrapper.get('[aria-label="区域选择"]').attributes('aria-pressed')).toBe('true');
+  await viewport.trigger('keydown', { key: 'Escape' });
+  await flushPromises();
+  expect(wrapper.find('.region-boundary').exists()).toBe(true);
+  await viewport.trigger('keydown', { key: 'Escape' });
+  expect(attempts).toBe(2);
+  current = state('2', ['1', '2']);
+  emit(current);
+  await flushPromises();
+  expect(wrapper.find('.region-boundary').exists()).toBe(false);
+  expect(wrapper.text()).toContain('尚未选择范围');
+  expect(wrapper.get('[aria-label="区域选择"]').attributes('aria-pressed')).toBe('true');
+  await viewport.trigger('keydown', { key: 'Escape' });
+  expect(attempts).toBe(2);
+});
+
+it('图层勾选经核心确认后可固定任务，关闭文档仍可查看并释放任务', async () => {
+  current = state('1', ['1']);
+  const sessionId = current.selection.sessionId;
+  const scope = {
+    snapshotId: '1',
+    documentId: '1',
+    documentRevision: '1',
+    documentName: 'design-1.psd',
+    targetCount: 1,
+    contentCount: 1,
+    textLayerCount: 0,
+  };
+  const details: LayerDetails = {
+    layer: {
+      id: 0,
+      parentId: null,
+      name: '目标图层',
+      nameTruncated: false,
+      kind: 'bitmap',
+      bounds: { x: 0, y: 0, width: 10, height: 10 },
+      visible: true,
+      effectiveVisible: true,
+      opacity: 255,
+    },
+    export: { status: 'supported', reason: 'fixture' },
+    exportBlockers: [],
+    diagnostics: [],
+    diagnosticsTruncated: false,
+    text: null,
+  };
+  let tasks: TaskDto[] = [];
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args, options) => {
+    if (command === 'read_layers')
+      return {
+        documentId: '1',
+        revision: '1',
+        result: {
+          kind: 'list',
+          page: { offset: 0, total: 1, nextOffset: null, layers: [details.layer] },
+        },
+      };
+    if (command !== 'selection_request') return base(command, args, options);
+    const { operation } = (args as { request: SelectionRequest }).request;
+    switch (operation.kind) {
+      case 'tasks':
+        return {
+          kind: 'tasks',
+          page: { sessionId, tasks, total: tasks.length, capacity: 128, nextAfter: null },
+        };
+      case 'layers':
+        current = {
+          ...state('2', ['1']),
+          selection: {
+            ...current.selection,
+            selectionRevision: '2',
+            scope,
+            layerIds: operation.layerIds,
+          },
+        };
+        return { kind: 'committed', sessionId, selectionRevision: '2', snapshotId: '1' };
+      case 'createTask':
+        tasks = [{ id: '1', name: operation.name, status: 'active', scope }];
+        return { kind: 'task', sessionId, task: tasks[0] };
+      case 'clear':
+        expect(operation).toEqual({
+          kind: 'clear',
+          documentId: '1',
+          documentRevision: '1',
+          expectedRevision: '2',
+        });
+        current = state('3', ['1']);
+        return { kind: 'committed', sessionId, selectionRevision: '3', snapshotId: null };
+      case 'releaseTask':
+        tasks = tasks.map((task) => ({ ...task, status: 'released' }));
+        return { kind: 'task', sessionId, task: tasks[0] };
+      case 'content':
+        return {
+          kind: 'content',
+          target: operation.target,
+          page: {
+            sessionId,
+            snapshotId: '1',
+            documentId: '1',
+            documentRevision: '1',
+            layerCount: 1,
+            textLayerCount: 0,
+            layers: [{ stackIndex: 0, role: 'target', intersection: null, details }],
+            warnings: [],
+            truncated: false,
+            nextCursor: null,
+          },
+        };
+      default:
+        throw new Error('未预期的选择操作');
+    }
+  });
+  wrapper = mount(WorkspaceView);
+  await flushPromises();
+  const button = (text: string) => wrapper!.findAll('button').find((b) => b.text() === text)!;
+  expect(button('固定任务').attributes('disabled')).toBeDefined();
+  await wrapper.get('input[type=checkbox]').setValue(true);
+  await flushPromises();
+  expect(wrapper.text()).toContain('包含 1 个图层');
+  await button('固定任务').trigger('click');
+  await flushPromises();
+  expect(wrapper.get('[aria-label=任务引用]').element).toBeInstanceOf(HTMLTextAreaElement);
+  expect(wrapper.get<HTMLTextAreaElement>('[aria-label=任务引用]').element.value).toContain(
+    sessionId,
+  );
+  await wrapper.get('[aria-label="区域选择"]').trigger('click');
+  await wrapper.get('[aria-label="平移画布"]').trigger('click');
+  await flushPromises();
+  expect(wrapper.get('[aria-label="平移画布"]').attributes('aria-pressed')).toBe('true');
+  expect(wrapper.text()).toContain('尚未选择范围');
+  expect(tasks[0]?.status).toBe('active');
+  current = state('4');
+  emit(current);
+  await flushPromises();
+  await button('查看任务内容').trigger('click');
+  await flushPromises();
+  expect(wrapper.get('[aria-label=固定范围内容]').text()).toContain('目标图层');
+  await button('释放任务').trigger('click');
+  await flushPromises();
+  expect(button('查看任务内容').attributes('disabled')).toBeDefined();
+  expect(wrapper.find('[aria-label=固定范围内容]').exists()).toBe(false);
 });
 
 describe('只读桌面工作区', () => {

@@ -124,6 +124,7 @@ pub struct DocumentSummary {
 /// 标签顺序、活动入口与作业状态在同一次短锁访问中取得。
 #[derive(Debug, Clone)]
 pub struct ServiceSnapshot {
+    pub selection: super::selection::SelectionSummary,
     pub documents: Vec<DocumentSummary>,
     pub active_document: Option<DocumentId>,
     pub pending_jobs: Vec<(OpenJobId, JobStatus)>,

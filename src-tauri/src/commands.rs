@@ -20,6 +20,15 @@ pub(crate) fn get_app_info(request: AppInfoRequest) -> Result<AppInfo, CommandEr
 
 struct SingleOperation(Arc<AtomicBool>);
 
+/// 只进入有界选区后台；选择提交与内容响应均由同一个核心会话裁决。
+#[tauri::command]
+pub(crate) async fn selection_request(
+    request: layerlens_core::selection_contract::SelectionRequest,
+    host: tauri::State<'_, WorkspaceHost>,
+) -> Result<layerlens_core::selection_contract::SelectionReply, WorkspaceError> {
+    host.selection.request(request).await
+}
+
 impl SingleOperation {
     fn acquire(flag: &Arc<AtomicBool>) -> Result<Self, WorkspaceError> {
         flag.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)

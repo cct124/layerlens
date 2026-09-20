@@ -4,6 +4,9 @@ import { useWorkspace } from './useWorkspace';
 import { useAppStatus } from './useAppStatus';
 import PreviewCanvas from './PreviewCanvas.vue';
 import LayerTree from './LayerTree.vue';
+import SelectionPanel from './SelectionPanel.vue';
+import { useSelection } from './useSelection';
+import { useCanvasTool } from './useCanvasTool';
 import LayerProperties from './LayerProperties.vue';
 import './inspection.css';
 import { useLayers } from './useLayers';
@@ -11,9 +14,27 @@ import { initialTree } from './layerTree';
 import type { LayerTreeView } from './layerTree';
 import { initialView } from './canvasView';
 import type { CanvasView } from './canvasView';
-import type { WorkspaceJobPhase } from '../../shared/api/generated';
-const { desktop, snapshot, active, error, connecting, picking, preview, act, connect, open } =
-  useWorkspace();
+import type {
+  SelectionBounds,
+  WorkspaceAction,
+  WorkspaceJobPhase,
+} from '../../shared/api/generated';
+const {
+  desktop,
+  snapshot,
+  active,
+  error,
+  connecting,
+  picking,
+  preview,
+  act: workspaceAct,
+  connect,
+  open: openFiles,
+} = useWorkspace();
+const selection = useSelection(
+  computed(() => snapshot.value?.selection ?? null),
+  connect,
+);
 const { url, error: imageError, loading, retry, imageFailed } = preview;
 const { status } = useAppStatus();
 const views = reactive(new Map<string, CanvasView>());
@@ -28,6 +49,33 @@ const {
   reload: reloadLayers,
 } = useLayers(active);
 const canvas = ref<InstanceType<typeof PreviewCanvas> | null>(null);
+const {
+  tool,
+  pending: pendingTool,
+  chooseTool,
+} = useCanvasTool(selection, () => canvas.value?.cancel());
+const selectionContext = computed(() => {
+  const current = snapshot.value?.selection;
+  return current
+    ? `${current.sessionId}/${current.documentId}/${current.documentRevision}/${current.selectionRevision}`
+    : '';
+});
+function commitRegion(bounds: SelectionBounds, contextKey: string) {
+  if (selectionContext.value === contextKey) void selection.selectRegion(bounds);
+}
+function clearCanvasSelection(contextKey: string) {
+  if (tool.value === 'region' && selectionContext.value === contextKey && selection.summary?.scope)
+    void selection.clear();
+}
+function act(action: WorkspaceAction) {
+  if (action.kind === 'activate' || action.kind === 'close' || action.kind === 'reload')
+    canvas.value?.cancel();
+  return workspaceAct(action);
+}
+function open() {
+  canvas.value?.cancel();
+  return openFiles();
+}
 const selectedBounds = computed(
   () => layers.value.find((layer) => layer.id === active.value?.selectedLayerId)?.bounds ?? null,
 );
@@ -128,21 +176,47 @@ function retryPreview() {
     </div>
     <main class="workspace-layout">
       <aside class="tool-rail" aria-label="画布工具">
-        <span class="tool-selected" title="平移画布" aria-label="平移画布">✥</span
-        ><span class="tool-rail-label">只读</span>
+        <button
+          :class="{ 'tool-selected': tool === 'pan' }"
+          title="移动工具：清空当前选区并平移；保留选区请按住中键拖动"
+          aria-label="平移画布"
+          :aria-pressed="tool === 'pan'"
+          :disabled="selection.busy || !!pendingTool || !!snapshot?.shuttingDown || picking"
+          :aria-busy="!!pendingTool"
+          @click="chooseTool('pan')"
+        >
+          ✥
+        </button>
+        <button
+          :class="{ 'tool-selected': tool === 'region' }"
+          title="区域选择"
+          aria-label="区域选择"
+          :aria-pressed="tool === 'region'"
+          :disabled="!active"
+          @click="chooseTool('region')"
+        >
+          ▧
+        </button>
+        <span class="tool-rail-label">只读</span>
       </aside>
       <section class="workspace" aria-label="文档工作区">
         <PreviewCanvas
           v-if="active"
           ref="canvas"
-          :key="active.id"
+          :key="`${active.id}:${active.revision}`"
           :width="active.width"
           :height="active.height"
           :name="active.name"
           :url="url"
           :view="views.get(active.id) ?? initialView()"
           :bounds="selectedBounds"
+          :tool="tool"
+          :region="snapshot?.selection.region ?? null"
+          :context-key="selectionContext"
+          :disabled="selection.busy || !!snapshot?.shuttingDown || picking"
           @update:view="views.set(active.id, $event)"
+          @region="commitRegion"
+          @clear-selection="clearCanvasSelection"
           @image-error="imageFailed"
         >
           <template v-if="imageError"
@@ -200,9 +274,12 @@ function retryPreview() {
             :key="`${active.id}:${active.revision}`"
             :layers="layers"
             :selected="active.selectedLayerId"
+            :range-ids="snapshot?.selection.layerIds ?? []"
+            :range-busy="selection.busy"
             :loading="layersLoading"
             :view="trees.get(active.id)?.view ?? initialTree()"
             @select="selectLayer"
+            @toggle-range="selection.toggleLayer"
             @update:view="trees.set(active.id, { revision: active.revision, view: $event })"
           />
           <div v-if="layerError" class="layer-error" role="alert">
@@ -242,6 +319,7 @@ function retryPreview() {
           <h3>忠于 PSD 原稿</h3>
           <p class="subtle">保留原始数据与单位，为后续判断提供依据。</p></template
         >
+        <SelectionPanel v-if="snapshot" :model="selection" />
         <div class="sidebar-footer">
           <span class="status-dot" :class="{ ready: !!snapshot }"></span
           >{{ snapshot ? '桌面工作区已连接' : desktop ? '工作区未连接' : '浏览器预览'

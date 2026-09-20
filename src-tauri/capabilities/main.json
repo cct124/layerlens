@@ -8,6 +8,7 @@
     "allow-workspace-action",
     "allow-read-preview",
     "allow-read-layers",
+    "allow-selection-request",
     "allow-choose-psd-files",
     "core:event:allow-listen",
     "core:event:allow-unlisten"

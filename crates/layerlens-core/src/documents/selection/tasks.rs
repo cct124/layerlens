@@ -3,17 +3,17 @@
 use std::time::SystemTime;
 
 use super::{
-    DesignTask, SelectionError, SessionId, SnapshotId, SnapshotLease, TaskId, TaskStatus,
-    model::limit,
+    DesignTask, SelectionError, SelectionHandle, SessionId, SnapshotId, SnapshotLease, TaskId,
+    TaskPage, TaskStatus, model::limit,
 };
-use crate::documents::{DocumentError, DocumentService, model::lock};
+use crate::documents::{DocumentError, model::lock};
 
 pub(super) struct TaskEntry {
     record: DesignTask,
     pub(super) snapshot: Option<SnapshotLease>,
 }
 
-impl DocumentService {
+impl SelectionHandle {
     /// 以客户端请求 ID 固定快照；同 ID 同参数返回原记录（包括已释放终态），不同参数冲突。
     /// 名称允许重复；请求 ID 为 1–128 字节，名称为 1–256 字节且不能全为空白。
     ///
@@ -65,6 +65,7 @@ impl DocumentService {
                 .ok_or(DocumentError::IdExhausted)?,
         );
         let record = DesignTask {
+            scope: snapshot.brief(),
             id,
             snapshot_id,
             name: name.to_owned(),
@@ -81,6 +82,44 @@ impl DocumentService {
         );
         selections.requests.insert(request_id.to_owned(), id);
         Ok(record)
+    }
+
+    /// 每页 1–32 条，按 ID 升序；游标必须属于此会话的既有任务。
+    pub fn list_tasks(
+        &self,
+        session: &SessionId,
+        after: Option<TaskId>,
+        limit: u32,
+    ) -> Result<TaskPage, SelectionError> {
+        if !(1..=32).contains(&limit) {
+            return Err(SelectionError::InvalidInput("任务页条数应为 1–32"));
+        }
+        let state = lock(&self.shared.state);
+        state.ensure_running()?;
+        state.selections.check_session(session)?;
+        let tasks = &state.selections.tasks;
+        if after.is_some_and(|id| !tasks.contains_key(&id)) {
+            return Err(SelectionError::TaskNotFound);
+        }
+        let mut iter = tasks
+            .iter()
+            .filter(|(id, _)| after.is_none_or(|after| **id > after));
+        let records: Vec<_> = iter
+            .by_ref()
+            .take(limit as usize)
+            .map(|(_, task)| task.record.clone())
+            .collect();
+        let next_after = if iter.next().is_some() {
+            records.last().map(|task| task.id)
+        } else {
+            None
+        };
+        Ok(TaskPage {
+            tasks: records,
+            next_after,
+            total: tasks.len(),
+            capacity: self.shared.config.selection.max_task_records,
+        })
     }
 
     /// 查询小型任务记录；已释放任务仍可核对结果，不隐式发起设计读取。

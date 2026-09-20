@@ -6,6 +6,7 @@ mod app_info;
 pub mod documents;
 mod error;
 pub mod psd;
+pub mod selection_contract;
 pub mod workspace_contract;
 
 pub use app_info::{AppInfo, AppInfoRequest, IPC_PROTOCOL_VERSION, get_app_info};

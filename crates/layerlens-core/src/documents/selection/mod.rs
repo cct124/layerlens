@@ -1,10 +1,11 @@
 //! 用户选区、固定范围和设计任务，复用文档服务短锁及不可变修订。
 //! 范围计算／内容分页在锁外；注册表只移动引用，最后引用及源数据在锁外释放。
-//! 查看器 selected_layer 与这里的选区无授权关系。此模块尚未接入桌面或 MCP。
+//! 查看器 selected_layer 与这里的选区无授权关系；桌面及未来协议共用同一服务。
 
 mod budget;
 mod content;
 mod error;
+mod handle;
 mod model;
 mod normalize;
 mod tasks;
@@ -12,11 +13,13 @@ mod tasks;
 pub(super) use budget::Budget;
 pub use content::{ContentLayer, ContentPage};
 pub use error::SelectionError;
+pub use handle::SelectionHandle;
 pub use model::{
-    ContentCursor, DesignTask, IntersectionKind, LayerIntersection, LayerReference, LayerRole,
-    PreparedSelection, SelectionAccounting, SelectionBounds, SelectionConfig, SelectionInput,
-    SelectionItem, SelectionRevision, SelectionScope, SelectionWarning, SessionId,
-    SnapshotDocumentInfo, SnapshotId, SnapshotLease, TaskId, TaskStatus, UserSelection,
+    ContentCursor, DesignTask, DocumentReference, IntersectionKind, LayerIntersection,
+    LayerReference, LayerRole, PreparedSelection, SelectionAccounting, SelectionBounds,
+    SelectionConfig, SelectionInput, SelectionItem, SelectionRevision, SelectionScope,
+    SelectionSummary, SelectionWarning, SessionId, SnapshotBrief, SnapshotDocumentInfo, SnapshotId,
+    SnapshotLease, TaskId, TaskPage, TaskStatus, UserSelection,
 };
 
 use std::{
@@ -140,6 +143,23 @@ impl state::State {
         }
     }
 
+    // 与文档列表在同一次锁内投影，不将可能延长大修订生命的引用交给通知线程。
+    pub(super) fn selection_summary(&self) -> SelectionSummary {
+        let entry = self
+            .documents
+            .iter()
+            .find(|entry| Some(entry.revision.document_id) == self.active);
+        let snapshot = entry.and_then(|entry| entry.selection.as_ref());
+        SelectionSummary {
+            session_id: self.selections.session_id.clone(),
+            revision: self.selections.revision,
+            document_id: entry.map(|entry| entry.revision.document_id),
+            document_revision: entry.map(|entry| entry.revision.id),
+            snapshot: snapshot.map(SnapshotLease::brief),
+            items: snapshot.map_or_else(Vec::new, |snapshot| snapshot.scope().items.clone()),
+        }
+    }
+
     fn validate_selection(
         &self,
         lease: &DocumentLease,
@@ -164,7 +184,7 @@ impl state::State {
     }
 }
 
-impl DocumentService {
+impl SelectionHandle {
     /// 原子采样活动文档、选择版本与快照强引用。区域内容必须从返回引用继续读取。
     pub fn user_selection(&self) -> Result<UserSelection, SelectionError> {
         let state = lock(&self.shared.state);
@@ -183,7 +203,21 @@ impl DocumentService {
         expected: SelectionRevision,
         input: SelectionInput,
     ) -> Result<PreparedSelection, SelectionError> {
-        lock(&self.shared.state).validate_selection(lease, expected)?;
+        let document_name = {
+            let state = lock(&self.shared.state);
+            let index = state.validate_selection(lease, expected)?;
+            // 终态任务保留有界显示标签；名称不是定位或授权依据。
+            let name = state.documents[index]
+                .path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            let mut end = name.len().min(256);
+            while !name.is_char_boundary(end) {
+                end -= 1;
+            }
+            name[..end].to_owned()
+        };
         let scope = normalize::normalize(
             lease.info(),
             lease.document_id(),
@@ -195,6 +229,7 @@ impl DocumentService {
             document: lease.clone(),
             expected_revision: expected,
             scope,
+            document_name,
         })
     }
 
@@ -218,7 +253,7 @@ impl DocumentService {
                 return Ok(state.capture_selection());
             }
         }
-        let bytes = prepared.scope.charged_bytes();
+        let bytes = prepared.scope.charged_bytes() + prepared.document_name.capacity() as u64;
         let permit = match self.shared.selection_budget.reserve(bytes) {
             Ok(permit) => permit,
             Err(_) => {
@@ -245,6 +280,7 @@ impl DocumentService {
                 session_id: state.selections.session_id.clone(),
                 document: prepared.document,
                 scope: prepared.scope,
+                document_name: prepared.document_name,
                 page_bytes: self.shared.config.selection.content_page_bytes,
                 _permit: permit,
             }));

@@ -259,6 +259,7 @@ impl Engine {
             });
         }
         let mut snapshot = WorkspaceSnapshot {
+            selection: super::selection::summary(core.selection),
             protocol_version: IPC_PROTOCOL_VERSION,
             sequence: self.sequence.to_string(),
             documents,

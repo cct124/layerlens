@@ -13,6 +13,7 @@ fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R>
             commands::workspace_action,
             commands::read_preview,
             commands::read_layers,
+            commands::selection_request,
             commands::choose_psd_files
         ])
 }
@@ -172,6 +173,10 @@ mod tests {
                 json!({ "protocolVersion": 2, "documentId": "1", "revision": "1" }),
             ),
             ("choose_psd_files", json!({ "protocolVersion": 2 })),
+            (
+                "selection_request",
+                json!({ "protocolVersion": 2, "sessionId": "00000000000000000000000000000000", "operation": { "kind": "tasks", "after": null, "limit": 32 } }),
+            ),
             (
                 "read_layers",
                 json!({"protocolVersion":2,"documentId":"1","revision":"1","query":{"kind":"list","offset":0,"limit":128}}),

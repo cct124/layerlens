@@ -183,7 +183,7 @@ function textSlice(v: unknown): v is TextSlice {
       ));
   return runs(v.styleRuns, characterFields) && runs(v.paragraphRuns, paragraphFields);
 }
-function details(v: unknown): v is LayerDetails {
+export function isLayerDetails(v: unknown): v is LayerDetails {
   return (
     record(v) &&
     isLayerSummary(v.layer) &&
@@ -216,6 +216,6 @@ export function isLayerResponse(v: unknown): v is LayerResponse {
     record(v.result) &&
     (v.result.kind === 'list'
       ? page(v.result.page)
-      : v.result.kind === 'details' && details(v.result.details))
+      : v.result.kind === 'details' && isLayerDetails(v.result.details))
   );
 }

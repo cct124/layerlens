@@ -1,4 +1,5 @@
 import { IPC_PROTOCOL_VERSION } from './generated';
+import { isSelectionSummary } from './selectionValidation';
 import type {
   WorkspaceDocument,
   WorkspaceError,
@@ -33,6 +34,13 @@ const errorCodes: Record<WorkspaceErrorCode, true> = {
   PREVIEW_FAILED: true,
   STALE_PREVIEW: true,
   STALE_REVISION: true,
+  FOREIGN_SESSION: true,
+  STALE_SELECTION: true,
+  INACTIVE_DOCUMENT: true,
+  SNAPSHOT_EXPIRED: true,
+  EMPTY_TARGETS: true,
+  TASK_RELEASED: true,
+  REQUEST_CONFLICT: true,
   SHUTTING_DOWN: true,
   INTERNAL: true,
 };
@@ -100,6 +108,7 @@ export function isWorkspaceSnapshot(value: unknown): value is WorkspaceSnapshot 
     !record(value) ||
     value.protocolVersion !== IPC_PROTOCOL_VERSION ||
     !decimal(value.sequence) ||
+    !isSelectionSummary(value.selection) ||
     !Array.isArray(value.documents) ||
     !value.documents.every(document) ||
     !(value.activeDocumentId === null || id(value.activeDocumentId)) ||
@@ -118,6 +127,10 @@ export function isWorkspaceSnapshot(value: unknown): value is WorkspaceSnapshot 
   const active = value.documents.find((d) => d.id === value.activeDocumentId);
   return (
     new Set(value.documents.map((d) => d.id)).size === value.documents.length &&
+    value.selection.documentId === value.activeDocumentId &&
+    (value.selection.documentRevision === null
+      ? !active
+      : value.selection.documentRevision === active?.revision) &&
     (value.activeDocumentId === null ? value.documents.length === 0 : !!active) &&
     (value.preview === null ||
       (active?.id === value.preview.documentId && active.revision === value.preview.revision))
