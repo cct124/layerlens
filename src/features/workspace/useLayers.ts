@@ -19,6 +19,8 @@ export function useLayers(active: Readonly<Ref<WorkspaceDocument | null>>) {
     () => [listError.value, detailError.value].filter((value) => value !== null).join('；') || null,
   );
   const loading = ref(false);
+  // 详情失败不影响完整边缘索引；列表失败或仍在分页时不能将部分图层当成完整目标。
+  const complete = computed(() => !!active.value && !loading.value && listError.value === null);
   const detailLoading = ref(false);
   let disposed = false,
     running = false,
@@ -110,5 +112,5 @@ export function useLayers(active: Readonly<Ref<WorkspaceDocument | null>>) {
     wantedDetail = null;
     nextOffset = null;
   });
-  return { layers, details, error, loading, detailLoading, readText, reload };
+  return { layers, details, error, loading, complete, detailLoading, readText, reload };
 }

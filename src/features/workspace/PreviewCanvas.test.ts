@@ -3,6 +3,7 @@ import { nextTick } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PreviewCanvas from './PreviewCanvas.vue';
+import { buildSnapIndex } from './regionSnapping';
 import type { CanvasTool } from './regionDraft';
 import type { SelectionBounds } from '../../shared/api/generated';
 
@@ -73,6 +74,7 @@ async function pointer(
   id = 1,
   button = 0,
   buttons = type === 'pointerup' ? 0 : 1,
+  altKey = false,
 ) {
   // jsdom 的 PointerEvent 继承只读 MouseEvent 属性，直接构造事件避免 trigger 的属性回填。
   target.element.dispatchEvent(
@@ -84,6 +86,7 @@ async function pointer(
       pointerId: id,
       clientX: x,
       clientY: y,
+      altKey,
     }),
   );
   await nextTick();
@@ -104,6 +107,114 @@ it('新建草稿随拖动显示，松开只提交一次且等待权威选区确�
   expect(wrapper.emitted('region')).toHaveLength(1);
   await wrapper.setProps({ region: { x: 100, y: 120, width: 90, height: 60 }, contextKey: 'next' });
   expect(wrapper.get('.region-boundary').attributes('style')).toContain('width: 90px');
+});
+
+function snapIndex(x = 300) {
+  return buildSnapIndex(1000, 800, [
+    {
+      id: 1,
+      parentId: null,
+      name: '标题',
+      nameTruncated: false,
+      kind: 'text',
+      bounds: { x, y: 250, width: 200, height: 100 },
+      visible: true,
+      effectiveVisible: true,
+      opacity: 255,
+    },
+  ]);
+}
+it('拖动吸附显示目标线但不提交，松开用同一吸附矩形提交一次并等待权威确认', async () => {
+  const viewport = setup();
+  await wrapper.setProps({ snapIndex: snapIndex() });
+  await pointer(viewport, 'pointerdown', 100, 120);
+  await pointer(viewport, 'pointermove', 297, 347);
+  expect(wrapper.get('.region-draft').attributes('style')).toContain('width: 200px');
+  // 1000px 画布居中，文档 x=300 对应视口中心左侧 200px。
+  expect(wrapper.get('[data-snap-axis="x"]').attributes('style')).toContain('calc(50% - 200px)');
+  expect(wrapper.get('.snap-feedback').text()).toContain('标题 · 几何左边');
+  expect(wrapper.emitted('region')).toBeUndefined();
+  await pointer(viewport, 'pointerup', 297, 347);
+  expect(wrapper.emitted('region')).toEqual([
+    [{ x: 100, y: 120, width: 200, height: 230 }, 'session/doc/revision/selection'],
+  ]);
+  expect(wrapper.find('.snap-guide').exists()).toBe(false);
+  expect(wrapper.get('.region-boundary').attributes('style')).toContain('width: 300px');
+});
+
+it('静止指针按下／松开 Alt 立即释放／恢复吸附，松开鼠标尊重最终 Alt 状态', async () => {
+  const viewport = setup();
+  await wrapper.setProps({ snapIndex: snapIndex() });
+  await pointer(viewport, 'pointerdown', 100, 120);
+  await pointer(viewport, 'pointermove', 297, 347);
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Alt', altKey: true }));
+  await nextTick();
+  expect(wrapper.find('.snap-guide').exists()).toBe(false);
+  expect(wrapper.get('.region-draft').attributes('style')).toContain('width: 197px');
+  expect(wrapper.get('.snap-note').text()).toContain('临时关闭');
+  window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Alt' }));
+  await nextTick();
+  expect(wrapper.findAll('.snap-guide')).toHaveLength(2);
+  await wrapper.setProps({ snapEnabled: false });
+  expect(wrapper.find('.snap-guide').exists()).toBe(false);
+  await wrapper.setProps({ snapEnabled: true });
+  expect(wrapper.findAll('.snap-guide')).toHaveLength(2);
+  await pointer(viewport, 'pointerup', 297, 347, 1, 0, 0, true);
+  expect(wrapper.emitted('region')?.[0]?.[0]).toEqual({ x: 100, y: 120, width: 197, height: 227 });
+});
+
+it('图层晚到不改变进行中的吸附目标，下次手势才使用完整列表', async () => {
+  const viewport = setup();
+  await pointer(viewport, 'pointerdown', 100, 120);
+  await pointer(viewport, 'pointermove', 297, 347);
+  await wrapper.setProps({ snapIndex: snapIndex() });
+  await pointer(viewport, 'pointermove', 297, 347);
+  expect(wrapper.find('.snap-guide').exists()).toBe(false);
+  expect(wrapper.get('.snap-note').text()).toContain('仅画布');
+  await viewport.trigger('keydown', { key: 'Escape' });
+  await pointer(viewport, 'pointerdown', 100, 120);
+  await pointer(viewport, 'pointermove', 297, 347);
+  expect(wrapper.findAll('.snap-guide')).toHaveLength(2);
+  expect(wrapper.get('.snap-note').text()).toContain('几何边缘');
+});
+
+it.each(['escape', 'blur', 'context', 'middle', 'resize', 'lostpointercapture', 'pointercancel'])(
+  '吸附后 %s 丢弃草稿和参考线，不清空已提交范围，迟到松开不提交',
+  async (cancel) => {
+    const viewport = setup();
+    await wrapper.setProps({ snapIndex: snapIndex() });
+    await pointer(viewport, 'pointerdown', 100, 120);
+    await pointer(viewport, 'pointermove', 297, 347);
+    if (cancel === 'escape') await viewport.trigger('keydown', { key: 'Escape' });
+    else if (cancel === 'blur') window.dispatchEvent(new Event('blur'));
+    else if (cancel === 'context')
+      await wrapper.setProps({
+        contextKey: 'other/doc/revision/selection',
+        snapIndex: snapIndex(400),
+      });
+    else if (cancel === 'middle') await pointer(viewport, 'pointermove', 297, 347, 1, 0, 5);
+    else if (cancel === 'resize') resizeViewport(900, 800);
+    else await pointer(viewport, cancel, 297, 347);
+    await nextTick();
+    expect(wrapper.find('.snap-guide').exists()).toBe(false);
+    expect(wrapper.get('.region-boundary').attributes('style')).toContain('width: 300px');
+    await pointer(viewport, 'pointerup', 297, 347);
+    expect(wrapper.emitted('region')).toBeUndefined();
+    expect(wrapper.emitted('clearSelection')).toBeUndefined();
+  },
+);
+
+it('近边单击和不足最小距离不吸附或提交，禁用时仍可自由框选', async () => {
+  const viewport = setup(null);
+  await pointer(viewport, 'pointerdown', 5, 5);
+  await pointer(viewport, 'pointermove', 6, 6);
+  expect(wrapper.find('.snap-guide').exists()).toBe(false);
+  await pointer(viewport, 'pointerup', 6, 6);
+  expect(wrapper.emitted('region')).toBeUndefined();
+  await wrapper.setProps({ snapEnabled: false });
+  await pointer(viewport, 'pointerdown', 100, 120);
+  await pointer(viewport, 'pointerup', 5, 5);
+  expect(wrapper.emitted('region')?.[0]?.[0]).toEqual({ x: 5, y: 5, width: 95, height: 115 });
 });
 
 it('框内移动保持尺寸，控制点调整尺寸，重新框选支持从原范围内部新建', async () => {

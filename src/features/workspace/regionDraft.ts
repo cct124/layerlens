@@ -22,7 +22,7 @@ export interface RegionDraft {
   original: SelectionBounds | null;
   bounds: SelectionBounds;
 }
-const MIN_DRAG_CSS_PX = 3;
+export const MIN_REGION_DRAG_CSS_PX = 3;
 
 /** 将相对视口左上角的 CSS 像素位置转换为文档位置，保留亚像素精度。 */
 export function documentPoint(point: Point, canvas: CanvasGeometry): Point {
@@ -123,7 +123,7 @@ export function finishRegion(
 ): SelectionBounds | null {
   const bounds = draft.bounds;
   if (
-    travel < MIN_DRAG_CSS_PX ||
+    travel < MIN_REGION_DRAG_CSS_PX ||
     bounds.width <= 0 ||
     bounds.height <= 0 ||
     !insideDocument(bounds, width, height) ||

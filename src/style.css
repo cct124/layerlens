@@ -178,6 +178,19 @@ summary {
   color: var(--muted);
   font-size: 11px;
 }
+.snap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.snap-toggle input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
 .scope-indicator.has-scope {
   color: #b5d4fa;
 }
@@ -542,6 +555,16 @@ dd {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+.region-controls > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.region-controls button {
+  flex-shrink: 0;
 }
 .canvas-footer {
   height: 28px;
@@ -695,7 +718,7 @@ dd {
   .tool-help {
     display: none;
   }
-  .region-controls > span {
+  .region-controls > span:not(.snap-note) {
     display: none;
   }
 }

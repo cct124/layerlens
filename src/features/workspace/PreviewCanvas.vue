@@ -9,21 +9,28 @@ import {
   finishRegion,
   insideDocument,
   screenPoint,
-  updateRegion,
+  MIN_REGION_DRAG_CSS_PX,
 } from './regionDraft';
-import type { CanvasTool, RegionAction, RegionDraft, RegionHandle } from './regionDraft';
-const props = defineProps<{
-  width: number;
-  height: number;
-  url: string | null;
-  name: string;
-  view: CanvasView;
-  bounds: Bounds | null;
-  tool: CanvasTool;
-  region: SelectionBounds | null;
-  contextKey: string;
-  disabled: boolean;
-}>();
+import type { CanvasTool, Point, RegionAction, RegionDraft, RegionHandle } from './regionDraft';
+import { buildSnapIndex, snapRegion } from './regionSnapping';
+import type { SnapGuides, SnapIndex } from './regionSnapping';
+const props = withDefaults(
+  defineProps<{
+    width: number;
+    height: number;
+    url: string | null;
+    name: string;
+    view: CanvasView;
+    bounds: Bounds | null;
+    tool: CanvasTool;
+    region: SelectionBounds | null;
+    contextKey: string;
+    disabled: boolean;
+    snapEnabled?: boolean;
+    snapIndex?: SnapIndex | null;
+  }>(),
+  { snapEnabled: true, snapIndex: null },
+);
 const emit = defineEmits<{
   'update:view': [view: CanvasView];
   imageError: [];
@@ -54,7 +61,26 @@ const regionDrag = shallowRef<{
   y: number;
   contextKey: string;
   draft: RegionDraft;
+  point: Point;
+  travel: number;
+  alt: boolean;
+  targets: SnapIndex;
+  guides: SnapGuides;
 } | null>(null);
+const targets = computed(() => props.snapIndex ?? buildSnapIndex(props.width, props.height));
+const guides = computed(() => {
+  const current = regionDrag.value?.guides;
+  return (['x', 'y'] as const).flatMap((axis) =>
+    current?.[axis] ? [{ axis, target: current[axis].target }] : [],
+  );
+});
+const snapNote = computed(() => {
+  if (!props.snapEnabled) return '吸附已关闭';
+  if (regionDrag.value?.alt) return 'Alt · 临时关闭吸附';
+  return (regionDrag.value?.targets ?? targets.value).layersReady
+    ? '画布与图层几何边缘 · Alt 暂停吸附'
+    : '仅画布吸附 · 图层列表尚未完整';
+});
 const drawingNew = ref(false);
 const displayedRegion = computed(() => regionDrag.value?.draft.bounds ?? props.region);
 const handles: { id: RegionHandle; x: number; y: number; label: string }[] = [
@@ -98,6 +124,27 @@ watch(
   },
   { flush: 'sync' },
 );
+function refreshSnapping() {
+  const region = regionDrag.value;
+  if (!region) return;
+  const snapped = snapRegion(
+    region.draft,
+    region.point,
+    props.width,
+    props.height,
+    effective.value.zoom,
+    region.targets,
+    region.guides,
+    props.snapEnabled && !region.alt && region.travel >= MIN_REGION_DRAG_CSS_PX,
+  );
+  regionDrag.value = { ...region, ...snapped };
+}
+function altKey(event: KeyboardEvent) {
+  if (event.key !== 'Alt' || event.isComposing || !regionDrag.value) return;
+  regionDrag.value = { ...regionDrag.value, alt: event.type === 'keydown' };
+  refreshSnapping();
+}
+watch(() => props.snapEnabled, refreshSnapping, { flush: 'sync' });
 onMounted(() => {
   observer = new ResizeObserver((entries) => {
     const entry = entries[0];
@@ -108,11 +155,15 @@ onMounted(() => {
   });
   if (viewport.value) observer.observe(viewport.value);
   window.addEventListener('blur', cancel);
+  window.addEventListener('keydown', altKey);
+  window.addEventListener('keyup', altKey);
 });
 onUnmounted(() => {
   cancel();
   observer?.disconnect();
   window.removeEventListener('blur', cancel);
+  window.removeEventListener('keydown', altKey);
+  window.removeEventListener('keyup', altKey);
 });
 function setView(view: CanvasView) {
   cancel();
@@ -193,12 +244,20 @@ function move(event: PointerEvent) {
       startPan(event, 1);
       return;
     }
-    regionDrag.value = {
-      ...region,
-      draft: updateRegion(region.draft, point(event), props.width, props.height),
-    };
+    updateDraft(event);
     return;
   }
+}
+function updateDraft(event: PointerEvent) {
+  const region = regionDrag.value;
+  if (!region) return;
+  regionDrag.value = {
+    ...region,
+    point: point(event),
+    travel: Math.hypot(event.clientX - region.x, event.clientY - region.y),
+    alt: event.altKey,
+  };
+  refreshSnapping();
 }
 function point(event: PointerEvent) {
   const rect = viewport.value!.getBoundingClientRect();
@@ -235,12 +294,18 @@ function startRegion(event: PointerEvent, action: RegionAction) {
     y: event.clientY,
     contextKey: props.contextKey,
     draft: beginRegion(action, start, props.region),
+    point: start,
+    travel: 0,
+    alt: event.altKey,
+    targets: targets.value,
+    guides: { x: null, y: null },
   };
 }
 function end(event: PointerEvent) {
   const region = regionDrag.value;
   if (region?.id === event.pointerId) {
-    const draft = updateRegion(region.draft, point(event), props.width, props.height);
+    updateDraft(event);
+    const draft = regionDrag.value!.draft;
     const bounds = finishRegion(
       draft,
       Math.hypot(event.clientX - region.x, event.clientY - region.y),
@@ -286,6 +351,7 @@ defineExpose({ locate, cancel, fit, actualSize });
     <div class="canvas-controls" aria-label="选区操作">
       <span class="preview-label">保存时合成预览</span>
       <div class="region-controls">
+        <span v-if="tool === 'region'" class="snap-note" :title="snapNote">{{ snapNote }}</span>
         <span v-if="tool === 'region'">{{
           drawingNew ? '在原选框内也可开始新范围' : '松开确认 · 拖动时 Esc 取消，空闲时清空'
         }}</span>
@@ -376,6 +442,24 @@ defineExpose({ locate, cancel, fit, actualSize });
           ></span>
         </template>
       </div>
+      <div
+        v-for="guide in guides"
+        :key="guide.axis"
+        class="snap-guide"
+        :class="`snap-guide-${guide.axis}`"
+        :data-snap-axis="guide.axis"
+        :aria-label="`吸附目标：${guide.target.label}`"
+        :style="
+          boundaryStyle(
+            guide.axis === 'x'
+              ? { x: guide.target.value, y: 0, width: 0, height }
+              : { x: 0, y: guide.target.value, width, height: 0 },
+          )
+        "
+      ></div>
+      <div v-if="guides.length" class="snap-feedback">
+        {{ guides.map((guide) => guide.target.label).join(' / ') }}
+      </div>
       <div v-if="!url" class="canvas-message"><slot /></div>
     </div>
     <div class="canvas-footer">
@@ -392,6 +476,32 @@ defineExpose({ locate, cancel, fit, actualSize });
 </template>
 
 <style scoped>
+.snap-guide {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+.snap-guide-x {
+  border-left: 1px dashed #e39ad8;
+}
+.snap-guide-y {
+  border-top: 1px dashed #e39ad8;
+}
+.snap-feedback {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 32px);
+  padding: 3px 6px;
+  background: #29212fee;
+  color: #f0bce9;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .region-tool,
 .region-tool:active {
   cursor: crosshair;

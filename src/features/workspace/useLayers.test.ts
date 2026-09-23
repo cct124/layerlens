@@ -73,6 +73,7 @@ it('按固定修订串行续读超过 128 项的图层，不遗漏最后一页',
   });
   const scope = effectScope();
   const state = scope.run(() => useLayers(shallowRef(doc('1'))))!;
+  expect(state.complete.value).toBe(false);
   await flushPromises();
   expect(vi.mocked(readLayers).mock.calls.map((call) => call[2])).toEqual([
     { kind: 'list', offset: 0, limit: 128 },
@@ -83,6 +84,7 @@ it('按固定修订串行续读超过 128 项的图层，不遗漏最后一页',
     Array.from({ length: 300 }, (_, id) => id),
   );
   expect(state.loading.value).toBe(false);
+  expect(state.complete.value).toBe(true);
   scope.stop();
 });
 it('续页失败后检查已有图层不清除列表错误，重新读取才能恢复完整列表', async () => {
@@ -95,10 +97,12 @@ it('续页失败后检查已有图层不清除列表错误，重新读取才能�
   const state = scope.run(() => useLayers(active))!;
   await flushPromises();
   expect(state.layers.value).toHaveLength(128);
+  expect(state.complete.value).toBe(false);
   expect(state.error.value).toContain('第二页读取失败');
   active.value = { ...doc('1'), selectedLayerId: 0 };
   await flushPromises();
   expect(state.details.value?.layer.id).toBe(0);
+  expect(state.complete.value).toBe(false);
   expect(state.error.value).toContain('第二页读取失败');
   vi.mocked(readLayers).mockImplementation(async (_id, _revision, query) =>
     query.kind === 'list' ? listPage(query.offset, 129) : detail(query.layerId),
@@ -107,6 +111,7 @@ it('续页失败后检查已有图层不清除列表错误，重新读取才能�
   await flushPromises();
   expect(state.layers.value).toHaveLength(129);
   expect(state.error.value).toBeNull();
+  expect(state.complete.value).toBe(true);
   scope.stop();
 });
 it('串行读取，快速切换只保留最新目标，旧成功和失败均不覆盖新文档', async () => {
@@ -120,6 +125,7 @@ it('串行读取，快速切换只保留最新目标，旧成功和失败均不�
   const state = scope.run(() => useLayers(active))!;
   active.value = doc('2');
   active.value = doc('3');
+  expect(state.complete.value).toBe(false);
   expect(readLayers).toHaveBeenCalledTimes(1);
   pending[0]!.reject(new Error('old failure'));
   await flushPromises();
@@ -129,6 +135,7 @@ it('串行读取，快速切换只保留最新目标，旧成功和失败均不�
   pending[1]!.resolve(page('3'));
   await flushPromises();
   expect(state.loading.value).toBe(false);
+  expect(state.complete.value).toBe(true);
   scope.stop();
 });
 it('选择变化与关闭会丢弃在途属性，销毁后不发起后续查询', async () => {

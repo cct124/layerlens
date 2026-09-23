@@ -13,6 +13,7 @@ import type {
   LayerDetails,
 } from '../../shared/api/generated';
 import WorkspaceView from './WorkspaceView.vue';
+import PreviewCanvas from './PreviewCanvas.vue';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
@@ -217,6 +218,99 @@ it('画布区域通过桌面接口确认，切换恢复各文档范围；重载�
   await pointer(restored, 'pointerup', 360, 360);
   expect(regionRequests).toHaveLength(1);
   expect(wrapper.find('.region-draft').exists()).toBe(false);
+});
+
+it('完整图层摘要接入吸附，开关跨标签保留，吸附结果只在松开时发到核心', async () => {
+  current = state('1', ['1', '2']);
+  const requests: SelectionRequest[] = [];
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((command, args, options) => {
+    if (command === 'read_layers') {
+      const request = layerRequest(args);
+      return Promise.resolve({
+        ...emptyLayers(request.documentId, request.revision),
+        result: {
+          kind: 'list',
+          page: {
+            offset: 0,
+            total: 1,
+            nextOffset: null,
+            layers: [
+              {
+                id: 0,
+                parentId: null,
+                name: '标题',
+                nameTruncated: false,
+                kind: 'text',
+                bounds: {
+                  x: request.documentId === '1' ? 300 : 600,
+                  y: 250,
+                  width: 200,
+                  height: 100,
+                },
+                visible: true,
+                effectiveVisible: true,
+                opacity: 255,
+              },
+            ],
+          },
+        },
+      });
+    }
+    if (command === 'selection_request') {
+      const { request } = args as { request: SelectionRequest };
+      if (request.operation.kind === 'region') {
+        requests.push(request);
+        return Promise.reject(new Error('测试核心拒绝：保留原范围'));
+      }
+    }
+    return base(command, args, options);
+  });
+  wrapper = mount(WorkspaceView);
+  await flushPromises();
+  await wrapper.get('[aria-label="区域选择"]').trigger('click');
+  const canvas = wrapper.getComponent(PreviewCanvas);
+  expect(canvas.props('snapIndex')?.layersReady).toBe(true);
+  expect(canvas.props('snapIndex')?.x.map((edge) => edge.value)).toEqual([0, 300, 500, 1000]);
+  await wrapper.get('.snap-toggle input').setValue(false);
+  expect(canvas.props('snapEnabled')).toBe(false);
+  emit(state('2', ['1', '2'], '2'));
+  await flushPromises();
+  const second = wrapper.getComponent(PreviewCanvas);
+  expect(second.props('snapEnabled')).toBe(false);
+  expect(second.props('snapIndex')?.x.map((edge) => edge.value)).toEqual([0, 600, 800, 1000]);
+  await wrapper.get('.snap-toggle input').setValue(true);
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === '100%')!
+    .trigger('click');
+  const viewport = wrapper.get<HTMLElement>('.preview-viewport').element;
+  vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1000, 800));
+  viewport.setPointerCapture = vi.fn();
+  viewport.hasPointerCapture = () => false;
+  for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
+    viewport.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        button: 0,
+        pointerId: 1,
+        clientX: type === 'pointerdown' ? 100 : 597,
+        clientY: type === 'pointerdown' ? 120 : 347,
+      }),
+    );
+    await flushPromises();
+    if (type !== 'pointerup') expect(requests).toHaveLength(0);
+  }
+  expect(requests).toHaveLength(1);
+  expect(requests[0]?.operation).toEqual({
+    kind: 'region',
+    documentId: '2',
+    documentRevision: '2',
+    expectedRevision: '2',
+    bounds: { x: 100, y: 120, width: 500, height: 230 },
+  });
+  expect(wrapper.find('.region-boundary').exists()).toBe(false);
+  expect(wrapper.text()).toContain('测试核心拒绝');
 });
 
 it('画布空闲 Esc 清空失败可重试，等待权威通知且始终保留区域工具', async () => {

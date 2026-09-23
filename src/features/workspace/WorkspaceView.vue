@@ -21,6 +21,7 @@ import { initialTree } from './layerTree';
 import type { LayerTreeView } from './layerTree';
 import { initialView } from './canvasView';
 import type { CanvasView } from './canvasView';
+import { buildSnapIndex } from './regionSnapping';
 import type {
   SelectionBounds,
   WorkspaceAction,
@@ -51,10 +52,21 @@ const {
   details,
   error: layerError,
   loading: layersLoading,
+  complete: layersComplete,
   detailLoading,
   readText,
   reload: reloadLayers,
 } = useLayers(active);
+const snapEnabled = ref(true);
+const snapIndex = computed(() =>
+  active.value
+    ? buildSnapIndex(
+        active.value.width,
+        active.value.height,
+        layersComplete.value ? layers.value : null,
+      )
+    : null,
+);
 const canvas = ref<InstanceType<typeof PreviewCanvas> | null>(null);
 const panels = ref<InstanceType<typeof WorkspacePanels> | null>(null);
 const inspectorTab = ref('properties');
@@ -225,6 +237,13 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
       <span class="tool-help">{{
         tool === 'pan' ? '拖动画布 · 滚轮缩放' : '左键框选 / 调整 · 中键平移 · Esc 清空'
       }}</span>
+      <label
+        v-if="tool === 'region'"
+        class="snap-toggle"
+        title="吸附画布与可见图层几何边缘；按住 Alt 临时关闭"
+      >
+        <input v-model="snapEnabled" type="checkbox" />边缘吸附
+      </label>
       <span class="scope-indicator" :class="{ 'has-scope': !!selection.summary?.scope }">{{
         scopeLabel
       }}</span>
@@ -326,6 +345,8 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
               :view="views.get(active.id) ?? initialView()"
               :bounds="selectedBounds"
               :tool="tool"
+              :snap-enabled="snapEnabled"
+              :snap-index="snapIndex"
               :region="snapshot?.selection.region ?? null"
               :context-key="selectionContext"
               :disabled="selection.busy || !!snapshot?.shuttingDown || picking"
