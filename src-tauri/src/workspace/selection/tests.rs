@@ -70,6 +70,78 @@ fn bind(service: &DocumentService, session: &SessionId, lease: &DocumentLease) -
 }
 
 #[test]
+fn cleanup_terminal_state_and_errors_survive_the_desktop_contract() {
+    let service = DocumentService::new(Default::default()).unwrap();
+    let lease = open(&service, "viewer-text.psd");
+    let session = service.user_selection().unwrap().session_id;
+    let task = bind(&service, &session, &lease);
+    service
+        .commit_cleanup(&service.prepare_cleanup(lease.document_id()).unwrap())
+        .unwrap();
+    let handle = service.selection_handle();
+    let error = execute(
+        &handle,
+        request(
+            &session,
+            SelectionOperation::Content {
+                target: SelectionTarget::Task {
+                    task_id: task.id.clone(),
+                },
+                cursor: None,
+                limit: 16,
+            },
+        ),
+        RESPONSE_BYTES,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, WorkspaceErrorCode::TaskInvalidated);
+    assert_eq!(
+        serde_json::to_value(&error).unwrap()["code"],
+        "TASK_INVALIDATED"
+    );
+    for operation in [
+        SelectionOperation::ReleaseTask {
+            task_id: task.id.clone(),
+        },
+        SelectionOperation::CreateTask {
+            snapshot_id: task.scope.snapshot_id.clone(),
+            request_id: "intent".into(),
+            name: "任务".into(),
+        },
+    ] {
+        let reply = execute(&handle, request(&session, operation), RESPONSE_BYTES).unwrap();
+        assert_eq!(
+            serde_json::to_value(&reply).unwrap()["task"]["status"],
+            "invalidated"
+        );
+    }
+    let reply = execute(
+        &handle,
+        request(
+            &session,
+            SelectionOperation::Tasks {
+                after: None,
+                limit: 32,
+            },
+        ),
+        RESPONSE_BYTES,
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(reply).unwrap()["page"]["tasks"][0]["status"],
+        "invalidated"
+    );
+    assert_eq!(
+        domain_error(&layerlens_core::documents::DocumentError::Invalidated).code,
+        WorkspaceErrorCode::DocumentInvalidated
+    );
+    assert_eq!(
+        domain_error(&layerlens_core::documents::DocumentError::StaleCleanupPlan).code,
+        WorkspaceErrorCode::StaleCleanupPlan
+    );
+}
+
+#[test]
 fn desktop_region_is_authoritative_idempotent_and_can_bind_a_task() {
     let service = DocumentService::new(Default::default()).unwrap();
     let lease = open(&service, "viewer-text.psd");

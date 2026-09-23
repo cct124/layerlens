@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { useSelection } from './useSelection';
+import { taskStatusLabel, type useSelection } from './useSelection';
 import type { TaskDto } from '../../shared/api/generated';
 const props = defineProps<{ model: ReturnType<typeof useSelection> }>();
 const name = ref('设计任务');
@@ -70,12 +70,12 @@ function copyTask(task: TaskDto) {
     <p v-if="!model.total" class="subtle">暂无固定任务。</p>
     <details v-else class="technical-details">
       <summary>任务记录 {{ model.total }} / {{ model.capacity }}</summary>
-      <p>数量包含已释放任务。释放可回收其资源，记录保留到退出软件；达到上限后需要重启软件。</p>
+      <p>数量包含已释放和已失效任务。终态记录保留到退出软件；达到上限后需要重启软件。</p>
     </details>
     <ul class="task-list">
       <li v-for="task in model.tasks" :key="task.id">
         <strong>{{ task.name }}</strong>
-        <span>{{ task.status === 'active' ? '已固定' : '已释放' }}</span>
+        <span>{{ taskStatusLabel[task.status] }}</span>
         <p>{{ task.scope.documentName }} · {{ task.scope.targetCount }} 个图层</p>
         <details class="technical-details">
           <summary>任务技术信息</summary>

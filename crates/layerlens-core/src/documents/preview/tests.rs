@@ -103,6 +103,78 @@ fn entered(calls: &mpsc::Receiver<Entered>) -> Entered {
 }
 
 #[test]
+fn cleanup_rechecks_preview_jobs_and_cancels_running_render_before_publication() {
+    let (service, calls) = controlled(config());
+    let document = open(&service, "bitmap-raw.psd");
+    let stale = service.prepare_cleanup(document).unwrap();
+    let job = service.preview(document).unwrap();
+    let checkpoint = entered(&calls);
+    assert!(matches!(
+        service.commit_cleanup(&stale),
+        Err(DocumentError::StaleCleanupPlan)
+    ));
+    let plan = service.prepare_cleanup(document).unwrap();
+    assert_eq!(plan.impact().preview_jobs, vec![job.id()]);
+    service.commit_cleanup(&plan).unwrap();
+    assert!(matches!(job.status(), JobStatus::Cancelling));
+    // 同步渲染尚未退出，不能提前归还源数据和解码／输出预留额度。
+    assert_eq!(service.snapshot().resources.live_revisions, 1);
+    assert!(service.snapshot().previews.resources.decoded_bytes > 0);
+    checkpoint.release();
+    assert!(matches!(done(&job).outcome, PreviewOutcome::Cancelled));
+    assert_eq!(service.snapshot().resources, ResourceAccounting::default());
+    assert_eq!(
+        service.snapshot().previews.resources,
+        PreviewAccounting::default()
+    );
+    assert_eq!(service.snapshot().previews.cache_entries, 0);
+}
+
+#[test]
+fn cleanup_cancels_queued_preview_without_cancelling_another_document() {
+    let (service, calls) = controlled(config());
+    let a = open(&service, "bitmap-raw.psd");
+    let b = open(&service, "bitmap-rle.psd");
+    let running = service.preview(a).unwrap();
+    let checkpoint = entered(&calls);
+    let queued = service.preview(b).unwrap();
+    assert!(matches!(queued.status(), JobStatus::Queued));
+    service
+        .commit_cleanup(&service.prepare_cleanup(b).unwrap())
+        .unwrap();
+    assert!(matches!(done(&queued).outcome, PreviewOutcome::Cancelled));
+    assert!(matches!(running.status(), JobStatus::Running));
+    checkpoint.release();
+    assert!(!image(&running).png().is_empty());
+    assert_eq!(service.snapshot().resources.live_revisions, 1);
+    assert!(calls.try_recv().is_err());
+}
+
+#[test]
+fn cleanup_evicts_cache_but_cannot_revoke_already_published_png() {
+    let service = service(config());
+    let document = open(&service, "bitmap-raw.psd");
+    let job = service.preview(document).unwrap();
+    let held = image(&job);
+    let original = held.png().to_vec();
+    service
+        .commit_cleanup(&service.prepare_cleanup(document).unwrap())
+        .unwrap();
+    assert_eq!(service.snapshot().resources, ResourceAccounting::default());
+    assert_eq!(service.snapshot().previews.cache_entries, 0);
+    assert_eq!(
+        service.snapshot().previews.resources.output_bytes,
+        held.charged_bytes()
+    );
+    assert_eq!(held.png(), original);
+    drop((job, held));
+    assert_eq!(
+        service.snapshot().previews.resources,
+        PreviewAccounting::default()
+    );
+}
+
+#[test]
 fn same_revision_coalesces_then_hits_cache_without_decoding() {
     let (mut service, calls) = controlled(config());
     let document = open(&service, "bitmap-raw.psd");

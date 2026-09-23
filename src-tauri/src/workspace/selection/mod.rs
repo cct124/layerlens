@@ -27,6 +27,7 @@ fn selection_error(value: SelectionError) -> WorkspaceError {
         SelectionError::EmptyTargets => WorkspaceErrorCode::EmptyTargets,
         SelectionError::TaskNotFound => WorkspaceErrorCode::NotFound,
         SelectionError::TaskReleased => WorkspaceErrorCode::TaskReleased,
+        SelectionError::TaskInvalidated => WorkspaceErrorCode::TaskInvalidated,
         SelectionError::RequestConflict => WorkspaceErrorCode::RequestConflict,
     };
     error(code, value.to_string())

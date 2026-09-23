@@ -134,6 +134,7 @@ pub struct LayerReference {
 impl DocumentLease {
     /// 为本修订中的图层建立显式引用；不存在时拒绝。
     pub fn selection_layer(&self, layer_id: LayerId) -> Result<LayerReference, DocumentError> {
+        self.ensure_valid()?;
         if !self.info().layers.iter().any(|layer| layer.id == layer_id) {
             return Err(DocumentError::LayerNotFound(layer_id));
         }
@@ -272,6 +273,11 @@ impl std::fmt::Debug for SnapshotLease {
 }
 
 impl SnapshotLease {
+    /// 主动清理的协作式取消检查点；异步调用方发布内容前应再次检查。
+    /// 已返回的摘要／数据无法撤回，普通关闭、重载或释放任务不使本引用失效。
+    pub fn ensure_valid(&self) -> Result<(), DocumentError> {
+        self.0.document.ensure_valid()
+    }
     /// 有界范围摘要；不含完整选择项、文字、像素或源引用，可保留在终态任务中。
     pub fn brief(&self) -> SnapshotBrief {
         SnapshotBrief {
@@ -344,11 +350,12 @@ pub struct PreparedSelection {
     pub(super) scope: SelectionScope,
 }
 
-/// 当前核心支持绑定与释放；主动全部清理／失效状态留待后续显式入口。
+/// 释放由任务所有者发起；失效仅由文档主动清理产生，两种终态均保留幂等记录。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {
     Active,
     Released,
+    Invalidated,
 }
 
 /// 有界任务记录；释放后保留小型终态和请求去重信息，不保留源修订。

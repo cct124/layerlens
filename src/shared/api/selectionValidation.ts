@@ -72,7 +72,7 @@ function task(v: unknown): v is TaskDto {
     id(v.id) &&
     shortString(v.name) &&
     v.name.trim().length > 0 &&
-    (v.status === 'active' || v.status === 'released') &&
+    (v.status === 'active' || v.status === 'released' || v.status === 'invalidated') &&
     isScope(v.scope) &&
     v.scope.targetCount > 0
   );

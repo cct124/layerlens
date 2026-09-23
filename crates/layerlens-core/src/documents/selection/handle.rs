@@ -91,7 +91,7 @@ impl DocumentService {
         self.selection_handle()
             .create_task(session, request, snapshot, name)
     }
-    /// 查询包括已释放终态在内的小型记录。
+    /// 查询包括已释放／失效终态在内的小型记录。
     pub fn design_task(
         &self,
         session: &SessionId,
@@ -99,7 +99,7 @@ impl DocumentService {
     ) -> Result<DesignTask, SelectionError> {
         self.selection_handle().design_task(session, id)
     }
-    /// 固定任务读取引用，已释放任务不能发起新读取。
+    /// 固定任务读取引用，已释放／失效任务不能发起新读取。
     pub fn task_snapshot(
         &self,
         session: &SessionId,

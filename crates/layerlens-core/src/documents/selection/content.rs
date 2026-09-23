@@ -58,6 +58,7 @@ impl SnapshotLease {
         limit: u32,
         available_bytes: u64,
     ) -> Result<ContentPage, SelectionError> {
+        self.0.document.ensure_valid()?;
         let page_bytes = self.0.page_bytes.min(available_bytes);
         if page_bytes < 1024 {
             return Err(SelectionError::InvalidInput("内容页可用预算应至少为 1 KiB"));
@@ -141,6 +142,7 @@ impl SnapshotLease {
                         });
                         page.truncated = true;
                         check_size(&page, page_bytes)?;
+                        self.0.document.ensure_valid()?;
                         return Ok(page);
                     }
                 }
@@ -151,6 +153,7 @@ impl SnapshotLease {
             }
         }
         check_size(&page, page_bytes)?;
+        self.0.document.ensure_valid()?;
         Ok(page)
     }
 }

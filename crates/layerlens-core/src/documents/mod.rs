@@ -5,6 +5,7 @@
 //! 服务退出会等待正在执行的调用结束，适配层必须在后台执行 shutdown／Drop。
 
 mod budget;
+mod cleanup;
 mod error;
 mod inspection;
 mod model;
@@ -13,6 +14,7 @@ pub mod selection;
 mod state;
 mod worker;
 
+pub use cleanup::{CleanupImpact, CleanupPlan, CleanupReceipt};
 pub use error::DocumentError;
 pub use inspection::{LayerDetails, LayerPage, LayerSummary, TextSlice};
 pub use model::{
@@ -196,25 +198,9 @@ impl DocumentService {
         let (removed, cleanup, selections) = {
             let mut state = lock(&self.shared.state);
             state.ensure_running()?;
-            let index = state
-                .documents
-                .iter()
-                .position(|entry| entry.revision.document_id == document)
+            let removed = state
+                .remove_document(document)?
                 .ok_or(DocumentError::NotFound(document))?;
-            if state.active == Some(document) {
-                let next = state
-                    .documents
-                    .get(index + 1)
-                    .or_else(|| {
-                        index
-                            .checked_sub(1)
-                            .and_then(|left| state.documents.get(left))
-                    })
-                    .map(|entry| entry.revision.document_id);
-                state.set_active(next)?;
-                state.activation = None;
-            }
-            let removed = state.documents.remove(index);
             let related: Vec<_> = state
                 .pending
                 .iter()

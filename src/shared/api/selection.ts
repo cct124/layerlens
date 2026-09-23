@@ -43,7 +43,7 @@ export async function selectionRequest(
       matches &&=
         value.kind === 'task' &&
         value.task.id === operation.taskId &&
-        value.task.status === 'released';
+        (value.task.status === 'released' || value.task.status === 'invalidated');
       break;
     case 'tasks':
       matches &&=

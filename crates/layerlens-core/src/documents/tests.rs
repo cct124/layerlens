@@ -14,6 +14,8 @@ use super::*;
 const DEADLINE: Duration = Duration::from_secs(10);
 
 // 复用通道检查点，覆盖选区与加载发布之间的竞态。
+#[path = "cleanup_tests.rs"]
+mod cleanup;
 #[path = "selection/lifecycle_tests.rs"]
 mod selection_lifecycle;
 

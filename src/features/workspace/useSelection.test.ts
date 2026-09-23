@@ -1,5 +1,5 @@
 import { effectScope, shallowRef } from 'vue';
-import { flushPromises } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { selectionRequest } from '../../shared/api/selection';
 import type {
@@ -9,6 +9,7 @@ import type {
   TaskDto,
 } from '../../shared/api/generated';
 import { useSelection } from './useSelection';
+import SelectionPanel from './SelectionPanel.vue';
 
 vi.mock('../../shared/api/selection', () => ({ selectionRequest: vi.fn() }));
 const sessionId = 'a'.repeat(32);
@@ -54,6 +55,92 @@ function deferred<T>() {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(selectionRequest).mockResolvedValue(emptyTasks());
+});
+
+it('刷新失效终态后清除旧任务内容和引用，显示已失效且拒绝继续读取', async () => {
+  const { model, stop } = setup();
+  await flushPromises();
+  // 没有剪贴板时仍保留手动复制引用，终态刷新必须将其清除。
+  await model.copyTask(task);
+  vi.mocked(selectionRequest).mockResolvedValueOnce({
+    kind: 'content',
+    target: { kind: 'task', taskId: task.id },
+    page: {
+      sessionId,
+      snapshotId: '1',
+      documentId: '1',
+      documentRevision: '1',
+      layers: [],
+      layerCount: 1,
+      textLayerCount: 0,
+      warnings: [],
+      truncated: false,
+      nextCursor: null,
+    },
+  });
+  model.viewScope(task);
+  await flushPromises();
+  expect(model.content).not.toBeNull();
+  const invalidated: TaskDto = { ...task, status: 'invalidated' };
+  vi.mocked(selectionRequest).mockResolvedValueOnce({
+    kind: 'tasks',
+    page: { sessionId, tasks: [invalidated], nextAfter: null, total: 1, capacity: 128 },
+  });
+  await model.refreshTasks();
+  expect(model.content).toBeNull();
+  expect(model.reference).toBeNull();
+  const wrapper = mount(SelectionPanel, { props: { model } });
+  try {
+    expect(wrapper.get('.task-list').text()).toContain('已失效');
+    for (const button of wrapper.get('.task-list').findAll('button'))
+      expect(button.attributes('disabled')).toBeDefined();
+    vi.mocked(selectionRequest).mockClear();
+    model.viewScope(invalidated);
+    await model.copyTask(invalidated);
+    expect(selectionRequest).not.toHaveBeenCalled();
+    expect(model.reference).toBeNull();
+  } finally {
+    wrapper.unmount();
+    stop();
+  }
+});
+
+it('创建回执不能将随后列表中的失效任务恢复为 active', async () => {
+  const { model, stop } = setup();
+  await flushPromises();
+  vi.mocked(selectionRequest)
+    .mockResolvedValueOnce({ kind: 'task', sessionId, task })
+    .mockResolvedValueOnce({
+      kind: 'tasks',
+      page: {
+        sessionId,
+        tasks: [{ ...task, status: 'invalidated' }],
+        nextAfter: null,
+        total: 1,
+        capacity: 128,
+      },
+    });
+  await model.createTask(task.name);
+  expect(model.tasks[0]?.status).toBe('invalidated');
+  expect(model.notice).toContain('已失效');
+  expect(model.reference).toBeNull();
+  stop();
+});
+
+it.each(['create', 'release'])('失效任务的 %s 重试按真实终态显示而非已释放', async (operation) => {
+  const { model, stop } = setup();
+  await flushPromises();
+  vi.mocked(selectionRequest).mockResolvedValueOnce({
+    kind: 'task',
+    sessionId,
+    task: { ...task, status: 'invalidated' },
+  });
+  if (operation === 'create') await model.createTask(task.name);
+  else await model.releaseTask(task);
+  expect(model.notice).toContain('已失效');
+  expect(model.tasks[0]?.status).toBe('invalidated');
+  expect(model.reference).toBeNull();
+  stop();
 });
 
 it('区域提交使用原文档与版本，回执不提前替换摘要；拒绝后保留原选择', async () => {

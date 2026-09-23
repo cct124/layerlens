@@ -108,6 +108,7 @@ pub struct SelectionSummaryDto {
 pub enum TaskStatusDto {
     Active,
     Released,
+    Invalidated,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

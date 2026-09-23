@@ -9,12 +9,12 @@ use super::{
 use crate::documents::{DocumentError, model::lock};
 
 pub(super) struct TaskEntry {
-    record: DesignTask,
+    pub(super) record: DesignTask,
     pub(super) snapshot: Option<SnapshotLease>,
 }
 
 impl SelectionHandle {
-    /// 以客户端请求 ID 固定快照；同 ID 同参数返回原记录（包括已释放终态），不同参数冲突。
+    /// 以客户端请求 ID 固定快照；同 ID 同参数返回原记录（包括已释放／失效终态），不同参数冲突。
     /// 名称允许重复；请求 ID 为 1–128 字节，名称为 1–256 字节且不能全为空白。
     ///
     /// # Errors
@@ -139,7 +139,7 @@ impl SelectionHandle {
             .ok_or(SelectionError::TaskNotFound)
     }
 
-    /// 在请求开始时固定任务引用；之后的释放不影响本次读取，新请求则被拒绝。
+    /// 在请求开始时固定任务引用；普通释放不影响本次读取，主动清理则在检查点拒绝读取。
     pub fn task_snapshot(
         &self,
         session: &SessionId,
@@ -153,6 +153,9 @@ impl SelectionHandle {
             .tasks
             .get(&id)
             .ok_or(SelectionError::TaskNotFound)?;
+        if task.record.status == TaskStatus::Invalidated {
+            return Err(SelectionError::TaskInvalidated);
+        }
         task.snapshot.clone().ok_or(SelectionError::TaskReleased)
     }
 
@@ -171,7 +174,9 @@ impl SelectionHandle {
                 .tasks
                 .get_mut(&id)
                 .ok_or(SelectionError::TaskNotFound)?;
-            task.record.status = TaskStatus::Released;
+            if task.record.status == TaskStatus::Active {
+                task.record.status = TaskStatus::Released;
+            }
             (task.record.clone(), task.snapshot.take())
         };
         drop(removed);

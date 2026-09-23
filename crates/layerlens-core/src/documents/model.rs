@@ -138,6 +138,8 @@ pub struct ServiceSnapshot {
 pub(super) struct Revision {
     pub document_id: DocumentId,
     pub id: RevisionId,
+    pub path: PathBuf,
+    pub invalidated: std::sync::atomic::AtomicBool,
     // 字段顺序保证解析数据先销毁，再由 Permit 归还资源额度。
     pub parsed: PsdDocument,
     pub _permit: Permit,
@@ -150,6 +152,19 @@ pub(super) struct Revision {
 pub struct DocumentLease(pub(super) Arc<Revision>);
 
 impl DocumentLease {
+    /// 主动清理后拒绝新的计算／读取。关闭、重载、普通任务释放不会使引用失效。
+    /// 已借出的不可变元数据无法撤回；调用方发布异步结果前须再次检查。
+    pub fn ensure_valid(&self) -> Result<(), DocumentError> {
+        if self
+            .0
+            .invalidated
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            Err(DocumentError::Invalidated)
+        } else {
+            Ok(())
+        }
+    }
     /// 当前修订所属文档的稳定标识。
     pub fn document_id(&self) -> DocumentId {
         self.0.document_id
@@ -158,7 +173,8 @@ impl DocumentLease {
     pub fn revision_id(&self) -> RevisionId {
         self.0.id
     }
-    /// PSD 规范化事实，保留原始单位、诊断及能力限制。
+    /// PSD 规范化事实的不可变借用，保留原始单位、诊断及能力限制。
+    /// 此借用访问器不撤销数据；受清理约束的读取应使用检查接口或自行调用 ensure_valid。
     pub fn info(&self) -> &DocumentInfo {
         self.0.parsed.info()
     }

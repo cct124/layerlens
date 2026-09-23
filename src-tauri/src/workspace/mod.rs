@@ -40,6 +40,9 @@ pub(super) fn domain_error(value: &DocumentError) -> WorkspaceError {
         DocumentError::NotFound(_) => WorkspaceErrorCode::NotFound,
         DocumentError::LayerNotFound(_) => WorkspaceErrorCode::NotFound,
         DocumentError::StaleRevision => WorkspaceErrorCode::StaleRevision,
+        DocumentError::Invalidated => WorkspaceErrorCode::DocumentInvalidated,
+        DocumentError::StaleCleanupPlan => WorkspaceErrorCode::StaleCleanupPlan,
+        DocumentError::ForeignCleanupPlan => WorkspaceErrorCode::ForeignSession,
         DocumentError::InvalidQuery(_) => WorkspaceErrorCode::InvalidInput,
         DocumentError::ShuttingDown => WorkspaceErrorCode::ShuttingDown,
         DocumentError::Parse { source, .. } | DocumentError::Preview { source, .. }

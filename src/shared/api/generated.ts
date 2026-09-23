@@ -41,7 +41,7 @@ export type WorkspaceRequest = { protocolVersion: number, action: WorkspaceActio
 
 export type PreviewRequest = { protocolVersion: number, documentId: string, revision: string, };
 
-export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "STALE_REVISION" | "FOREIGN_SESSION" | "STALE_SELECTION" | "INACTIVE_DOCUMENT" | "SNAPSHOT_EXPIRED" | "EMPTY_TARGETS" | "TASK_RELEASED" | "REQUEST_CONFLICT" | "SHUTTING_DOWN" | "INTERNAL";
+export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "STALE_REVISION" | "FOREIGN_SESSION" | "STALE_SELECTION" | "INACTIVE_DOCUMENT" | "SNAPSHOT_EXPIRED" | "EMPTY_TARGETS" | "TASK_RELEASED" | "TASK_INVALIDATED" | "DOCUMENT_INVALIDATED" | "STALE_CLEANUP_PLAN" | "REQUEST_CONFLICT" | "SHUTTING_DOWN" | "INTERNAL";
 
 export type WorkspaceError = { code: WorkspaceErrorCode, message: string, };
 
@@ -135,7 +135,7 @@ export type ScopeDto = { snapshotId: string, documentId: string, documentRevisio
 
 export type SelectionSummaryDto = { sessionId: string, selectionRevision: string, documentId: string | null, documentRevision: string | null, scope: ScopeDto | null, layerIds: Array<number>, region: SelectionBounds | null, };
 
-export type TaskStatusDto = "active" | "released";
+export type TaskStatusDto = "active" | "released" | "invalidated";
 
 export type TaskDto = { id: string, name: string, status: TaskStatusDto, scope: ScopeDto, };
 

@@ -57,6 +57,42 @@ impl Default for State {
 }
 
 impl State {
+    pub(super) fn cleanup_tasks(&self, document: DocumentId) -> Vec<DesignTask> {
+        self.tasks
+            .values()
+            .filter(|task| {
+                task.record.scope.document_id == document
+                    && task.record.status == TaskStatus::Active
+            })
+            .map(|task| task.record.clone())
+            .collect()
+    }
+
+    /// 所有旧修订快照都撤销 ID 查找；在途强引用只标记失效，最后析构必须留在锁外。
+    pub(super) fn invalidate_document(&mut self, document: DocumentId) -> Vec<SnapshotLease> {
+        let mut removed = self.retire_document(document);
+        for task in self.tasks.values_mut() {
+            if task.record.scope.document_id == document && task.record.status == TaskStatus::Active
+            {
+                task.record.status = TaskStatus::Invalidated;
+                if let Some(snapshot) = task.snapshot.take() {
+                    removed.push(snapshot);
+                }
+            }
+        }
+        self.snapshots.retain(|_, weak| {
+            let Some(snapshot) = weak.upgrade() else {
+                return false;
+            };
+            let snapshot = SnapshotLease(snapshot);
+            let keep = snapshot.document_id() != document;
+            // 包括非目标的临时升级引用，避免并发释放时在锁内销毁最后一份数据。
+            removed.push(snapshot);
+            keep
+        });
+        removed
+    }
+
     /// 退出后不再接受 ID 查找，释放所有内部强引用；保留会话标识供诊断。
     pub(super) fn drain_references(&mut self) -> Vec<SnapshotLease> {
         let mut removed: Vec<_> = self.cache.drain(..).collect();
@@ -166,6 +202,7 @@ impl state::State {
         expected: SelectionRevision,
     ) -> Result<usize, SelectionError> {
         self.ensure_running()?;
+        lease.ensure_valid()?;
         let index = self
             .documents
             .iter()
@@ -225,6 +262,7 @@ impl SelectionHandle {
             input,
             self.shared.config.selection,
         )?;
+        lease.ensure_valid()?;
         Ok(PreparedSelection {
             document: lease.clone(),
             expected_revision: expected,

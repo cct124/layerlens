@@ -42,6 +42,7 @@ pub(super) fn task(value: DesignTask) -> TaskDto {
         status: match value.status {
             TaskStatus::Active => TaskStatusDto::Active,
             TaskStatus::Released => TaskStatusDto::Released,
+            TaskStatus::Invalidated => TaskStatusDto::Invalidated,
         },
     }
 }

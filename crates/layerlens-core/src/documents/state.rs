@@ -3,7 +3,7 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     path::PathBuf,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, Weak},
     time::{Duration, Instant},
 };
 
@@ -93,6 +93,8 @@ impl Pending {
 #[derive(Default)]
 pub(super) struct State {
     pub documents: Vec<Entry>,
+    /// 仅登记已发布修订的弱引用，关闭或重载后仍可显式清理外部持有的旧修订。
+    pub revisions: BTreeMap<(DocumentId, super::RevisionId), Weak<Revision>>,
     pub active: Option<DocumentId>,
     /// 只有最新打开意图的完成可以激活；手动切换／关闭活动入口会清除此意图。
     pub activation: Option<OpenJobId>,
@@ -107,6 +109,33 @@ pub(super) struct State {
 }
 
 impl State {
+    /// 标签移除的唯一入口；先推进可能失败的选择版本，再移出引用供锁外释放。
+    pub fn remove_document(
+        &mut self,
+        document: DocumentId,
+    ) -> Result<Option<Entry>, DocumentError> {
+        let Some(index) = self
+            .documents
+            .iter()
+            .position(|entry| entry.revision.document_id == document)
+        else {
+            return Ok(None);
+        };
+        if self.active == Some(document) {
+            let next = self
+                .documents
+                .get(index + 1)
+                .or_else(|| {
+                    index
+                        .checked_sub(1)
+                        .and_then(|left| self.documents.get(left))
+                })
+                .map(|entry| entry.revision.document_id);
+            self.set_active(next)?;
+            self.activation = None;
+        }
+        Ok(Some(self.documents.remove(index)))
+    }
     pub fn pending_count(&self) -> usize {
         self.pending.len() + self.previews.pending.len()
     }

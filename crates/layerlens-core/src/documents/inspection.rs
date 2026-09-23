@@ -92,6 +92,7 @@ impl DocumentLease {
     /// # Errors
     /// 越界分页或非法数量返回 InvalidQuery，序列化预算不足返回 ResourceLimit。
     pub fn layers(&self, offset: u32, limit: u32) -> Result<LayerPage, DocumentError> {
+        self.ensure_valid()?;
         let layers = &self.info().layers;
         if limit == 0 || limit > PAGE_LIMIT || offset as usize > layers.len() {
             return Err(DocumentError::InvalidQuery("分页位置或数量越界"));
@@ -107,6 +108,7 @@ impl DocumentLease {
                 .collect(),
         };
         check_size(&page, RESPONSE_BYTES)?;
+        self.ensure_valid()?;
         Ok(page)
     }
 
@@ -120,13 +122,16 @@ impl DocumentLease {
         id: LayerId,
         text_start: u32,
     ) -> Result<LayerDetails, DocumentError> {
+        self.ensure_valid()?;
         let layer = self
             .info()
             .layers
             .iter()
             .find(|layer| layer.id == id)
             .ok_or(DocumentError::LayerNotFound(id))?;
-        inspect_layer(layer, text_start)
+        let details = inspect_layer(layer, text_start)?;
+        self.ensure_valid()?;
+        Ok(details)
     }
 }
 

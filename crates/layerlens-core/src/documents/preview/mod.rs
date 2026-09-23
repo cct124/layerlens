@@ -56,6 +56,13 @@ pub(super) struct State {
     evictions: u64,
 }
 impl State {
+    pub(super) fn cleanup_jobs(&self, document: DocumentId) -> Vec<PreviewJobId> {
+        self.pending
+            .iter()
+            .filter(|(_, job)| job.key.document == document)
+            .map(|(id, _)| *id)
+            .collect()
+    }
     pub fn statuses(&self) -> Vec<(PreviewJobId, JobStatus<PreviewCompletion>)> {
         self.pending
             .iter()

@@ -138,10 +138,12 @@ fn compute(shared: &Shared, work: &Work, loader: &Loader) -> Result<Computed, Do
         parsed.info().resources.total_declared_pixels,
     )?;
     Ok(Computed::Loaded {
-        path,
+        path: path.clone(),
         revision: Arc::new(Revision {
             document_id: work.document,
             id: RevisionId(work.id.0),
+            path,
+            invalidated: std::sync::atomic::AtomicBool::new(false),
             parsed,
             _permit: permit,
         }),
@@ -219,6 +221,10 @@ fn publish(shared: &Shared, work: Work, result: Result<Computed, DocumentError>)
                         discarded = Some(revision);
                         OpenOutcome::Failed(Arc::new(error))
                     } else {
+                        state.revisions.retain(|_, weak| weak.strong_count() > 0);
+                        state
+                            .revisions
+                            .insert((work.document, revision_id), Arc::downgrade(&revision));
                         if work.kind == OpenKind::Reload {
                             let entry = state
                                 .documents

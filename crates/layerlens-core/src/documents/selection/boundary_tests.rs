@@ -29,6 +29,13 @@ fn exhausted_selection_version_cannot_partially_publish_any_active_transition() 
         service.close(b.document_id()),
         Err(DocumentError::IdExhausted)
     ));
+    let cleanup = service.prepare_cleanup(b.document_id()).unwrap();
+    assert!(matches!(
+        service.commit_cleanup(&cleanup),
+        Err(DocumentError::IdExhausted)
+    ));
+    assert!(b.ensure_valid().is_ok());
+    assert!(snapshot(&selected).content_page(None, 1).is_ok());
     let reload = service
         .reload(b.document_id())
         .unwrap()

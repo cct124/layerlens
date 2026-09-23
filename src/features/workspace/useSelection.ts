@@ -8,9 +8,16 @@ import type {
   SelectionSummaryDto,
   SelectionTarget,
   TaskDto,
+  TaskStatusDto,
 } from '../../shared/api/generated';
 import { selectionRequest } from '../../shared/api/selection';
 import { workspaceMessage } from '../../shared/api/workspace';
+
+export const taskStatusLabel: Record<TaskStatusDto, string> = {
+  active: '已固定',
+  released: '已释放',
+  invalidated: '已失效',
+};
 
 interface ContentView {
   sessionId: string;
@@ -71,6 +78,16 @@ export function useSelection(
     tasks.value = [...tasks.value.filter((t) => t.id !== task.id), task].sort((a, b) =>
       BigInt(a.id) > BigInt(b.id) ? -1 : 1,
     );
+    if (task.status !== 'active') {
+      if (
+        reference.value === JSON.stringify({ sessionId: summary.value?.sessionId, taskId: task.id })
+      )
+        reference.value = null;
+      if (content.value?.target.kind === 'task' && content.value.target.taskId === task.id) {
+        contentGeneration++;
+        content.value = null;
+      }
+    }
   }
   async function loadTasks(sessionId: string, more: boolean) {
     const result = await selectionRequest(sessionId, {
@@ -173,11 +190,19 @@ export function useSelection(
       if (!live(intent.sessionId) || result.kind !== 'task') return;
       pendingCreate = null;
       upsert(result.task);
-      notice.value = `任务 #${result.task.id} 已确认（${result.task.status === 'active' ? '已固定' : '已释放'}）。`;
-      reference.value = JSON.stringify({ sessionId: intent.sessionId, taskId: result.task.id });
+      notice.value = `任务 #${result.task.id} 已确认（${taskStatusLabel[result.task.status]}）。`;
+      reference.value =
+        result.task.status === 'active'
+          ? JSON.stringify({ sessionId: intent.sessionId, taskId: result.task.id })
+          : null;
       try {
         await loadTasks(intent.sessionId, false);
-        if (live(intent.sessionId)) upsert(result.task);
+        // 列表是稍后的权威结果，不能用创建回执把已释放／失效任务恢复为 active。
+        if (live(intent.sessionId)) {
+          const latest = tasks.value.find((task) => task.id === result.task.id);
+          if (!latest) upsert(result.task);
+          notice.value = `任务 #${result.task.id} 已确认（${taskStatusLabel[(latest ?? result.task).status]}）。`;
+        }
       } catch (cause: unknown) {
         if (live(intent.sessionId))
           error.value = `任务已确认，列表刷新失败：${workspaceMessage(cause)}`;
@@ -191,13 +216,7 @@ export function useSelection(
       const result = await selectionRequest(sessionId, { kind: 'releaseTask', taskId: task.id });
       if (!live(sessionId) || result.kind !== 'task') return;
       upsert(result.task);
-      notice.value = `任务 #${task.id} 已释放，不再接受新的读取。`;
-      if (reference.value === JSON.stringify({ sessionId, taskId: task.id }))
-        reference.value = null;
-      if (content.value?.target.kind === 'task' && content.value.target.taskId === task.id) {
-        contentGeneration++;
-        content.value = null;
-      }
+      notice.value = `任务 #${task.id} ${taskStatusLabel[result.task.status]}，不再接受新的读取。`;
     });
   }
   async function copyTask(task: TaskDto) {
@@ -239,7 +258,7 @@ export function useSelection(
     );
   }
   function viewScope(task?: TaskDto) {
-    if (busy.value || task?.status === 'released') return;
+    if (busy.value || (task && task.status !== 'active')) return;
     const current = summary.value,
       scope = task?.scope ?? current?.scope;
     if (!current || !scope) return;

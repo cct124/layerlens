@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { selectionRequest } from './selection';
 import { isSelectionSummary } from './selectionValidation';
+import { isWorkspaceError } from './workspaceValidation';
 import type { SelectionReply } from './generated';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 const sessionId = 'a'.repeat(32);
@@ -18,6 +19,43 @@ const page = {
   truncated: false,
 };
 beforeEach(() => vi.resetAllMocks());
+it('失效任务可列出和幂等释放，但不能把 active 或未知状态当作释放成功', async () => {
+  const task = {
+    id: '1',
+    name: '模块',
+    status: 'invalidated',
+    scope: {
+      snapshotId: '1',
+      documentId: '1',
+      documentRevision: '1',
+      documentName: 'A.psd',
+      targetCount: 1,
+      contentCount: 1,
+      textLayerCount: 0,
+    },
+  };
+  const reply = { kind: 'task', sessionId, task };
+  vi.mocked(invoke).mockResolvedValue(reply);
+  await expect(selectionRequest(sessionId, { kind: 'releaseTask', taskId: '1' })).resolves.toEqual(
+    reply,
+  );
+  const list = {
+    kind: 'tasks',
+    page: { sessionId, tasks: [task], total: 1, capacity: 128, nextAfter: null },
+  };
+  vi.mocked(invoke).mockResolvedValue(list);
+  await expect(
+    selectionRequest(sessionId, { kind: 'tasks', after: null, limit: 32 }),
+  ).resolves.toEqual(list);
+  for (const status of ['active', 'unknown']) {
+    vi.mocked(invoke).mockResolvedValue({ ...reply, task: { ...task, status } });
+    await expect(
+      selectionRequest(sessionId, { kind: 'releaseTask', taskId: '1' }),
+    ).rejects.toThrow();
+  }
+  for (const code of ['TASK_INVALIDATED', 'DOCUMENT_INVALIDATED', 'STALE_CLEANUP_PLAN'])
+    expect(isWorkspaceError({ code, message: '资源已变化' })).toBe(true);
+});
 it('拒绝跨会话、错误操作回执与另一任务的内容', async () => {
   vi.mocked(invoke).mockResolvedValue({
     kind: 'committed',

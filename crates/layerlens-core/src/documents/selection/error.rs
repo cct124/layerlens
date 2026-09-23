@@ -15,6 +15,7 @@ pub enum SelectionError {
     EmptyTargets,
     TaskNotFound,
     TaskReleased,
+    TaskInvalidated,
     RequestConflict,
 }
 
@@ -36,6 +37,7 @@ impl fmt::Display for SelectionError {
             Self::EmptyTargets => f.write_str("选区没有有效可见目标，不能创建任务"),
             Self::TaskNotFound => f.write_str("设计任务不存在"),
             Self::TaskReleased => f.write_str("设计任务已释放，不接受新的读取"),
+            Self::TaskInvalidated => f.write_str("设计任务的源文档已被主动清理，任务已失效"),
             Self::RequestConflict => f.write_str("请求 ID 已用于不同的任务参数"),
         }
     }
