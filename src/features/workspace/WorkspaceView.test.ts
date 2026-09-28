@@ -11,9 +11,11 @@ import type {
   SelectionRequest,
   TaskDto,
   LayerDetails,
+  CleanupRequest,
 } from '../../shared/api/generated';
 import WorkspaceView from './WorkspaceView.vue';
 import PreviewCanvas from './PreviewCanvas.vue';
+import { mockNativeDialog } from '../../test/nativeDialog';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
@@ -42,6 +44,7 @@ const state = (
   active = ids[0] ?? null,
 ): WorkspaceSnapshot => ({
   protocolVersion: 1,
+  cleanup: { revision: '0', invalidatedTaskIds: [] },
   selection: {
     sessionId: 'a'.repeat(32),
     selectionRevision: sequence,
@@ -75,6 +78,7 @@ let wrapper: VueWrapper | undefined;
 let receive: EventCallback<unknown>;
 const stop = vi.fn();
 let current: WorkspaceSnapshot;
+let restoreDialog: () => void;
 function emit(next: unknown) {
   receive({ event: 'workspace-changed', id: 1, payload: next });
 }
@@ -93,6 +97,7 @@ async function fileMenu() {
 }
 
 beforeEach(() => {
+  restoreDialog = mockNativeDialog();
   vi.resetAllMocks();
   localStorage.clear();
   vi.stubGlobal(
@@ -129,7 +134,190 @@ beforeEach(() => {
 afterEach(() => {
   wrapper?.unmount();
   wrapper = undefined;
+  restoreDialog();
   vi.unstubAllGlobals();
+});
+
+it.each([
+  { latePreview: false, syncFailure: null },
+  { latePreview: true, syncFailure: null },
+  { latePreview: false, syncFailure: 'transport' },
+  { latePreview: false, syncFailure: 'stale' },
+])(
+  '清理回执先于通知时撤销旧预览并等待权威文档列表；$latePreview / $syncFailure',
+  async ({ latePreview, syncFailure }) => {
+    current = state('1', ['1', '2']);
+    const afterCleanup = state('2', ['2']);
+    afterCleanup.cleanup = { revision: '1', invalidatedTaskIds: [] };
+    const sync = deferred<WorkspaceSnapshot>();
+    const oldImage = deferred<ArrayBuffer>();
+    let committed = false;
+    let syncRequests = 0;
+    const base = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation((command, args, options) => {
+      if (command === 'read_preview' && latePreview && layerRequest(args).documentId === '1')
+        return oldImage.promise;
+      if (command === 'cleanup_request') {
+        const { request } = args as { request: CleanupRequest };
+        if (request.operation.kind === 'prepare')
+          return Promise.resolve({
+            kind: 'prepared',
+            sessionId: current.selection.sessionId,
+            plan: {
+              planId: '1',
+              documentId: '1',
+              documentName: 'design-1.psd',
+              openRevision: '1',
+              selectionId: null,
+              liveRevisions: ['1'],
+              tasks: [],
+              loadJobs: [],
+              unresolvedLoadJobs: [],
+              previewJobs: [],
+              expiresInSeconds: 300,
+            },
+          });
+        if (request.operation.kind === 'confirm') {
+          committed = true;
+          return Promise.resolve({
+            kind: 'committed',
+            sessionId: current.selection.sessionId,
+            receipt: { planId: '1', documentId: '1', revision: '1', invalidatedTaskIds: [] },
+          });
+        }
+        return Promise.resolve({
+          kind: 'cancelled',
+          sessionId: current.selection.sessionId,
+          planId: '1',
+        });
+      }
+      if (command === 'workspace_action' && committed) {
+        syncRequests++;
+        if (syncRequests === 1 && syncFailure === 'transport')
+          return Promise.reject(new Error('连接中断'));
+        if (syncRequests === 1 && syncFailure === 'stale') return Promise.resolve(current);
+        return sync.promise;
+      }
+      return base(command, args, options);
+    });
+    wrapper = mount(WorkspaceView, { attachTo: document.body });
+    await flushPromises();
+    await fileMenu();
+    await wrapper.get('[aria-label="清理此文档资源…"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('dialog').attributes('open')).toBeDefined();
+    expect(wrapper.findAll('.document-tab')).toHaveLength(2);
+    await wrapper.get('.cleanup-confirm').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('img[alt="design-1.psd 保存时合成预览"]').exists()).toBe(false);
+    expect(wrapper.get('[aria-label="区域选择"]').attributes('disabled')).toBeDefined();
+    oldImage.resolve(png());
+    await flushPromises();
+    if (latePreview) expect(URL.createObjectURL).not.toHaveBeenCalled();
+    else expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+    if (syncFailure) {
+      expect(wrapper.get('.error-notice').text()).toContain('清理已生效，工作区同步失败');
+      expect(wrapper.get('dialog').text()).toContain('清理已经生效，界面同步失败');
+      await wrapper
+        .get('dialog')
+        .findAll('button')
+        .find((button) => button.text() === '重试同步')!
+        .trigger('click');
+    }
+    current = afterCleanup;
+    sync.resolve(afterCleanup);
+    await flushPromises();
+    expect(wrapper.findAll('.document-tab')).toHaveLength(1);
+    expect(wrapper.get('.document-tab').text()).toContain('design-2.psd');
+    expect(wrapper.get('dialog').text()).toContain('清理已生效');
+    expect(wrapper.find('.error-notice').exists()).toBe(false);
+    expect(
+      vi
+        .mocked(invoke)
+        .mock.calls.filter(
+          ([command, args]) =>
+            command === 'cleanup_request' &&
+            (args as { request: CleanupRequest }).request.operation.kind === 'confirm',
+        ),
+    ).toHaveLength(1);
+  },
+);
+
+it('关闭全部标签后仍可从固定任务清理所属文档，终态投影使操作失效', async () => {
+  const task: TaskDto = {
+    id: '33',
+    name: '保留任务',
+    status: 'active',
+    scope: {
+      snapshotId: '4',
+      documentId: '1',
+      documentRevision: '1',
+      documentName: 'closed.psd',
+      targetCount: 1,
+      contentCount: 1,
+      textLayerCount: 0,
+    },
+  };
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((command, args, options) => {
+    if (command === 'selection_request')
+      return Promise.resolve({
+        kind: 'tasks',
+        page: {
+          sessionId: current.selection.sessionId,
+          tasks: [task],
+          nextAfter: null,
+          total: 1,
+          capacity: 128,
+        },
+      });
+    if (command === 'cleanup_request') {
+      const { request } = args as { request: CleanupRequest };
+      if (request.operation.kind === 'prepare') {
+        expect(request.operation.target).toEqual({ kind: 'task', taskId: '33' });
+        return Promise.resolve({
+          kind: 'prepared',
+          sessionId: current.selection.sessionId,
+          plan: {
+            planId: '1',
+            documentId: '1',
+            documentName: 'closed.psd',
+            openRevision: null,
+            selectionId: null,
+            liveRevisions: ['1'],
+            tasks: [{ id: '33', name: task.name, documentRevision: '1' }],
+            loadJobs: [],
+            unresolvedLoadJobs: [],
+            previewJobs: [],
+            expiresInSeconds: 300,
+          },
+        });
+      }
+      current = state('2');
+      current.cleanup = { revision: '1', invalidatedTaskIds: ['33'] };
+      return Promise.resolve({
+        kind: 'committed',
+        sessionId: current.selection.sessionId,
+        receipt: { planId: '1', documentId: '1', revision: '1', invalidatedTaskIds: ['33'] },
+      });
+    }
+    return base(command, args, options);
+  });
+  wrapper = mount(WorkspaceView, { attachTo: document.body });
+  await flushPromises();
+  await wrapper.get('#resources-tab-tasks').trigger('click');
+  await wrapper
+    .get('.task-list')
+    .findAll('button')
+    .find((button) => button.text() === '清理所属文档资源…')!
+    .trigger('click');
+  await flushPromises();
+  expect(wrapper.get('dialog').text()).toContain('标签已关闭');
+  await wrapper.get('.cleanup-confirm').trigger('click');
+  await flushPromises();
+  expect(wrapper.get('.task-list').text()).toContain('已失效');
+  for (const button of wrapper.get('.task-list').findAll('button'))
+    expect(button.attributes('disabled')).toBeDefined();
 });
 
 it('画布区域通过桌面接口确认，切换恢复各文档范围；重载发起即取消草稿', async () => {

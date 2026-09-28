@@ -1,5 +1,6 @@
 import { IPC_PROTOCOL_VERSION } from './generated';
 import { isSelectionSummary } from './selectionValidation';
+import { isCleanupState } from './cleanup';
 import type {
   WorkspaceDocument,
   WorkspaceError,
@@ -43,6 +44,7 @@ const errorCodes: Record<WorkspaceErrorCode, true> = {
   TASK_INVALIDATED: true,
   DOCUMENT_INVALIDATED: true,
   STALE_CLEANUP_PLAN: true,
+  CLEANUP_PLAN_EXPIRED: true,
   REQUEST_CONFLICT: true,
   SHUTTING_DOWN: true,
   INTERNAL: true,
@@ -112,6 +114,7 @@ export function isWorkspaceSnapshot(value: unknown): value is WorkspaceSnapshot 
     value.protocolVersion !== IPC_PROTOCOL_VERSION ||
     !decimal(value.sequence) ||
     !isSelectionSummary(value.selection) ||
+    !isCleanupState(value.cleanup) ||
     !Array.isArray(value.documents) ||
     !value.documents.every(document) ||
     !(value.activeDocumentId === null || id(value.activeDocumentId)) ||

@@ -6,6 +6,8 @@ import PreviewCanvas from './PreviewCanvas.vue';
 import LayerTree from './LayerTree.vue';
 import SelectionPanel from './SelectionPanel.vue';
 import { useSelection } from './useSelection';
+import { useCleanup } from './useCleanup';
+import CleanupDialog from './CleanupDialog.vue';
 import { useCanvasTool } from './useCanvasTool';
 import LayerProperties from './LayerProperties.vue';
 import DockTabs from './DockTabs.vue';
@@ -26,6 +28,7 @@ import type {
   SelectionBounds,
   WorkspaceAction,
   WorkspaceJobPhase,
+  TaskDto,
 } from '../../shared/api/generated';
 const {
   desktop,
@@ -38,10 +41,23 @@ const {
   act: workspaceAct,
   connect,
   open: openFiles,
+  applyCleanup,
+  syncCleanup,
+  cleanupPending,
 } = useWorkspace();
+const cleanup = useCleanup(
+  computed(() => snapshot.value?.selection.sessionId ?? null),
+  (receipt, sessionId) => {
+    selection.applyCleanup(receipt);
+    applyCleanup(receipt, sessionId);
+  },
+  syncCleanup,
+);
 const selection = useSelection(
   computed(() => snapshot.value?.selection ?? null),
   connect,
+  computed(() => snapshot.value?.cleanup ?? null),
+  computed(() => cleanup.opened || cleanupPending.value),
 );
 const { url, error: imageError, loading, retry, imageFailed } = preview;
 const { status } = useAppStatus();
@@ -72,7 +88,13 @@ const panels = ref<InstanceType<typeof WorkspacePanels> | null>(null);
 const inspectorTab = ref('properties');
 const resourceTab = ref('layers');
 const canOpen = computed(
-  () => desktop && !picking.value && !!snapshot.value && !snapshot.value.shuttingDown,
+  () =>
+    desktop &&
+    !cleanup.opened &&
+    !cleanupPending.value &&
+    !picking.value &&
+    !!snapshot.value &&
+    !snapshot.value.shuttingDown,
 );
 const toolsBusy = computed(
   () => selection.busy || !!pendingTool.value || !!snapshot.value?.shuttingDown || picking.value,
@@ -95,6 +117,7 @@ const menus = computed<WorkspaceMenu[]>(() => [
     items: [
       { command: 'open', label: '打开 PSD', shortcut: 'Ctrl+O', disabled: !canOpen.value },
       { command: 'reload', label: '重新载入', disabled: !active.value || toolsBusy.value },
+      { command: 'cleanup', label: '清理此文档资源…', disabled: !active.value || toolsBusy.value },
       {
         command: 'close',
         label: '关闭当前文档',
@@ -153,14 +176,29 @@ function clearCanvasSelection(contextKey: string) {
   if (tool.value === 'region' && selectionContext.value === contextKey && selection.summary?.scope)
     void selection.clear();
 }
-function act(action: WorkspaceAction) {
+async function act(action: WorkspaceAction) {
+  if (cleanup.opened || cleanupPending.value) return;
   if (action.kind === 'activate' || action.kind === 'close' || action.kind === 'reload')
     canvas.value?.cancel();
   return workspaceAct(action);
 }
-function open() {
+async function open() {
+  if (cleanup.opened || cleanupPending.value) return;
   canvas.value?.cancel();
   return openFiles();
+}
+function cleanCurrentDocument() {
+  if (!active.value || toolsBusy.value) return;
+  canvas.value?.cancel();
+  void cleanup.begin(
+    { kind: 'document', documentId: active.value.id, documentRevision: active.value.revision },
+    active.value.id,
+  );
+}
+function cleanTaskDocument(task: TaskDto) {
+  if (toolsBusy.value || task.status !== 'active') return;
+  canvas.value?.cancel();
+  void cleanup.begin({ kind: 'task', taskId: task.id }, task.scope.documentId);
 }
 const selectedBounds = computed(
   () => layers.value.find((layer) => layer.id === active.value?.selectedLayerId)?.bounds ?? null,
@@ -210,6 +248,7 @@ function runMenuCommand(command: WorkspaceMenuCommand) {
   } else if (active.value && !toolsBusy.value) {
     if (command === 'reload' || command === 'close')
       void act({ kind: command, documentId: active.value.id });
+    else if (command === 'cleanup') cleanCurrentDocument();
     else if (command === 'fit') canvas.value?.fit();
     else canvas.value?.actualSize();
   }
@@ -459,6 +498,9 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
                   从磁盘重新加载
                 </button>
                 <p class="subtle">文件改变后请主动重载；加载失败时保留已有内容。</p>
+                <button class="wide-button" :disabled="toolsBusy" @click="cleanCurrentDocument">
+                  清理此文档资源…
+                </button>
                 <div class="sidebar-divider"></div>
                 <h3>预览范围</h3>
                 <p class="preview-note">{{ active.previewNote }}</p>
@@ -523,7 +565,7 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
               aria-labelledby="resources-tab-tasks"
               tabindex="0"
             >
-              <SelectionPanel v-if="snapshot" :model="selection" />
+              <SelectionPanel v-if="snapshot" :model="selection" @cleanup="cleanTaskDocument" />
               <p v-else class="panel-empty">请在桌面应用中连接工作区后管理任务。</p>
             </div>
           </section>
@@ -539,5 +581,6 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
         </template>
       </WorkspacePanels>
     </main>
+    <CleanupDialog :model="cleanup" />
   </div>
 </template>

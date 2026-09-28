@@ -7,6 +7,7 @@ import type {
   SelectionReply,
   SelectionSummaryDto,
   TaskDto,
+  CleanupStateDto,
 } from '../../shared/api/generated';
 import { useSelection } from './useSelection';
 import SelectionPanel from './SelectionPanel.vue';
@@ -37,11 +38,12 @@ const emptyTasks = (): SelectionReply => ({
   page: { sessionId, tasks: [], nextAfter: null, total: 0, capacity: 128 },
 });
 function setup() {
+  const cleanup = shallowRef<CleanupStateDto | null>(null);
   const state = shallowRef<SelectionSummaryDto | null>(selected());
   const context = effectScope();
   const sync = vi.fn(async () => {});
-  const model = context.run(() => useSelection(state, sync))!;
-  return { state, model, sync, stop: () => context.stop() };
+  const model = context.run(() => useSelection(state, sync, cleanup))!;
+  return { state, model, sync, cleanup, stop: () => context.stop() };
 }
 function deferred<T>() {
   let resolve!: (v: T) => void;
@@ -55,6 +57,109 @@ function deferred<T>() {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(selectionRequest).mockResolvedValue(emptyTasks());
+});
+
+const firstTasks = Array.from({ length: 32 }, (_, i): TaskDto => ({ ...task, id: String(i + 1) }));
+const laterTask: TaskDto = {
+  ...task,
+  id: '33',
+  scope: { ...scope, documentId: '2', documentName: 'B.psd' },
+};
+function taskPage(tasks: TaskDto[], nextAfter: string | null): SelectionReply {
+  return { kind: 'tasks', page: { sessionId, tasks, nextAfter, total: 33, capacity: 128 } };
+}
+function taskContent(task: TaskDto): SelectionReply {
+  return {
+    kind: 'content',
+    target: { kind: 'task', taskId: task.id },
+    page: {
+      sessionId,
+      snapshotId: task.scope.snapshotId,
+      documentId: task.scope.documentId,
+      documentRevision: task.scope.documentRevision,
+      layers: [],
+      layerCount: 1,
+      textLayerCount: 0,
+      warnings: [],
+      truncated: false,
+      nextCursor: null,
+    },
+  };
+}
+it('核心失效投影覆盖后续页和当前内容；迟到内容、旧列表不能恢复任务', async () => {
+  vi.mocked(selectionRequest).mockResolvedValueOnce(taskPage(firstTasks, '32'));
+  const { model, cleanup, stop } = setup();
+  await flushPromises();
+  vi.mocked(selectionRequest).mockResolvedValueOnce(taskPage([laterTask], null));
+  await model.refreshTasks(true);
+  await model.copyTask(laterTask);
+  const pending = deferred<SelectionReply>();
+  vi.mocked(selectionRequest).mockReturnValueOnce(pending.promise);
+  model.viewScope(laterTask);
+  cleanup.value = { revision: '1', invalidatedTaskIds: ['33'] };
+  expect(model.tasks.find((task) => task.id === '33')?.status).toBe('invalidated');
+  expect(model.tasks.find((task) => task.id === '1')?.status).toBe('active');
+  expect(model.content).toBeNull();
+  expect(model.reference).toBeNull();
+  pending.resolve(taskContent(laterTask));
+  await flushPromises();
+  expect(model.content).toBeNull();
+  vi.mocked(selectionRequest)
+    .mockResolvedValueOnce(taskPage(firstTasks, '32'))
+    .mockResolvedValueOnce(taskPage([laterTask], null));
+  await model.refreshTasks();
+  expect(selectionRequest).toHaveBeenLastCalledWith(sessionId, {
+    kind: 'tasks',
+    after: '32',
+    limit: 32,
+  });
+  expect(model.tasks).toHaveLength(33);
+  expect(model.tasks[0]?.status).toBe('invalidated');
+  expect(model.nextAfter).toBeNull();
+  stop();
+});
+it('创建第 33 条任务后的刷新读到后续页真实终态，而不是补回旧 active 回执', async () => {
+  vi.mocked(selectionRequest).mockResolvedValueOnce(taskPage(firstTasks, '32'));
+  const { model, stop } = setup();
+  await flushPromises();
+  vi.mocked(selectionRequest)
+    .mockResolvedValueOnce({ kind: 'task', sessionId, task: laterTask })
+    .mockResolvedValueOnce(taskPage(firstTasks, '32'))
+    .mockResolvedValueOnce(taskPage([{ ...laterTask, status: 'invalidated' }], null));
+  await model.createTask(laterTask.name);
+  expect(model.tasks[0]?.status).toBe('invalidated');
+  expect(model.notice).toContain('已失效');
+  expect(model.reference).toBeNull();
+  stop();
+});
+it('清理回执先于工作区通知和创建响应时，未加载过的任务也不能恢复', async () => {
+  const { model, stop } = setup();
+  await flushPromises();
+  const pending = deferred<SelectionReply>();
+  vi.mocked(selectionRequest).mockReturnValueOnce(pending.promise);
+  const creating = model.createTask(task.name);
+  model.applyCleanup({ planId: '1', documentId: '1', revision: '1', invalidatedTaskIds: ['1'] });
+  pending.resolve({ kind: 'task', sessionId, task });
+  await creating;
+  expect(model.tasks[0]?.status).toBe('invalidated');
+  expect(model.reference).toBeNull();
+  const before = vi.mocked(selectionRequest).mock.calls.length;
+  model.viewScope(task);
+  await model.copyTask(task);
+  expect(selectionRequest).toHaveBeenCalledTimes(before);
+  stop();
+});
+it('清理其他文档保留当前任务内容，清理本目标才撤销', async () => {
+  const { model, stop } = setup();
+  await flushPromises();
+  vi.mocked(selectionRequest).mockResolvedValueOnce(taskContent(task));
+  model.viewScope(task);
+  await flushPromises();
+  model.applyCleanup({ planId: '1', documentId: '2', revision: '1', invalidatedTaskIds: ['33'] });
+  expect(model.content?.page?.documentId).toBe('1');
+  model.applyCleanup({ planId: '2', documentId: '1', revision: '2', invalidatedTaskIds: ['1'] });
+  expect(model.content).toBeNull();
+  stop();
 });
 
 it('刷新失效终态后清除旧任务内容和引用，显示已失效且拒绝继续读取', async () => {

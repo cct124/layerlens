@@ -2,6 +2,7 @@
 
 use std::{env, error::Error, fs, io, path::PathBuf};
 
+use layerlens_core::cleanup_contract::*;
 use layerlens_core::documents::selection::{
     ContentLayer, IntersectionKind, LayerIntersection, LayerRole, SelectionBounds, SelectionWarning,
 };
@@ -94,6 +95,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         SelectionOperation::decl(&config),
         SelectionRequest::decl(&config),
         SelectionReply::decl(&config),
+        CleanupRequest::decl(&config),
+        CleanupTarget::decl(&config),
+        CleanupOperation::decl(&config),
+        CleanupTaskDto::decl(&config),
+        CleanupPlanDto::decl(&config),
+        CleanupStateDto::decl(&config),
+        CleanupReceiptDto::decl(&config),
+        CleanupReply::decl(&config),
     ];
     let mut expected = String::from(
         "// 此文件由 Rust DTO 自动生成，请勿手工编辑。\n\

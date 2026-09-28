@@ -14,6 +14,7 @@ fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R>
             commands::read_preview,
             commands::read_layers,
             commands::selection_request,
+            commands::cleanup_request,
             commands::choose_psd_files
         ])
 }
@@ -201,6 +202,10 @@ mod tests {
             (
                 "selection_request",
                 json!({ "protocolVersion": 2, "sessionId": "00000000000000000000000000000000", "operation": { "kind": "tasks", "after": null, "limit": 32 } }),
+            ),
+            (
+                "cleanup_request",
+                json!({ "protocolVersion": 2, "sessionId": "00000000000000000000000000000000", "operation": { "kind": "confirm", "planId": "1" } }),
             ),
             (
                 "read_layers",

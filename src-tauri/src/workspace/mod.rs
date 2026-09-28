@@ -1,10 +1,14 @@
 //! 桌面工作区适配：一个有界命令邮箱、一份共享核心和轻量状态通知。
 //! 所有可能析构大对象的操作在专用线程运行；前端不持有核心对象。
 
+mod budget;
+mod cleanup;
 mod engine;
+mod operations;
 mod runtime;
 mod selection;
 
+pub(crate) use cleanup::validate_publication;
 pub(crate) use runtime::WorkspaceHost;
 
 use layerlens_core::{

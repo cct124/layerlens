@@ -1,5 +1,9 @@
 import { computed, onMounted, onScopeDispose, ref, shallowRef } from 'vue';
-import type { WorkspaceAction, WorkspaceSnapshot } from '../../shared/api/generated';
+import type {
+  CleanupReceiptDto,
+  WorkspaceAction,
+  WorkspaceSnapshot,
+} from '../../shared/api/generated';
 import { isDesktopAvailable } from '../../shared/api/desktop';
 import {
   choosePsdFiles,
@@ -16,15 +20,73 @@ export function useWorkspace() {
   const error = ref<string | null>(null);
   const connecting = ref(false);
   const picking = ref(false);
+  const cleanupBarrier = shallowRef<{
+    sessionId: string;
+    revision: string;
+    documents: string[];
+  } | null>(null);
+  const cleanupPending = computed(() => cleanupBarrier.value !== null);
   let disposed = false;
+  let cleanupSyncError: string | null = null;
   let unsubscribe: (() => void) | undefined;
   const active = computed(
-    () => snapshot.value?.documents.find((d) => d.id === snapshot.value?.activeDocumentId) ?? null,
+    () =>
+      snapshot.value?.documents.find(
+        (d) =>
+          d.id === snapshot.value?.activeDocumentId &&
+          !cleanupBarrier.value?.documents.includes(d.id),
+      ) ?? null,
   );
-  const preview = usePreview(computed(() => snapshot.value?.preview ?? null));
+  const preview = usePreview(
+    computed(() => {
+      const value = snapshot.value?.preview;
+      return value && !cleanupBarrier.value?.documents.includes(value.documentId) ? value : null;
+    }),
+  );
   function accept(next: WorkspaceSnapshot) {
-    if (!disposed && (!snapshot.value || BigInt(next.sequence) > BigInt(snapshot.value.sequence)))
+    if (!disposed && (!snapshot.value || BigInt(next.sequence) > BigInt(snapshot.value.sequence))) {
       snapshot.value = next;
+      const barrier = cleanupBarrier.value;
+      if (
+        barrier &&
+        (next.selection.sessionId !== barrier.sessionId ||
+          BigInt(next.cleanup.revision) >= BigInt(barrier.revision))
+      )
+        cleanupBarrier.value = null;
+    }
+  }
+  /** 核心回执已经生效时立即撤销目标图像／属性，绝不等待迟到的通知；不伪造新的文档列表。 */
+  function applyCleanup(receipt: CleanupReceiptDto, sessionId: string) {
+    if (
+      snapshot.value?.selection.sessionId !== sessionId ||
+      BigInt(snapshot.value.cleanup.revision) >= BigInt(receipt.revision)
+    )
+      return;
+    const before = cleanupBarrier.value;
+    cleanupBarrier.value = {
+      sessionId,
+      revision:
+        before && BigInt(before.revision) > BigInt(receipt.revision)
+          ? before.revision
+          : receipt.revision,
+      documents: [...new Set([...(before?.documents ?? []), receipt.documentId])],
+    };
+  }
+  async function syncCleanup() {
+    try {
+      accept(await workspaceAction({ kind: 'snapshot' }));
+      if (!disposed && cleanupBarrier.value)
+        throw new Error('工作区尚未确认清理后的状态，请重试同步。');
+      if (!disposed && cleanupSyncError !== null && error.value === cleanupSyncError)
+        error.value = null;
+      cleanupSyncError = null;
+    } catch (cause: unknown) {
+      if (!disposed) {
+        cleanupSyncError = `清理已生效，工作区同步失败：${workspaceMessage(cause)}`;
+        error.value = cleanupSyncError;
+      }
+      throw cause;
+    }
   }
   async function act(action: WorkspaceAction) {
     try {
@@ -92,5 +154,19 @@ export function useWorkspace() {
     unsubscribe?.();
     window.removeEventListener('focus', focus);
   });
-  return { desktop, snapshot, active, error, connecting, picking, preview, act, connect, open };
+  return {
+    desktop,
+    snapshot,
+    active,
+    error,
+    connecting,
+    picking,
+    preview,
+    act,
+    connect,
+    open,
+    applyCleanup,
+    syncCleanup,
+    cleanupPending,
+  };
 }

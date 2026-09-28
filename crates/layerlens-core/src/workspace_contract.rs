@@ -87,6 +87,7 @@ pub enum WorkspaceErrorCode {
     TaskInvalidated,
     DocumentInvalidated,
     StaleCleanupPlan,
+    CleanupPlanExpired,
     RequestConflict,
     ShuttingDown,
     Internal,
@@ -179,6 +180,7 @@ pub struct WorkspaceResources {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {
     pub selection: crate::selection_contract::SelectionSummaryDto,
+    pub cleanup: crate::cleanup_contract::CleanupStateDto,
     pub protocol_version: u32,
     pub sequence: String,
     pub documents: Vec<WorkspaceDocument>,

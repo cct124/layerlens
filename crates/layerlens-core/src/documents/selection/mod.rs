@@ -57,6 +57,14 @@ impl Default for State {
 }
 
 impl State {
+    pub(super) fn invalidated_tasks(&self) -> Vec<TaskId> {
+        self.tasks
+            .values()
+            .filter(|task| task.record.status == TaskStatus::Invalidated)
+            .map(|task| task.record.id)
+            .collect()
+    }
+
     pub(super) fn cleanup_tasks(&self, document: DocumentId) -> Vec<DesignTask> {
         self.tasks
             .values()

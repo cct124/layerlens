@@ -9,6 +9,7 @@
     "allow-read-preview",
     "allow-read-layers",
     "allow-selection-request",
+    "allow-cleanup-request",
     "allow-choose-psd-files",
     "core:event:allow-listen",
     "core:event:allow-unlisten",

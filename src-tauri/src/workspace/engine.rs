@@ -259,6 +259,14 @@ impl Engine {
             });
         }
         let mut snapshot = WorkspaceSnapshot {
+            cleanup: layerlens_core::cleanup_contract::CleanupStateDto {
+                revision: core.cleanup_revision.to_string(),
+                invalidated_task_ids: core
+                    .invalidated_tasks
+                    .iter()
+                    .map(|id| id.get().to_string())
+                    .collect(),
+            },
             selection: super::selection::summary(core.selection),
             protocol_version: IPC_PROTOCOL_VERSION,
             sequence: self.sequence.to_string(),

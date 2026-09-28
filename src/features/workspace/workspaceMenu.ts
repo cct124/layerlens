@@ -2,6 +2,7 @@
 export type WorkspaceMenuCommand =
   | 'open'
   | 'reload'
+  | 'cleanup'
   | 'close'
   | 'fit'
   | 'actual'

@@ -1,22 +1,20 @@
 //! 选区／任务适配。唯一核心句柄在有界后台使用；回执与按需内容分离。
 
 mod dto;
-mod worker;
 pub(crate) use dto::summary;
-pub(super) use worker::{SelectionClient, SelectionWorker};
 
-use super::{domain_error, error};
+use super::{budget::check_size, domain_error, error};
 use layerlens_core::{
     documents::selection::*, psd::LayerId, selection_contract::*, workspace_contract::*,
 };
 
-const RESPONSE_BYTES: usize = 256 * 1024;
+pub(super) const RESPONSE_BYTES: usize = 256 * 1024;
 // 变更回执没有不定长集合：两项字符串各 <=256 UTF-8 字节，即使全部 JSON 转义，
 // 加上固定字段、u64/u32 的最大位数也小于 8 KiB。新增字段须更新最坏值回归。
 const RECEIPT_BYTES: usize = 8 * 1024;
 const REQUEST_BYTES: usize = 64 * 1024;
 
-fn selection_error(value: SelectionError) -> WorkspaceError {
+pub(super) fn selection_error(value: SelectionError) -> WorkspaceError {
     let code = match &value {
         SelectionError::Document(value) => return domain_error(value),
         SelectionError::InvalidInput(_) => WorkspaceErrorCode::InvalidInput,
@@ -33,32 +31,7 @@ fn selection_error(value: SelectionError) -> WorkspaceError {
     error(code, value.to_string())
 }
 
-fn check_size(value: &impl serde::Serialize, limit: usize) -> Result<(), WorkspaceError> {
-    struct Counter {
-        written: usize,
-        limit: usize,
-    }
-    impl std::io::Write for Counter {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            if bytes.len() > self.limit.saturating_sub(self.written) {
-                return Err(std::io::Error::other("响应或请求超过字节预算"));
-            }
-            self.written += bytes.len();
-            Ok(bytes.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-    serde_json::to_writer(Counter { written: 0, limit }, value).map_err(|_| {
-        error(
-            WorkspaceErrorCode::ResourceLimit,
-            "选区请求或完整响应超过预算。",
-        )
-    })
-}
-
-fn validate_request(request: &SelectionRequest) -> Result<(), WorkspaceError> {
+pub(super) fn validate_request(request: &SelectionRequest) -> Result<(), WorkspaceError> {
     super::check_version(request.protocol_version)?;
     check_size(request, REQUEST_BYTES)?;
     if let SelectionOperation::Layers { layer_ids, .. } = &request.operation
@@ -72,7 +45,7 @@ fn validate_request(request: &SelectionRequest) -> Result<(), WorkspaceError> {
     Ok(())
 }
 
-fn execute(
+pub(super) fn execute(
     handle: &SelectionHandle,
     request: SelectionRequest,
     response_bytes: usize,

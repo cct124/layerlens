@@ -92,6 +92,7 @@ impl Pending {
 
 #[derive(Default)]
 pub(super) struct State {
+    pub cleanup_revision: u64,
     pub documents: Vec<Entry>,
     /// 仅登记已发布修订的弱引用，关闭或重载后仍可显式清理外部持有的旧修订。
     pub revisions: BTreeMap<(DocumentId, super::RevisionId), Weak<Revision>>,

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { taskStatusLabel, type useSelection } from './useSelection';
 import type { TaskDto } from '../../shared/api/generated';
 const props = defineProps<{ model: ReturnType<typeof useSelection> }>();
+const emit = defineEmits<{ cleanup: [task: TaskDto] }>();
 const name = ref('设计任务');
 const showReference = ref(false);
 function copyTask(task: TaskDto) {
@@ -87,9 +88,14 @@ function copyTask(task: TaskDto) {
         <button :disabled="model.busy || task.status !== 'active'" @click="model.viewScope(task)">
           查看任务内容
         </button>
-        <button :disabled="task.status !== 'active'" @click="copyTask(task)">复制引用</button>
+        <button :disabled="model.busy || task.status !== 'active'" @click="copyTask(task)">
+          复制引用
+        </button>
         <button :disabled="model.busy || task.status !== 'active'" @click="model.releaseTask(task)">
           释放任务
+        </button>
+        <button :disabled="model.busy || task.status !== 'active'" @click="emit('cleanup', task)">
+          清理所属文档资源…
         </button>
       </li>
     </ul>

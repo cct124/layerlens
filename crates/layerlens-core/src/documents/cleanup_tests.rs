@@ -62,6 +62,23 @@ fn preflight_is_read_only_and_does_not_pin_source_resources() {
 }
 
 #[test]
+fn cleanup_revision_exhaustion_rejects_without_partial_invalidation() {
+    let service = service(Default::default());
+    let id = open(&service, "viewer-scale.psd");
+    let lease = service.lease(id).unwrap();
+    let handle = service.cleanup_handle();
+    let plan = handle.prepare_cleanup(id).unwrap();
+    lock(&service.shared.state).cleanup_revision = u64::MAX;
+    assert!(matches!(
+        handle.commit_cleanup(&plan),
+        Err(DocumentError::IdExhausted)
+    ));
+    assert!(lease.ensure_valid().is_ok());
+    assert_eq!(service.snapshot().documents[0].id, id);
+    assert!(service.snapshot().invalidated_tasks.is_empty());
+}
+
+#[test]
 fn cleanup_invalidates_reads_and_tasks_but_keeps_terminal_records_and_charges() {
     let service = service(Default::default());
     let id = open(&service, "viewer-scale.psd");

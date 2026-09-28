@@ -11,7 +11,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Weak,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicU64, Ordering},
     },
 };
 
@@ -19,6 +19,8 @@ use std::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleanupImpact {
     pub document_id: DocumentId,
+    /// 最多 256 UTF-8 字节的显示标签，不是定位依据。
+    pub document_name: String,
     pub open_revision: Option<RevisionId>,
     pub selection: Option<SnapshotId>,
     pub live_revisions: Vec<RevisionId>,
@@ -36,7 +38,7 @@ pub struct CleanupPlan {
     owner: Weak<Shared>,
     impact: CleanupImpact,
     paths: Vec<PathBuf>,
-    applied: AtomicBool,
+    applied_revision: AtomicU64,
 }
 impl CleanupPlan {
     /// 供调用方展示的只读影响摘要。执行前始终重新核对，不以本摘要替代权限检查。
@@ -50,6 +52,37 @@ impl CleanupPlan {
 pub struct CleanupReceipt {
     pub document_id: DocumentId,
     pub already_applied: bool,
+    pub revision: u64,
+}
+
+/// 同一核心的清理入口；不拥有后台线程，不另建文档状态。耗时方法须由有界后台调用。
+#[derive(Clone)]
+pub struct CleanupHandle {
+    shared: Arc<Shared>,
+}
+
+impl CleanupHandle {
+    /// 桌面发布图像／属性前检查目标仍为已打开修订；不创建强引用，也不影响其他文档读取。
+    /// 检查后发生的关闭或清理仍须由客户端修订／回执屏障处理。
+    ///
+    /// # Errors
+    /// 服务退出、标签关闭、修订变化或清理后拒绝发布。固定任务读取不使用此入口。
+    pub fn validate_open_revision(
+        &self,
+        document: DocumentId,
+        revision: RevisionId,
+    ) -> Result<(), DocumentError> {
+        let state = lock(&self.shared.state);
+        state.ensure_running()?;
+        if !state
+            .documents
+            .iter()
+            .any(|entry| entry.revision.document_id == document && entry.revision.id == revision)
+        {
+            return Err(DocumentError::StaleRevision);
+        }
+        Ok(())
+    }
 }
 
 // 先存入调用方在状态锁外声明的容器，避免 Weak 升级后最后一个强引用在锁内析构。
@@ -123,9 +156,20 @@ fn impact(
     }
     paths.sort();
     paths.dedup();
+    let name = paths
+        .first()
+        .and_then(|path| path.file_name())
+        .unwrap_or_default()
+        .to_string_lossy();
+    let mut end = name.len().min(256);
+    while !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    let document_name = name[..end].to_owned();
     Ok((
         CleanupImpact {
             document_id: document,
+            document_name,
             open_revision: entry.map(|entry| entry.revision.id),
             selection: entry
                 .and_then(|entry| entry.selection.as_ref().map(|selection| selection.id())),
@@ -140,6 +184,25 @@ fn impact(
 }
 
 impl DocumentService {
+    /// 创建共享同一状态的清理句柄；服务停止后所有句柄拒绝新的操作。
+    pub fn cleanup_handle(&self) -> CleanupHandle {
+        CleanupHandle {
+            shared: self.shared.clone(),
+        }
+    }
+
+    /// 清理预检，契约同 [`CleanupHandle::prepare_cleanup`]。
+    pub fn prepare_cleanup(&self, document: DocumentId) -> Result<CleanupPlan, DocumentError> {
+        self.cleanup_handle().prepare_cleanup(document)
+    }
+
+    /// 原子确认，契约同 [`CleanupHandle::commit_cleanup`]。
+    pub fn commit_cleanup(&self, plan: &CleanupPlan) -> Result<CleanupReceipt, DocumentError> {
+        self.cleanup_handle().commit_cleanup(plan)
+    }
+}
+
+impl CleanupHandle {
     /// 只读列出同文档 ID 的标签、所有存活修订、活跃任务及已知在途工作。
     /// 包括已关闭标签而仍被任务保护的文档；不会读取源路径、创建任务或固定资源。
     /// 临时升级的弱引用可能成为最后一个引用，预检同样应在有界后台执行。
@@ -156,7 +219,7 @@ impl DocumentService {
             owner: Arc::downgrade(&self.shared),
             impact,
             paths,
-            applied: AtomicBool::new(false),
+            applied_revision: AtomicU64::new(0),
         })
     }
 
@@ -176,10 +239,12 @@ impl DocumentService {
         let (removed, snapshots, cleanup) = {
             let mut state = lock(&self.shared.state);
             state.ensure_running()?;
-            if plan.applied.load(Ordering::Acquire) {
+            let applied = plan.applied_revision.load(Ordering::Acquire);
+            if applied != 0 {
                 return Ok(CleanupReceipt {
                     document_id: document,
                     already_applied: true,
+                    revision: applied,
                 });
             }
             collect_revisions(&state, document, &mut leases);
@@ -189,6 +254,10 @@ impl DocumentService {
                 return Err(DocumentError::StaleCleanupPlan);
             }
             // 选择版本耗尽也必须发生在任何失效或取消之前。后续动作均不会失败。
+            let revision = state
+                .cleanup_revision
+                .checked_add(1)
+                .ok_or(DocumentError::IdExhausted)?;
             let removed = state.remove_document(document)?;
             for revision in &leases {
                 revision.invalidated.store(true, Ordering::Release);
@@ -207,7 +276,8 @@ impl DocumentService {
             let cleanup = state.previews.invalidate(Some(document));
             let snapshots = state.selections.invalidate_document(document);
             state.revisions.retain(|_, weak| weak.strong_count() > 0);
-            plan.applied.store(true, Ordering::Release);
+            state.cleanup_revision = revision;
+            plan.applied_revision.store(revision, Ordering::Release);
             (removed, snapshots, cleanup)
         };
         drop(removed);
@@ -217,6 +287,7 @@ impl DocumentService {
         Ok(CleanupReceipt {
             document_id: document,
             already_applied: false,
+            revision: plan.applied_revision.load(Ordering::Acquire),
         })
     }
 }

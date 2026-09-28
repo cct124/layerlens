@@ -9,6 +9,8 @@ import type {
   SelectionTarget,
   TaskDto,
   TaskStatusDto,
+  CleanupStateDto,
+  CleanupReceiptDto,
 } from '../../shared/api/generated';
 import { selectionRequest } from '../../shared/api/selection';
 import { workspaceMessage } from '../../shared/api/workspace';
@@ -30,6 +32,8 @@ interface ContentView {
 export function useSelection(
   summary: Readonly<Ref<SelectionSummaryDto | null>>,
   sync: () => Promise<void>,
+  cleanupState: Readonly<Ref<CleanupStateDto | null>> = ref(null),
+  blocked: Readonly<Ref<boolean>> = ref(false),
 ) {
   const running = ref(false),
     error = ref<string | null>(null),
@@ -44,6 +48,7 @@ export function useSelection(
   const busy = computed(
     () =>
       running.value ||
+      blocked.value ||
       (acknowledgement.value?.sessionId === summary.value?.sessionId &&
         BigInt(summary.value?.selectionRevision ?? '0') <
           BigInt(acknowledgement.value?.revision ?? '0')),
@@ -51,6 +56,7 @@ export function useSelection(
   let disposed = false,
     refreshWanted = false,
     contentGeneration = 0;
+  const invalidatedIds = new Set<string>();
   let pendingCreate: {
     sessionId: string;
     snapshotId: string;
@@ -75,6 +81,15 @@ export function useSelection(
   }
   const live = (session: string) => !disposed && summary.value?.sessionId === session;
   function upsert(task: TaskDto) {
+    const previous = tasks.value.find((item) => item.id === task.id);
+    // 核心终态不回退；旧列表／创建回执不得绕过清理投影恢复任务。
+    const status =
+      previous && previous.status !== 'active'
+        ? previous.status
+        : invalidatedIds.has(task.id)
+          ? 'invalidated'
+          : task.status;
+    task = { ...task, status };
     tasks.value = [...tasks.value.filter((t) => t.id !== task.id), task].sort((a, b) =>
       BigInt(a.id) > BigInt(b.id) ? -1 : 1,
     );
@@ -90,17 +105,22 @@ export function useSelection(
     }
   }
   async function loadTasks(sessionId: string, more: boolean) {
-    const result = await selectionRequest(sessionId, {
-      kind: 'tasks',
-      after: more ? nextAfter.value : null,
-      limit: 32,
-    });
-    if (!live(sessionId) || result.kind !== 'tasks') return;
-    if (!more) tasks.value = [];
-    for (const task of result.page.tasks) upsert(task);
-    total.value = result.page.total;
-    capacity.value = result.page.capacity;
-    nextAfter.value = result.page.nextAfter;
+    const through = tasks.value.reduce(
+      (max, task) => (BigInt(task.id) > max ? BigInt(task.id) : max),
+      0n,
+    );
+    let after = more ? nextAfter.value : null;
+    // 刷新覆盖此前已加载范围（最多 128 条／4 页），不只刷新第一页。
+    for (let page = 0; page < 4; page++) {
+      const result = await selectionRequest(sessionId, { kind: 'tasks', after, limit: 32 });
+      if (!live(sessionId) || result.kind !== 'tasks') return;
+      for (const task of result.page.tasks) upsert(task);
+      total.value = result.page.total;
+      capacity.value = result.page.capacity;
+      nextAfter.value = result.page.nextAfter;
+      if (more || !result.page.nextAfter || BigInt(result.page.nextAfter) >= through) return;
+      after = result.page.nextAfter;
+    }
   }
   async function refreshTasks(more = false) {
     if (running.value) {
@@ -190,9 +210,10 @@ export function useSelection(
       if (!live(intent.sessionId) || result.kind !== 'task') return;
       pendingCreate = null;
       upsert(result.task);
-      notice.value = `任务 #${result.task.id} 已确认（${taskStatusLabel[result.task.status]}）。`;
+      const confirmed = tasks.value.find((task) => task.id === result.task.id) ?? result.task;
+      notice.value = `任务 #${result.task.id} 已确认（${taskStatusLabel[confirmed.status]}）。`;
       reference.value =
-        result.task.status === 'active'
+        confirmed.status === 'active'
           ? JSON.stringify({ sessionId: intent.sessionId, taskId: result.task.id })
           : null;
       try {
@@ -221,13 +242,14 @@ export function useSelection(
   }
   async function copyTask(task: TaskDto) {
     const sessionId = summary.value?.sessionId;
-    if (!sessionId || task.status !== 'active') return;
+    if (busy.value || !sessionId || task.status !== 'active' || invalidatedIds.has(task.id)) return;
     const value = JSON.stringify({ sessionId, taskId: task.id });
     reference.value = value;
     try {
       if (!navigator.clipboard) throw new Error('当前环境不支持剪贴板');
       await navigator.clipboard.writeText(value);
-      if (live(sessionId)) notice.value = '已复制当前会话的任务引用。';
+      if (live(sessionId) && !invalidatedIds.has(task.id))
+        notice.value = '已复制当前会话的任务引用。';
     } catch (cause: unknown) {
       if (live(sessionId)) error.value = `复制失败，请从引用框手动复制：${workspaceMessage(cause)}`;
     }
@@ -235,7 +257,7 @@ export function useSelection(
   async function readContent(cursor: SelectionCursorDto | null = null) {
     const view = content.value,
       generation = contentGeneration;
-    if (!view || running.value) return;
+    if (!view || running.value || blocked.value) return;
     await run(
       async () => {
         const result = await selectionRequest(view.sessionId, {
@@ -258,7 +280,7 @@ export function useSelection(
     );
   }
   function viewScope(task?: TaskDto) {
-    if (busy.value || (task && task.status !== 'active')) return;
+    if (busy.value || (task && (task.status !== 'active' || invalidatedIds.has(task.id)))) return;
     const current = summary.value,
       scope = task?.scope ?? current?.scope;
     if (!current || !scope) return;
@@ -276,6 +298,7 @@ export function useSelection(
   watch(
     () => summary.value?.sessionId,
     () => {
+      invalidatedIds.clear();
       tasks.value = [];
       total.value = 0;
       nextAfter.value = null;
@@ -289,7 +312,37 @@ export function useSelection(
         void refreshTasks();
       }
     },
-    { immediate: true },
+    { immediate: true, flush: 'sync' },
+  );
+  function applyInvalidated(ids: string[]) {
+    for (const id of ids) invalidatedIds.add(id);
+    for (const task of tasks.value)
+      if (invalidatedIds.has(task.id)) upsert({ ...task, status: 'invalidated' });
+    const target = content.value?.target;
+    if (target?.kind === 'task' && invalidatedIds.has(target.taskId)) {
+      contentGeneration++;
+      content.value = null;
+    }
+    for (const id of invalidatedIds) {
+      if (reference.value === JSON.stringify({ sessionId: summary.value?.sessionId, taskId: id }))
+        reference.value = null;
+    }
+  }
+  /** 来自核心确认回执的局部投影；不等待分页刷新，也不自行推算任务影响。 */
+  function applyCleanup(receipt: CleanupReceiptDto) {
+    applyInvalidated(receipt.invalidatedTaskIds);
+    if (content.value?.scope.documentId === receipt.documentId) {
+      contentGeneration++;
+      content.value = null;
+    }
+    notice.value = '文档资源已清理，关联任务已失效；其他文档和普通释放记录不受影响。';
+  }
+  watch(
+    () => [summary.value?.sessionId, cleanupState.value] as const,
+    () => {
+      applyInvalidated(cleanupState.value?.invalidatedTaskIds ?? []);
+    },
+    { immediate: true, flush: 'sync' },
   );
   watch(
     () => summary.value?.scope?.snapshotId,
@@ -326,6 +379,7 @@ export function useSelection(
     viewScope,
     readContent,
     refreshTasks,
+    applyCleanup,
     sync,
   });
 }

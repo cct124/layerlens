@@ -26,7 +26,16 @@ pub(crate) async fn selection_request(
     request: layerlens_core::selection_contract::SelectionRequest,
     host: tauri::State<'_, WorkspaceHost>,
 ) -> Result<layerlens_core::selection_contract::SelectionReply, WorkspaceError> {
-    host.selection.request(request).await
+    host.operations.request(request).await
+}
+
+/// 预检和确认均进入同一有界操作后台；客户端不能传入自造的清理影响集合。
+#[tauri::command]
+pub(crate) async fn cleanup_request(
+    request: layerlens_core::cleanup_contract::CleanupRequest,
+    host: tauri::State<'_, WorkspaceHost>,
+) -> Result<layerlens_core::cleanup_contract::CleanupReply, WorkspaceError> {
+    host.operations.cleanup(request).await
 }
 
 impl SingleOperation {
@@ -59,14 +68,17 @@ pub(crate) async fn read_preview(
 ) -> Result<tauri::ipc::Response, WorkspaceError> {
     check_version(request.protocol_version)?;
     let guard = SingleOperation::acquire(&host.image_reading)?;
+    let cleanup = host.cleanup_handle.clone();
     let image = host.image(request).await?;
     // 只复制已完成 PNG；二进制 IPC 不使用 JSON/base64，最多一个在途复制。
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
-        tauri::ipc::Response::new(image.png().to_vec())
+        let response = tauri::ipc::Response::new(image.png().to_vec());
+        crate::workspace::validate_publication(&cleanup, image.document_id(), image.revision_id())?;
+        Ok(response)
     })
     .await
-    .map_err(|e| error(WorkspaceErrorCode::Internal, format!("读取预览失败：{e}")))
+    .map_err(|e| error(WorkspaceErrorCode::Internal, format!("读取预览失败：{e}")))?
 }
 
 /// 固定修订后在阻塞池组装有界详情；一次只允许一个查询，避免复制大文字属性时无限并发。
@@ -77,6 +89,7 @@ pub(crate) async fn read_layers(
 ) -> Result<LayerResponse, WorkspaceError> {
     check_version(request.protocol_version)?;
     let guard = SingleOperation::acquire(&host.inspecting)?;
+    let cleanup = host.cleanup_handle.clone();
     let lease = host.inspection(request.clone()).await?;
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
@@ -94,6 +107,7 @@ pub(crate) async fn read_layers(
                 }),
         }
         .map_err(|e| crate::workspace::domain_error(&e))?;
+        crate::workspace::validate_publication(&cleanup, lease.document_id(), lease.revision_id())?;
         Ok(LayerResponse {
             document_id: lease.document_id().get().to_string(),
             revision: lease.revision_id().get().to_string(),

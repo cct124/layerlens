@@ -41,7 +41,7 @@ export type WorkspaceRequest = { protocolVersion: number, action: WorkspaceActio
 
 export type PreviewRequest = { protocolVersion: number, documentId: string, revision: string, };
 
-export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "STALE_REVISION" | "FOREIGN_SESSION" | "STALE_SELECTION" | "INACTIVE_DOCUMENT" | "SNAPSHOT_EXPIRED" | "EMPTY_TARGETS" | "TASK_RELEASED" | "TASK_INVALIDATED" | "DOCUMENT_INVALIDATED" | "STALE_CLEANUP_PLAN" | "REQUEST_CONFLICT" | "SHUTTING_DOWN" | "INTERNAL";
+export type WorkspaceErrorCode = "PROTOCOL_MISMATCH" | "INVALID_INPUT" | "NOT_FOUND" | "BUSY" | "RESOURCE_LIMIT" | "OPEN_FAILED" | "PREVIEW_FAILED" | "STALE_PREVIEW" | "STALE_REVISION" | "FOREIGN_SESSION" | "STALE_SELECTION" | "INACTIVE_DOCUMENT" | "SNAPSHOT_EXPIRED" | "EMPTY_TARGETS" | "TASK_RELEASED" | "TASK_INVALIDATED" | "DOCUMENT_INVALIDATED" | "STALE_CLEANUP_PLAN" | "CLEANUP_PLAN_EXPIRED" | "REQUEST_CONFLICT" | "SHUTTING_DOWN" | "INTERNAL";
 
 export type WorkspaceError = { code: WorkspaceErrorCode, message: string, };
 
@@ -59,7 +59,7 @@ export type WorkspaceNotice = { id: string, message: string, };
 
 export type WorkspaceResources = { sourceBytes: string, decodedBytes: string, outputBytes: string, cacheBytes: string, };
 
-export type WorkspaceSnapshot = { selection: SelectionSummaryDto, protocolVersion: number, sequence: string, documents: Array<WorkspaceDocument>, activeDocumentId: string | null, jobs: Array<WorkspaceJob>, preview: WorkspacePreview | null, notices: Array<WorkspaceNotice>, resources: WorkspaceResources, shuttingDown: boolean, };
+export type WorkspaceSnapshot = { selection: SelectionSummaryDto, cleanup: CleanupStateDto, protocolVersion: number, sequence: string, documents: Array<WorkspaceDocument>, activeDocumentId: string | null, jobs: Array<WorkspaceJob>, preview: WorkspacePreview | null, notices: Array<WorkspaceNotice>, resources: WorkspaceResources, shuttingDown: boolean, };
 
 export type LayerId = number;
 
@@ -152,3 +152,19 @@ export type SelectionOperation = { "kind": "layers", documentId: string, documen
 export type SelectionRequest = { protocolVersion: number, sessionId: string, operation: SelectionOperation, };
 
 export type SelectionReply = { "kind": "committed", sessionId: string, selectionRevision: string, snapshotId: string | null, } | { "kind": "task", sessionId: string, task: TaskDto, } | { "kind": "tasks", page: TaskPageDto, } | { "kind": "content", target: SelectionTarget, page: SelectionContentDto, };
+
+export type CleanupRequest = { protocolVersion: number, sessionId: string, operation: CleanupOperation, };
+
+export type CleanupTarget = { "kind": "document", documentId: string, documentRevision: string, } | { "kind": "task", taskId: string, };
+
+export type CleanupOperation = { "kind": "prepare", target: CleanupTarget, } | { "kind": "confirm", planId: string, } | { "kind": "cancel", planId: string, };
+
+export type CleanupTaskDto = { id: string, name: string, documentRevision: string, };
+
+export type CleanupPlanDto = { planId: string, documentId: string, documentName: string, openRevision: string | null, selectionId: string | null, liveRevisions: Array<string>, tasks: Array<CleanupTaskDto>, loadJobs: Array<string>, unresolvedLoadJobs: Array<string>, previewJobs: Array<string>, expiresInSeconds: number, };
+
+export type CleanupStateDto = { revision: string, invalidatedTaskIds: Array<string>, };
+
+export type CleanupReceiptDto = { planId: string, documentId: string, revision: string, invalidatedTaskIds: Array<string>, };
+
+export type CleanupReply = { "kind": "prepared", sessionId: string, plan: CleanupPlanDto, } | { "kind": "committed", sessionId: string, receipt: CleanupReceiptDto, } | { "kind": "cancelled", sessionId: string, planId: string, };

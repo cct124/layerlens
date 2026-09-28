@@ -3,6 +3,7 @@
 //! 提供应用信息、边界契约、PSD 只读解析和文档生命周期服务。
 
 mod app_info;
+pub mod cleanup_contract;
 pub mod documents;
 mod error;
 pub mod psd;

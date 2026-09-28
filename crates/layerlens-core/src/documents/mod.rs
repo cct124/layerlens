@@ -14,7 +14,7 @@ pub mod selection;
 mod state;
 mod worker;
 
-pub use cleanup::{CleanupImpact, CleanupPlan, CleanupReceipt};
+pub use cleanup::{CleanupHandle, CleanupImpact, CleanupPlan, CleanupReceipt};
 pub use error::DocumentError;
 pub use inspection::{LayerDetails, LayerPage, LayerSummary, TextSlice};
 pub use model::{
@@ -248,6 +248,8 @@ impl DocumentService {
         let state = lock(&self.shared.state);
         ServiceSnapshot {
             selection: state.selection_summary(),
+            cleanup_revision: state.cleanup_revision,
+            invalidated_tasks: state.selections.invalidated_tasks(),
             documents: state
                 .documents
                 .iter()

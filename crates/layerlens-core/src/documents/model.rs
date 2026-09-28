@@ -125,6 +125,9 @@ pub struct DocumentSummary {
 #[derive(Debug, Clone)]
 pub struct ServiceSnapshot {
     pub selection: super::selection::SelectionSummary,
+    /// 主动清理的单调代次，与选择版本独立；终态任务集合受任务记录额度约束。
+    pub cleanup_revision: u64,
+    pub invalidated_tasks: Vec<super::selection::TaskId>,
     pub documents: Vec<DocumentSummary>,
     pub active_document: Option<DocumentId>,
     pub pending_jobs: Vec<(OpenJobId, JobStatus)>,
