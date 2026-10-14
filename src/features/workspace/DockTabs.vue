@@ -30,6 +30,7 @@ function navigate(event: KeyboardEvent, index: number) {
       v-for="(tab, index) in tabs"
       :id="`${id}-tab-${tab.id}`"
       :key="tab.id"
+      :data-dev-target="`panel:${tab.id}`"
       role="tab"
       :aria-selected="modelValue === tab.id"
       :aria-controls="`${id}-panel-${tab.id}`"

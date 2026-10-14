@@ -145,6 +145,7 @@ watch(
           ><span v-else class="tree-leaf"></span>
           <input
             type="checkbox"
+            :data-dev-target="`layer:${row.layer.id}:check`"
             :aria-label="`加入任务范围：${row.layer.name || '（空名称）'}`"
             :checked="rangeIds.includes(row.layer.id)"
             :disabled="rangeBusy"
@@ -152,6 +153,7 @@ watch(
           />
           <button
             class="tree-name"
+            :data-dev-target="`layer:${row.layer.id}:select`"
             :title="`${row.layer.name}${row.layer.nameTruncated ? '（名称已截断）' : ''} · ${layerLabels[row.layer.kind]}${row.layer.effectiveVisible ? '' : ' · 有效隐藏'}`"
             @click="emit('select', row.layer.id)"
           >

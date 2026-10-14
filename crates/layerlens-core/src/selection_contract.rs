@@ -5,6 +5,7 @@ use crate::documents::selection::{ContentLayer, SelectionBounds, SelectionWarnin
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelectionRequest {
@@ -13,6 +14,7 @@ pub struct SelectionRequest {
     pub operation: SelectionOperation,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(
     tag = "kind",
@@ -57,6 +59,7 @@ pub enum SelectionOperation {
     },
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(
     tag = "kind",
@@ -69,6 +72,7 @@ pub enum SelectionTarget {
     Task { task_id: String },
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelectionCursorDto {
@@ -79,6 +83,7 @@ pub struct SelectionCursorDto {
 }
 
 /// 任务保留固定文档标签与计数；标签可能截短，不是唯一标识。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ScopeDto {
@@ -91,6 +96,7 @@ pub struct ScopeDto {
     pub text_layer_count: u32,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionSummaryDto {
@@ -103,6 +109,7 @@ pub struct SelectionSummaryDto {
     pub region: Option<SelectionBounds>,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum TaskStatusDto {
@@ -111,6 +118,7 @@ pub enum TaskStatusDto {
     Invalidated,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDto {
@@ -120,6 +128,7 @@ pub struct TaskDto {
     pub scope: ScopeDto,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskPageDto {
@@ -130,6 +139,7 @@ pub struct TaskPageDto {
     pub capacity: u32,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionContentDto {
@@ -146,6 +156,7 @@ pub struct SelectionContentDto {
 }
 
 /// 变更返回可预留的小型回执；最新选择另由工作区原子摘要通知，不拼接两次采样。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(
     tag = "kind",

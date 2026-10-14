@@ -21,6 +21,8 @@ fn main() {
             "selection_request",
             "cleanup_request",
             "choose_psd_files",
+            #[cfg(feature = "dev-mcp")]
+            "dev_view_report",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         eprintln!("Tauri 构建配置失败：{error:#}");

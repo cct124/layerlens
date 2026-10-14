@@ -6,6 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 description = "LayerLens Tauri 桌面适配层"
 
+[features]
+dev-mcp = [
+  "dep:rmcp", "dep:axum", "dep:schemars", "dep:tokio-util",
+  "dep:uuid", "dep:base64", "dep:reqwest", "dep:ts-rs", "layerlens-core/schema",
+  "tokio/net", "tokio/time", "tokio/macros", "tokio/io-util",
+  "rmcp/client", "rmcp/transport-streamable-http-client-reqwest",
+]
+
 [lib]
 name = "layerlens_desktop"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -24,9 +32,22 @@ tauri-plugin-dialog.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+rmcp = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true, features = ["rt"] }
+uuid = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+ts-rs = { workspace = true, optional = true }
+
+[[example]]
+name = "export_dev_bindings"
+required-features = ["dev-mcp"]
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
+png.workspace = true
 
 [lints]
 workspace = true

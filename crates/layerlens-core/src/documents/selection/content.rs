@@ -12,6 +12,7 @@ use crate::documents::{
 };
 
 /// 原始详情和选区交集分开保存；同一文字图层可跨页重复，计数始终是唯一图层数。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentLayer {

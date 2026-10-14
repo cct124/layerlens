@@ -2,7 +2,7 @@
 use super::error;
 use layerlens_core::workspace_contract::{WorkspaceError, WorkspaceErrorCode};
 
-pub(super) fn check_size(
+pub(crate) fn check_size(
     value: &impl serde::Serialize,
     limit: usize,
 ) -> Result<(), WorkspaceError> {

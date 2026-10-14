@@ -23,6 +23,11 @@ use tokio::sync::oneshot;
 
 type Reply = oneshot::Sender<Result<SelectionReply, WorkspaceError>>;
 enum Operation {
+    #[cfg(feature = "dev-mcp")]
+    Context(
+        Option<SelectionSummaryDto>,
+        oneshot::Sender<Result<super::SelectionContext, WorkspaceError>>,
+    ),
     Selection(SelectionRequest, Reply),
     Cleanup(
         CleanupRequest,
@@ -58,6 +63,11 @@ impl OperationsWorker {
                                 break;
                             }
                             match operation {
+                                #[cfg(feature = "dev-mcp")]
+                                Operation::Context(fixed, reply) if !reply.is_closed() => {
+                                    let _ =
+                                        reply.send(super::selection::read_context(&handle, fixed));
+                                }
                                 Operation::Selection(request, reply) if !reply.is_closed() => {
                                     let _ = reply.send(execute(&handle, request, RESPONSE_BYTES));
                                 }
@@ -120,6 +130,17 @@ impl Drop for OperationsWorker {
     }
 }
 impl OperationsClient {
+    #[cfg(feature = "dev-mcp")]
+    pub(crate) async fn context(
+        &self,
+        fixed: Option<SelectionSummaryDto>,
+    ) -> Result<super::SelectionContext, WorkspaceError> {
+        let (sender, receiver) = oneshot::channel();
+        self.send(Operation::Context(fixed, sender))?;
+        receiver
+            .await
+            .map_err(|_| error(WorkspaceErrorCode::ShuttingDown, "选区观测后台已停止。"))?
+    }
     pub(crate) async fn cleanup(
         &self,
         request: CleanupRequest,

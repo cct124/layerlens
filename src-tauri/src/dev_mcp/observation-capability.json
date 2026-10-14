@@ -1,0 +1,6 @@
+{
+  "identifier": "dev-observation",
+  "description": "仅在显式开发测试实例内动态授予主窗口上报只读观测的权限。",
+  "windows": ["main"],
+  "permissions": ["allow-dev-view-report"]
+}

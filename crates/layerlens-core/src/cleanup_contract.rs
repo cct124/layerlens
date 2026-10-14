@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CleanupRequest {
@@ -11,6 +12,7 @@ pub struct CleanupRequest {
     pub operation: CleanupOperation,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(
     tag = "kind",
@@ -28,6 +30,7 @@ pub enum CleanupTarget {
     },
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(
     tag = "kind",
@@ -41,6 +44,7 @@ pub enum CleanupOperation {
     Cancel { plan_id: String },
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupTaskDto {
@@ -49,6 +53,7 @@ pub struct CleanupTaskDto {
     pub document_revision: String,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupPlanDto {
@@ -66,6 +71,7 @@ pub struct CleanupPlanDto {
 }
 
 /// 清理代次和全部失效任务 ID 与文档列表同锁采样；集合受核心任务记录额度约束。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupStateDto {
@@ -73,6 +79,7 @@ pub struct CleanupStateDto {
     pub invalidated_task_ids: Vec<String>,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupReceiptDto {
@@ -82,6 +89,7 @@ pub struct CleanupReceiptDto {
     pub invalidated_task_ids: Vec<String>,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(
     tag = "kind",

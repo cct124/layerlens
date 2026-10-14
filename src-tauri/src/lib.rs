@@ -1,22 +1,37 @@
 //! Tauri 桌面入口，仅装配窗口、权限和共享核心的命令适配。
 
 mod commands;
+#[cfg(feature = "dev-mcp")]
+mod dev_mcp;
 mod workspace;
 
+use std::sync::Arc;
 use tauri::{Emitter, Manager};
 
 fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+    #[cfg(feature = "dev-mcp")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        commands::get_app_info,
+        commands::workspace_action,
+        commands::read_preview,
+        commands::read_layers,
+        commands::selection_request,
+        commands::cleanup_request,
+        commands::choose_psd_files,
+        dev_mcp::ui::dev_view_report
+    ]);
+    #[cfg(not(feature = "dev-mcp"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        commands::get_app_info,
+        commands::workspace_action,
+        commands::read_preview,
+        commands::read_layers,
+        commands::selection_request,
+        commands::cleanup_request,
+        commands::choose_psd_files
+    ]);
     builder
-        .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![
-            commands::get_app_info,
-            commands::workspace_action,
-            commands::read_preview,
-            commands::read_layers,
-            commands::selection_request,
-            commands::cleanup_request,
-            commands::choose_psd_files
-        ])
 }
 
 /// 启动桌面事件循环，应用业务能力由共享核心提供。
@@ -25,10 +40,27 @@ fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R>
 ///
 /// 窗口或运行时初始化失败时返回 Tauri 错误，由入口统一处理。
 pub fn run() -> tauri::Result<()> {
+    #[cfg(not(feature = "dev-mcp"))]
+    if std::env::args_os().any(|arg| arg.to_string_lossy().starts_with("--dev-mcp")) {
+        return Err(std::io::Error::other("当前构建未启用 dev-mcp 特性。").into());
+    }
+    let context = tauri::generate_context!();
+    #[cfg(feature = "dev-mcp")]
+    let mut context = context;
+    #[cfg(feature = "dev-mcp")]
+    let development = dev_mcp::Instance::from_args()?.map(Arc::new);
+    #[cfg(feature = "dev-mcp")]
+    if development.is_some() {
+        for window in &mut context.config_mut().app.windows {
+            window.create = false;
+        }
+    }
     let app = configure(tauri::Builder::default())
-        .setup(|app| {
+        .setup(move |app| {
             let events = app.handle().clone();
             let exit = app.handle().clone();
+            #[cfg(feature = "dev-mcp")]
+            let (core_done, core_stopped) = tokio::sync::oneshot::channel();
             let host = workspace::WorkspaceHost::start(
                 Default::default(),
                 move |snapshot| {
@@ -40,20 +72,75 @@ pub fn run() -> tauri::Result<()> {
                     }
                 },
                 move |result| {
+                    #[cfg(feature = "dev-mcp")]
+                    let _ = core_done.send(result.is_err());
                     if let Err(error) = &result {
                         eprintln!("operation=workspace_shutdown error={}", error.message);
                     }
-                    exit.exit(i32::from(result.is_err()));
+                    let code = i32::from(result.is_err());
+                    #[cfg(feature = "dev-mcp")]
+                    let code = code.max(i32::from(
+                        exit.try_state::<dev_mcp::Running>()
+                            .is_some_and(|server| server.failed()),
+                    ));
+                    exit.exit(code);
                 },
             )
             .map_err(|error| std::io::Error::other(error.message))?;
-            app.manage(host);
+            let host = Arc::new(host);
+            app.manage(host.clone());
+            #[cfg(feature = "dev-mcp")]
+            if let Some(instance) = development {
+                app.manage(instance.clone());
+                let window = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|window| window.label == "main")
+                    .ok_or_else(|| std::io::Error::other("开发实例缺少 main 窗口配置"))?;
+                let mut builder = tauri::WebviewWindowBuilder::from_config(app, window)?
+                    .data_directory(instance.directory.join("webview"))
+                    .visible(instance.visible)
+                    .title("LayerLens · 开发测试实例");
+                if instance.web_driver_enabled() {
+                    app.add_capability(include_str!("dev_mcp/observation-capability.json"))?;
+                    let boot = serde_json::json!({"instanceId":instance.instance_id()});
+                    let observation = instance.observations.clone();
+                    builder = builder.initialization_script(format!("Object.defineProperty(window, '__LAYERLENS_DEV_BOOT__', {{value:Object.freeze({boot}), configurable:false}});"))
+                        .on_page_load(move |_, payload| {
+                            if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) { observation.invalidate(); }
+                        });
+                }
+                builder.build()?;
+                let exit = app.handle().clone();
+                let running =
+                    tauri::async_runtime::block_on(dev_mcp::start(host, instance, move || {
+                        // 核心可能先于监听器停止，也可能仍在释放资源；以其最终结果决定退出码。
+                        tauri::async_runtime::spawn(async move {
+                            let failed = core_stopped.await.unwrap_or(true)
+                                || exit
+                                    .try_state::<dev_mcp::Running>()
+                                    .is_some_and(|server| server.failed());
+                            exit.exit(i32::from(failed));
+                        });
+                    }))?;
+                app.manage(running);
+            }
             Ok(())
         })
-        .build(tauri::generate_context!())?;
+        .build(context)?;
     app.run(|app, event| {
         if let tauri::RunEvent::ExitRequested { api, .. } = event {
-            let host = app.state::<workspace::WorkspaceHost>();
+            #[cfg(feature = "dev-mcp")]
+            if let Some(server) = app.try_state::<dev_mcp::Running>()
+                && !server.stopped()
+            {
+                api.prevent_exit();
+                server.stop();
+                return;
+            }
+            let host = app.state::<Arc<workspace::WorkspaceHost>>();
             if !host.stopped() {
                 api.prevent_exit();
                 host.stop();
@@ -96,7 +183,7 @@ mod tests {
         )
         .unwrap();
         let app = super::configure(mock_builder())
-            .manage(host)
+            .manage(std::sync::Arc::new(host))
             .build(tauri::generate_context!())
             .expect("测试应用必须能够装配");
         let window =
@@ -119,7 +206,8 @@ mod tests {
         );
 
         use tauri::Manager;
-        app.state::<crate::workspace::WorkspaceHost>().stop();
+        app.state::<std::sync::Arc<crate::workspace::WorkspaceHost>>()
+            .stop();
         exit.recv_timeout(std::time::Duration::from_secs(10))
             .unwrap()
             .unwrap();
@@ -139,6 +227,20 @@ mod tests {
                 "protocolVersion": layerlens_core::IPC_PROTOCOL_VERSION,
             })
         );
+    }
+
+    #[cfg(feature = "dev-mcp")]
+    #[test]
+    fn ordinary_windows_cannot_report_development_observations() {
+        for label in ["main", "untrusted"] {
+            let error =
+                invoke_raw(label, "dev_view_report", json!({"observation":{}})).unwrap_err();
+            assert!(
+                error
+                    .as_str()
+                    .is_some_and(|message| message.contains("not allowed"))
+            );
+        }
     }
 
     #[test]

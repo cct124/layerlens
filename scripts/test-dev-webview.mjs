@@ -1,0 +1,649 @@
+// 第二批真实 WebView 回归：应用操作经 MCP → W3C WebDriver → 前端事件 → IPC。
+// 驱动会话启动、页面刷新与退出监测由本运行器管理。
+import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { mkdir, mkdtemp, readdir, readFile, writeFile, watch } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+import { redact } from './dev-mcp-artifacts.mjs';
+
+const { values: options } = parseArgs({
+  options: {
+    driver: { type: 'string' },
+    app: { type: 'string' },
+    visible: { type: 'boolean', default: false },
+    'output-root': { type: 'string' },
+  },
+});
+assert.equal(process.platform, 'win32', '当前真实 WebView 回归仅验证 Windows。');
+assert(
+  options.driver,
+  '用法：npm run test:dev-mcp:webview -- --driver <msedgedriver.exe> [--app <layerlens.exe>]',
+);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const app = path.resolve(root, options.app ?? 'target/debug/layerlens.exe');
+const driverPath = path.resolve(root, options.driver);
+const base = path.resolve(root, options['output-root'] ?? '.local/dev-mcp');
+await mkdir(base, { recursive: true });
+const run = await mkdtemp(path.join(base, 'webview-'));
+const runs = path.join(run, 'instances');
+await mkdir(runs);
+const sampleRoot = path.join(root, 'crates/layerlens-core/tests/fixtures/psd');
+const samples = ['viewer-scale.psd', 'bitmap-rle.psd'];
+async function hash(file) {
+  const h = createHash('sha256');
+  for await (const c of createReadStream(file)) h.update(c);
+  return h.digest('hex');
+}
+const sourceHashes = await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s))));
+const report = {
+  evidence: 'webview-webdriver-mcp',
+  passed: false,
+  phase: 'driver-start',
+  checks: [],
+  actions: [],
+  images: [],
+  samples,
+  sourceHashes,
+  commit: execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+  }).trim(),
+  dirty:
+    execFileSync('git', ['status', '--porcelain'], {
+      cwd: root,
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim().length > 0,
+  appSha256: await hash(app),
+  driverSha256: await hash(driverPath),
+  cargoLockSha256: await hash(path.join(root, 'Cargo.lock')),
+  system: {
+    platform: process.platform,
+    release: os.release(),
+    arch: process.arch,
+    node: process.version,
+  },
+  startedAt: new Date().toISOString(),
+};
+const started = performance.now();
+const driver = spawn(
+  driverPath,
+  ['--port=0', '--allowed-ips=127.0.0.1', '--log-path=' + path.join(run, 'driver-service.log')],
+  {
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  },
+);
+let driverLog = '',
+  driverExited = false,
+  endpoint,
+  session,
+  connection,
+  info,
+  frontend,
+  monitor;
+let rpcId = 0,
+  mutationId = 0;
+driver.once('exit', () => {
+  driverExited = true;
+});
+const driverExit = new Promise((resolve) => {
+  driver.once('error', resolve);
+  driver.once('close', resolve);
+});
+for (const stream of [driver.stdout, driver.stderr])
+  stream.on('data', (c) => {
+    driverLog = (driverLog + c.toString()).slice(-64 * 1024);
+  });
+function deadline(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(label)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+const port = deadline(
+  new Promise((resolve, reject) => {
+    driver.once('error', reject);
+    driver.once('exit', (code) => reject(new Error('驱动启动退出：' + code)));
+    for (const stream of [driver.stdout, driver.stderr])
+      stream.on('data', () => {
+        const match = driverLog.match(/started successfully on port (\d+)/i);
+        if (match) resolve(Number(match[1]));
+      });
+  }),
+  10000,
+  '驱动启动超时',
+);
+port.catch(() => undefined);
+async function wd(route, body, method = 'POST') {
+  const r = await fetch(endpoint + route, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
+  });
+  const result = await r.json();
+  assert(r.ok && !result.value?.error, JSON.stringify(result));
+  return result.value;
+}
+async function readConnection() {
+  const controller = new AbortController();
+  const events = watch(runs, {
+    recursive: true,
+    signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]),
+  });
+  let next = events.next();
+  next.catch(() => undefined);
+  try {
+    for (;;) {
+      for (const dir of await readdir(runs, { withFileTypes: true })) {
+        if (!dir.isDirectory()) continue;
+        const directory = path.join(runs, dir.name);
+        if (!(await readdir(directory)).includes('ready')) continue;
+        const value = JSON.parse(await readFile(path.join(directory, 'connection.json'), 'utf8'));
+        assert.equal(value.formatVersion, 1);
+        assert(Number.isInteger(value.processId) && value.processId > 0);
+        const url = new URL(value.endpoint);
+        assert.equal(url.hostname, '127.0.0.1');
+        assert.equal(url.pathname, '/mcp');
+        return { ...value, directory };
+      }
+      await next;
+      next = events.next();
+      next.catch(() => undefined);
+    }
+  } finally {
+    controller.abort();
+    await events.return().catch((e) => {
+      if (e.name !== 'AbortError') throw e;
+    });
+  }
+}
+function observeProcess(pid) {
+  // 在应用退出前取得句柄；读取该测试实例的真实退出码，不把驱动会话删除当作正常退出。
+  const command =
+    "$ErrorActionPreference='Stop'; $testProcess=[Diagnostics.Process]::GetProcessById(" +
+    pid +
+    "); $null=$testProcess.Handle; Write-Output 'watching'; $testProcess.WaitForExit(); Write-Output $testProcess.ExitCode";
+  const child = spawn('powershell', ['-NoProfile', '-Command', command], {
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '',
+    stderr = '';
+  const ready = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.stdout.on('data', (c) => {
+      stdout += c.toString();
+      if (stdout.includes('watching')) resolve();
+    });
+    child.once('close', (code) => {
+      if (!stdout.includes('watching'))
+        reject(new Error('退出监测启动失败：' + code + ' ' + stderr));
+    });
+  });
+  child.stderr.on('data', (c) => {
+    stderr += c.toString();
+  });
+  const exit = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code) => {
+      const match = stdout.match(/watching\s+(-?\d+)/);
+      if (code === 0 && match) resolve(Number(match[1]));
+      else reject(new Error('退出监测失败：' + stderr));
+    });
+  });
+  ready.catch(() => undefined);
+  exit.catch(() => undefined);
+  return { ready, exit, child };
+}
+async function rpc(method, params, notification = false) {
+  const id = notification ? undefined : ++rpcId;
+  const action = {
+    id,
+    method,
+    tool: params?.name,
+    requestId: params?.arguments?.clientRequestId,
+    phase: report.phase,
+  };
+  report.actions.push(action);
+  const response = await fetch(connection.endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + connection.token,
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'MCP-Protocol-Version': '2025-11-25',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+    signal: AbortSignal.timeout(35000),
+  });
+  action.httpStatus = response.status;
+  assert(response.ok, 'MCP HTTP ' + response.status);
+  if (notification) return;
+  const result = await response.json();
+  assert.equal(result.id, id);
+  assert.equal(result.error, undefined, JSON.stringify(result.error));
+  action.isError = result.result.isError;
+  action.errorCode = result.result.structuredContent?.data?.error?.code;
+  return result.result;
+}
+const args = (request, mutate = false) => ({
+  instanceId: info.instanceId,
+  sessionId: info.sessionId,
+  clientRequestId: mutate ? 'webview-' + ++mutationId : null,
+  request,
+});
+async function tool(name, input, expectedError = false) {
+  const r = await rpc('tools/call', { name, arguments: input });
+  assert.equal(r.isError, expectedError, JSON.stringify(r.structuredContent));
+  assert.deepEqual(JSON.parse(r.content[0].text), r.structuredContent);
+  return r.structuredContent.data;
+}
+const state = async () => (await tool('dev_ui_state', args({}))).value;
+const core = async () =>
+  (await tool('dev_workspace', args({ protocolVersion: 1, action: { kind: 'snapshot' } }))).value
+    .snapshot;
+const workspace = async (action) =>
+  (await tool('dev_workspace', args({ protocolVersion: 1, action }, true))).value;
+async function wait(condition) {
+  const r = (
+    await tool('dev_ui_wait', args({ frontendId: frontend ?? null, condition, timeoutMs: 10000 }))
+  ).value;
+  assert.equal(r.satisfied, true, JSON.stringify(r));
+  return r.lastState;
+}
+async function waitCore(condition) {
+  const r = (await tool('dev_wait', args({ condition, timeoutMs: 10000 }))).value;
+  assert.equal(r.satisfied, true, JSON.stringify(r));
+  return r.lastState;
+}
+async function action(input) {
+  const result = await tool(
+    'dev_ui_action',
+    args({ frontendId: frontend, expectedViewRevision: null, action: input }, true),
+  );
+  report.inputs ??= [];
+  report.inputs.push({ input, before: result.value.before });
+  return result;
+}
+const click = (target) => action({ kind: 'click', target });
+const key = (key, phase = 'press') => action({ kind: 'key', key, phase });
+function point(view, x, y) {
+  const r = view.canvas.image;
+  return { x: Math.round(r.x + x * view.canvas.zoom), y: Math.round(r.y + y * view.canvas.zoom) };
+}
+async function screenshot(name) {
+  const result = await rpc('tools/call', {
+    name: 'dev_ui_screenshot',
+    arguments: args({ frontendId: frontend }),
+  });
+  assert.equal(result.isError, false, JSON.stringify(result.structuredContent));
+  const data = result.structuredContent.data.value;
+  assert.equal(data.source, 'webdriverWebview');
+  assert.equal(data.before.frontendId, frontend);
+  const png = Buffer.from(result.content.find((c) => c.type === 'image').data, 'base64');
+  assert.equal(png.readUInt32BE(16), data.width);
+  assert.equal(png.readUInt32BE(20), data.height);
+  assert(data.width >= 900 && data.height >= 600);
+  await writeFile(path.join(run, name), png, { flag: 'wx' });
+  report.images.push({
+    name,
+    before: data.before.viewRevision,
+    after: data.after.viewRevision,
+    unchanged: data.unchanged,
+  });
+}
+try {
+  endpoint = 'http://127.0.0.1:' + (await port);
+  const config = path.join(run, 'config.json');
+  await writeFile(
+    config,
+    JSON.stringify({ sampleRoot, runRoot: runs, visible: options.visible, webDriverUrl: endpoint }),
+    { flag: 'wx' },
+  );
+  report.phase = 'webview-start';
+  const launched = await wd('/session', {
+    capabilities: {
+      alwaysMatch: {
+        browserName: 'webview2',
+        'ms:edgeOptions': {
+          binary: app,
+          args: ['--dev-mcp-config=' + config],
+          windowTypes: ['webview'],
+        },
+      },
+    },
+  });
+  session = launched.sessionId;
+  report.capabilities = launched.capabilities;
+  connection = await readConnection();
+  monitor = observeProcess(connection.processId);
+  await deadline(monitor.ready, 10000, '进程监测握手超时');
+  report.processId = connection.processId;
+  await rpc('initialize', {
+    protocolVersion: '2025-11-25',
+    capabilities: {},
+    clientInfo: { name: 'layerlens-webview-regression', version: '1' },
+  });
+  await rpc('notifications/initialized', {}, true);
+  info = (await tool('dev_instance', {})).value;
+  assert.equal(info.instanceId, connection.instanceId);
+  report.instanceId = info.instanceId;
+  assert.equal((await rpc('tools/list', {})).tools.length, 13);
+  let view = await wait({ kind: 'ready' });
+  frontend = view.frontendId;
+  report.frontendId = frontend;
+  report.driver = (await tool('dev_ui_attach', args({ driverSessionId: session }, true))).value;
+  assert.equal(report.driver.browserVersion, launched.capabilities.browserVersion);
+  assert.equal(report.driver.driverVersion.split(' ')[0], launched.capabilities.browserVersion);
+  // 固定的只读事件诊断，不生成输入、不更改组件或核心状态。
+  await wd('/session/' + session + '/execute/sync', {
+    script: `
+    const trace=[];
+    for(const type of ['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture','gotpointercapture','blur']) {
+      window.addEventListener(type,event=>{ trace.push({type:event.type,buttons:event.buttons,pointerId:event.pointerId,trusted:event.isTrusted,target:event.target?.dataset?.devTarget??event.target?.tagName}); if(trace.length>32)trace.shift(); },true);
+    }
+    Object.defineProperty(window,'__LAYERLENS_INPUT_TRACE__',{value:()=>trace.slice()});
+  `,
+    args: [],
+  });
+  report.checks.push('匹配驱动、WebView 身份、前端握手及 13 个真实工具');
+  report.phase = 'document-sync';
+  await workspace({ kind: 'open', path: samples[0] });
+  let workspaceState = await waitCore({ kind: 'documentCount', count: 1 });
+  const a = workspaceState.documents[0];
+  await wait({ kind: 'applied', atLeast: workspaceState.sequence });
+  view = await wait({ kind: 'imageReady', documentId: a.id, revision: a.revision });
+  assert.equal(view.sessionId, info.sessionId);
+  assert.equal(view.canvas.documentWidth, 256);
+  assert.equal(view.canvas.documentHeight, 128);
+  report.phase = 'menu-and-draft';
+  await click('menu:window');
+  await wait({ kind: 'menu', menu: 'window' });
+  const waitingPanel = wait({ kind: 'panel', panel: 'tasks' });
+  await click('command:tasks');
+  await waitingPanel;
+  await click('tool:region');
+  await click('canvas:snap');
+  view = await state();
+  const p0 = point(view, 17, 17),
+    p1 = point(view, 47, 39);
+  const originalRevision = view.selectionRevision;
+  await action({ kind: 'drag', startX: p0.x, startY: p0.y, endX: p1.x, endY: p1.y, hold: true });
+  const draft = await wait({ kind: 'draft', active: true });
+  assert.equal(draft.selectionRevision, originalRevision);
+  assert.equal((await core()).selection.selectionRevision, originalRevision);
+  await key('escape');
+  await wait({ kind: 'draft', active: false });
+  await action({ kind: 'releaseInputs' });
+  assert.equal((await core()).selection.selectionRevision, originalRevision);
+  await action({ kind: 'drag', startX: p0.x, startY: p0.y, endX: p1.x, endY: p1.y, hold: false });
+  view = await wait({ kind: 'selection', after: originalRevision, hasScope: true });
+  for (const [field, expected] of Object.entries({ x: 17, y: 17, width: 30, height: 22 }))
+    assert(Math.abs(view.region[field] - expected) <= 1, field + '：' + view.region[field]);
+  workspaceState = await core();
+  assert.equal(workspaceState.selection.scope.targetCount, 12);
+  const snapshotId = view.snapshotId,
+    selectionRevision = view.selectionRevision;
+  await click('menu:file');
+  await wait({ kind: 'menu', menu: 'file' });
+  await key('escape');
+  await wait({ kind: 'menu', menu: null });
+  assert.equal((await core()).selection.selectionRevision, selectionRevision);
+  assert(BigInt((await state()).input.pointerEvents) > 0n);
+  assert(BigInt((await state()).input.keyEvents) > 0n);
+  report.checks.push('真实菜单输入、并发前端等待、草稿不提交、Esc 取消与 12 个独立网格命中预期');
+  report.phase = 'task-panel';
+  await action({ kind: 'fillTaskName', text: 'WebView 固定范围 A' });
+  await click('task:create');
+  view = await wait({ kind: 'taskCount', count: 1 });
+  const task = view.tasks[0];
+  assert.equal(task.snapshotId, snapshotId);
+  await click('task:' + task.id + ':view');
+  await wait({ kind: 'content', snapshotId });
+  await screenshot('fixed-task.png');
+  report.phase = 'snapping-and-alt';
+  await click('canvas:snap');
+  view = await state();
+  const s0 = point(view, 65, 17),
+    s1 = point(view, 95, 39),
+    beforeSnap = view.selectionRevision;
+  await action({ kind: 'drag', startX: s0.x, startY: s0.y, endX: s1.x, endY: s1.y, hold: true });
+  view = await wait({ kind: 'draft', active: true });
+  assert.equal(view.canvas.snapGuides, 2);
+  assert(Math.abs(view.canvas.draft.x + view.canvas.draft.width - 96) < 0.01);
+  assert(Math.abs(view.canvas.draft.y + view.canvas.draft.height - 40) < 0.01);
+  let keyResult = await key('alt', 'down');
+  view = await wait({
+    kind: 'viewRevision',
+    atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
+  });
+  assert.equal(view.canvas.alt, true);
+  assert.equal(view.canvas.snapGuides, 0);
+  keyResult = await key('alt', 'up');
+  view = await wait({
+    kind: 'viewRevision',
+    atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
+  });
+  assert.equal(view.canvas.alt, false);
+  assert.equal(view.canvas.snapGuides, 2);
+  await key('escape');
+  await wait({ kind: 'draft', active: false });
+  await action({ kind: 'releaseInputs' });
+  assert.equal((await core()).selection.selectionRevision, beforeSnap);
+  await action({ kind: 'drag', startX: s0.x, startY: s0.y, endX: s1.x, endY: s1.y, hold: false });
+  view = await wait({ kind: 'selection', after: beforeSnap, hasScope: true });
+  assert(Math.abs(view.region.x + view.region.width - 96) < 0.01);
+  assert(Math.abs(view.region.y + view.region.height - 40) < 0.01);
+  assert.notEqual(view.snapshotId, snapshotId);
+  assert.equal(view.tasks[0].snapshotId, snapshotId);
+  report.checks.push('真实几何边缘吸附、Alt 临时关闭／恢复、取消与改选不改变固定任务');
+  report.phase = 'task-panel';
+  await workspace({ kind: 'open', path: samples[1] });
+  workspaceState = await waitCore({ kind: 'documentCount', count: 2 });
+  const b = workspaceState.documents.find((d) => d.id !== a.id);
+  await wait({ kind: 'imageReady', documentId: b.id, revision: b.revision });
+  await click('document:' + a.id);
+  await wait({ kind: 'imageReady', documentId: a.id, revision: a.revision });
+  await click('menu:file');
+  await click('command:close');
+  workspaceState = await waitCore({ kind: 'documentCount', count: 1 });
+  await wait({ kind: 'applied', atLeast: workspaceState.sequence });
+  await click('task:' + task.id + ':view');
+  view = await wait({ kind: 'content', snapshotId });
+  assert.equal(view.activeDocument.id, b.id);
+  report.checks.push('任务面板真实键入／固定／读取，以及 UI 关闭标签后保留原快照');
+  report.phase = 'cleanup-dialog';
+  const beforeCleanup = (await core()).selection.selectionRevision;
+  await click('task:' + task.id + ':cleanup');
+  view = await wait({ kind: 'cleanup', phase: 'ready' });
+  assert.deepEqual(view.cleanup.taskIds, [task.id]);
+  assert.equal(view.focus, 'cleanup-title');
+  await key('escape');
+  await wait({ kind: 'cleanup', phase: null });
+  assert.equal((await core()).selection.selectionRevision, beforeCleanup);
+  assert.equal((await state()).tasks[0].status, 'active');
+  await click('task:' + task.id + ':cleanup');
+  await wait({ kind: 'cleanup', phase: 'ready' });
+  await screenshot('cleanup-confirmation.png');
+  const confirm = args(
+    {
+      frontendId: frontend,
+      expectedViewRevision: null,
+      action: { kind: 'click', target: 'cleanup:confirm' },
+    },
+    true,
+  );
+  const first = await tool('dev_ui_action', confirm);
+  await wait({ kind: 'cleanup', phase: 'complete' });
+  view = await wait({ kind: 'task', taskId: task.id, status: 'invalidated' });
+  assert.equal(view.content, null);
+  assert.equal(view.activeDocument.id, b.id);
+  assert.deepEqual(await tool('dev_ui_action', confirm), first);
+  await click('cleanup:cancel');
+  await wait({ kind: 'cleanup', phase: null });
+  report.checks.push('真实清理模态、焦点、Esc 隔离、确认幂等、任务失效及前端同步');
+  report.phase = 'frontend-navigation';
+  const oldFrontend = frontend;
+  const disconnected = tool(
+    'dev_ui_wait',
+    args({
+      frontendId: oldFrontend,
+      condition: { kind: 'viewRevision', atLeast: '1000000' },
+      timeoutMs: 10000,
+    }),
+    true,
+  );
+  await wd('/session/' + session + '/refresh', {});
+  const terminated = await disconnected;
+  assert(['NOT_FOUND', 'STALE_REVISION'].includes(terminated.error.code));
+  frontend = undefined;
+  view = await wait({ kind: 'ready' });
+  frontend = view.frontendId;
+  assert.notEqual(frontend, oldFrontend);
+  assert.equal(view.sessionId, info.sessionId);
+  assert.equal(view.activeDocument.id, b.id);
+  await wait({ kind: 'imageReady', documentId: b.id, revision: b.revision });
+  await click('panel:tasks');
+  await wait({ kind: 'task', taskId: task.id, status: 'invalidated' });
+  report.checks.push('真实页面刷新使旧等待失效，新前端代次重连同一核心会话');
+  report.phase = 'negative-and-screenshot';
+  const stale = await tool(
+    'dev_ui_action',
+    args(
+      {
+        frontendId: 'stale-page',
+        expectedViewRevision: null,
+        action: { kind: 'click', target: 'tool:pan' },
+      },
+      true,
+    ),
+    true,
+  );
+  assert.equal(stale.error.code, 'STALE_REVISION');
+  const rejected = await tool(
+    'dev_ui_action',
+    args(
+      {
+        frontendId: frontend,
+        expectedViewRevision: null,
+        action: { kind: 'click', target: 'body' },
+      },
+      true,
+    ),
+    true,
+  );
+  assert.equal(rejected.error.code, 'INVALID_INPUT');
+  const timeout = (
+    await tool(
+      'dev_ui_wait',
+      args({
+        frontendId: frontend,
+        condition: { kind: 'task', taskId: task.id, status: 'active' },
+        timeoutMs: 1,
+      }),
+    )
+  ).value;
+  assert.equal(timeout.timedOut, true);
+  assert.equal(timeout.lastState.tasks[0].status, 'invalidated');
+  await screenshot('final-state.png');
+  report.finalView = await state();
+  report.finalCore = await core();
+  assert.deepEqual(
+    await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s)))),
+    sourceHashes,
+  );
+  report.checks.push('旧前端／非法目标拒绝、超时末态、截图版本关联与源文件不变');
+  report.phase = 'shutdown';
+  await tool('dev_shutdown', args({}));
+  assert.equal(await deadline(monitor.exit, 10000, '应用正常退出超时'), 0);
+  const remaining = await readdir(connection.directory);
+  assert(remaining.includes('stopped'));
+  assert(!remaining.includes('ready') && !remaining.includes('connection.json'));
+  report.checks.push('真实应用退出码 0 与连接文件回收');
+  report.passed = true;
+  report.phase = 'complete';
+} catch (error) {
+  report.error = error.stack ?? String(error);
+  if (session) {
+    try {
+      report.inputTrace = await wd('/session/' + session + '/execute/sync', {
+        script: 'return window.__LAYERLENS_INPUT_TRACE__?.() ?? [];',
+        args: [],
+      });
+    } catch (cause) {
+      report.inputTraceError = String(cause);
+    }
+    try {
+      report.browserLog = await wd('/session/' + session + '/log', { type: 'browser' });
+    } catch (cause) {
+      report.browserLogError = String(cause);
+    }
+  }
+  process.exitCode = 1;
+  if (info && frontend)
+    try {
+      await screenshot('failure.png');
+    } catch (cause) {
+      report.captureError = String(cause);
+    }
+} finally {
+  if (!report.passed && info) {
+    try {
+      await tool('dev_shutdown', args({}));
+      if (monitor) await deadline(monitor.exit, 10000, '失败收尾超时');
+    } catch (error) {
+      report.shutdownError = String(error);
+    }
+  }
+  if (session)
+    try {
+      await wd('/session/' + session, undefined, 'DELETE');
+    } catch (error) {
+      report.driverCleanup = String(error);
+    }
+  if (monitor?.child.exitCode === null) monitor.child.kill();
+  if (!driverExited) driver.kill();
+  try {
+    await deadline(driverExit, 5000, '驱动进程未退出');
+  } catch (error) {
+    report.driverExitError = String(error);
+    report.passed = false;
+    process.exitCode = 1;
+  }
+  report.durationMs = Math.round(performance.now() - started);
+  await writeFile(path.join(run, 'driver.log'), redact(driverLog, [connection?.token]), {
+    flag: 'wx',
+  });
+  await writeFile(
+    path.join(run, 'report.json'),
+    redact(JSON.stringify(report, null, 2), [connection?.token]),
+    { flag: 'wx' },
+  );
+}
+console.log(
+  redact(
+    JSON.stringify(
+      {
+        passed: report.passed,
+        phase: report.phase,
+        checks: report.checks,
+        report: path.join(run, 'report.json'),
+        error: report.error,
+      },
+      null,
+      2,
+    ),
+    [connection?.token],
+  ),
+);

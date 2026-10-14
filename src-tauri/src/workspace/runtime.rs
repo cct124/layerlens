@@ -39,6 +39,8 @@ enum Message {
 
 /// 应用持有的适配入口；退出只发信号，由后台释放全部对象后通知事件循环退出。
 pub(crate) struct WorkspaceHost {
+    #[cfg(feature = "dev-mcp")]
+    observed: tokio::sync::watch::Sender<Option<WorkspaceSnapshot>>,
     pub(crate) operations: OperationsClient,
     pub(crate) cleanup_handle: CleanupHandle,
     sender: mpsc::SyncSender<Message>,
@@ -56,6 +58,15 @@ impl WorkspaceHost {
         on_exit: impl FnOnce(Result<(), WorkspaceError>) + Send + 'static,
     ) -> Result<Self, WorkspaceError> {
         let mut engine = Engine::new(config)?;
+        #[cfg(feature = "dev-mcp")]
+        let (observed, _) = tokio::sync::watch::channel(None);
+        #[cfg(feature = "dev-mcp")]
+        let observer = observed.clone();
+        #[cfg(feature = "dev-mcp")]
+        let notify = move |snapshot: &WorkspaceSnapshot| {
+            observer.send_replace(Some(snapshot.clone()));
+            notify(snapshot);
+        };
         let cleanup_handle = engine.service.cleanup_handle();
         let (operations, mut operations_worker) =
             OperationsWorker::start(engine.service.selection_handle(), cleanup_handle.clone())?;
@@ -124,6 +135,8 @@ impl WorkspaceHost {
                 )
             })?;
         Ok(Self {
+            #[cfg(feature = "dev-mcp")]
+            observed,
             operations,
             cleanup_handle,
             sender,
@@ -147,6 +160,12 @@ impl WorkspaceHost {
                 error(WorkspaceErrorCode::ShuttingDown, "工作区已停止。")
             }
         })
+    }
+
+    /// 只保留最新的轻量工作区投影，不持有 PSD／PNG 租约，也不为等待者增加核心队列。
+    #[cfg(feature = "dev-mcp")]
+    pub(crate) fn observe(&self) -> tokio::sync::watch::Receiver<Option<WorkspaceSnapshot>> {
+        self.observed.subscribe()
     }
 
     pub(crate) async fn action(

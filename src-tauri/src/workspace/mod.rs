@@ -1,6 +1,7 @@
 //! 桌面工作区适配：一个有界命令邮箱、一份共享核心和轻量状态通知。
 //! 所有可能析构大对象的操作在专用线程运行；前端不持有核心对象。
 
+mod access;
 mod budget;
 mod cleanup;
 mod engine;
@@ -8,8 +9,13 @@ mod operations;
 mod runtime;
 mod selection;
 
+pub(crate) use access::SingleOperation;
+#[cfg(feature = "dev-mcp")]
+pub(crate) use budget::check_size;
 pub(crate) use cleanup::validate_publication;
 pub(crate) use runtime::WorkspaceHost;
+#[cfg(feature = "dev-mcp")]
+pub(crate) use selection::SelectionContext;
 
 use layerlens_core::{
     IPC_PROTOCOL_VERSION,

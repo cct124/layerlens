@@ -114,6 +114,7 @@ impl DocumentReference {
 }
 
 /// 文档像素坐标，保留小数；核心提交时验证有限、正面积且位于画布内。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct SelectionBounds {
@@ -166,6 +167,7 @@ pub enum SelectionItem {
 }
 
 /// 固定的范围与能力限制；不是可通过续页消除的截断。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum SelectionWarning {
@@ -175,6 +177,7 @@ pub enum SelectionWarning {
 }
 
 /// 有效目标与仅供解释层级的结构记录；结构记录不增加授权。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum LayerRole {
@@ -183,6 +186,7 @@ pub enum LayerRole {
 }
 
 /// 图层用于命中的完整边界是否全部位于所选矩形中。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum IntersectionKind {
@@ -191,6 +195,7 @@ pub enum IntersectionKind {
 }
 
 /// 交集基于当前适配器的几何边界；绝不覆盖图层原始 bounds。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, ts_rs::TS)]
 pub struct LayerIntersection {
     pub kind: IntersectionKind,

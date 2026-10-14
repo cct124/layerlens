@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { fitZoom, initialView, locateBounds, zoomAround } from './canvasView';
 import type { CanvasView } from './canvasView';
+import type { UiCanvas, UiRect } from '../../shared/api/devGenerated';
+import { developmentInstance } from './useDevObservation';
 import type { Bounds, SelectionBounds } from '../../shared/api/generated';
 import {
   beginRegion,
@@ -38,6 +40,49 @@ const emit = defineEmits<{
   clearSelection: [contextKey: string];
 }>();
 const viewport = ref<HTMLElement | null>(null);
+const imageDecoded = ref(false);
+const paintPrepared = ref(false);
+const decodeError = ref<string | null>(null);
+let decodeGeneration = 0;
+let decodingGeneration: number | null = null;
+let decodeFrame: number | null = null;
+function resetDecode() {
+  decodeGeneration++;
+  decodingGeneration = null;
+  imageDecoded.value = false;
+  paintPrepared.value = false;
+  decodeError.value = null;
+  if (decodeFrame !== null) cancelAnimationFrame(decodeFrame);
+  decodeFrame = null;
+}
+function imageLoaded() {
+  if (!developmentInstance()) return;
+  const image = viewport.value?.querySelector<HTMLImageElement>('.preview-image');
+  const generation = decodeGeneration,
+    url = props.url;
+  if (!image || !url || image.getAttribute('src') !== url) return;
+  if (decodingGeneration === generation) return;
+  decodingGeneration = generation;
+  const current = () => generation === decodeGeneration && props.url === url;
+  void image
+    .decode()
+    .then(() => {
+      if (!current()) return;
+      imageDecoded.value = true;
+      decodeFrame = requestAnimationFrame(() => {
+        if (current()) {
+          paintPrepared.value = true;
+          decodeFrame = null;
+        }
+      });
+    })
+    .catch((cause: unknown) => {
+      if (current())
+        decodeError.value = (cause instanceof Error ? cause.message : String(cause)).slice(0, 160);
+    });
+}
+watch(() => props.url, resetDecode, { flush: 'sync' });
+onUnmounted(resetDecode);
 const size = ref({ width: 0, height: 0 });
 const effective = computed(() =>
   props.view.mode === 'fit'
@@ -146,6 +191,7 @@ function altKey(event: KeyboardEvent) {
 }
 watch(() => props.snapEnabled, refreshSnapping, { flush: 'sync' });
 onMounted(() => {
+  if (viewport.value?.querySelector<HTMLImageElement>('.preview-image')?.complete) imageLoaded();
   observer = new ResizeObserver((entries) => {
     const entry = entries[0];
     if (entry) {
@@ -344,7 +390,31 @@ function fit() {
 function actualSize() {
   setView({ mode: 'manual', zoom: 1, x: 0, y: 0 });
 }
-defineExpose({ locate, cancel, fit, actualSize });
+/** 开发桥只读取当前交互与实际 DOM，不更改草稿、图像或视图。 */
+function observation(): UiCanvas | null {
+  const element = viewport.value;
+  if (!element) return null;
+  const image = element.querySelector<HTMLImageElement>('.preview-image');
+  const rect = (r: DOMRect): UiRect => ({ x: r.x, y: r.y, width: r.width, height: r.height });
+  return {
+    viewport: rect(element.getBoundingClientRect()),
+    image: image ? rect(image.getBoundingClientRect()) : null,
+    documentWidth: props.width,
+    documentHeight: props.height,
+    imageDecoded:
+      imageDecoded.value &&
+      !!image &&
+      image.naturalWidth === props.width &&
+      image.naturalHeight === props.height,
+    paintPrepared: paintPrepared.value,
+    imageError: decodeError.value,
+    zoom: effective.value.zoom,
+    draft: regionDrag.value ? { ...regionDrag.value.draft.bounds } : null,
+    alt: regionDrag.value?.alt ?? false,
+    snapGuides: guides.value.length,
+  };
+}
+defineExpose({ locate, cancel, fit, actualSize, observation });
 </script>
 <template>
   <div class="preview-pane">
@@ -357,6 +427,7 @@ defineExpose({ locate, cancel, fit, actualSize });
         }}</span>
         <button
           v-if="tool === 'region' && region"
+          data-dev-target="canvas:reframe"
           :disabled="disabled"
           :aria-pressed="drawingNew"
           @click="
@@ -370,6 +441,7 @@ defineExpose({ locate, cancel, fit, actualSize });
     </div>
     <div
       ref="viewport"
+      data-dev-target="canvas"
       class="preview-viewport"
       :class="{ 'region-tool': tool === 'region', panning: !!drag }"
       aria-label="PSD 预览画布"
@@ -404,6 +476,7 @@ defineExpose({ locate, cancel, fit, actualSize });
           transform: `translate(-50%, -50%) translate(${effective.x}px, ${effective.y}px) scale(${effective.zoom})`,
         }"
         @error="emit('imageError')"
+        @load="imageLoaded"
       />
       <div
         v-if="bounds && bounds.width > 0 && bounds.height > 0"
@@ -432,6 +505,7 @@ defineExpose({ locate, cancel, fit, actualSize });
             :key="handle.id"
             class="region-handle"
             :data-region-handle="handle.id"
+            :data-dev-target="`handle:${handle.id}`"
             :title="`调整${handle.label}`"
             :style="{
               left: `${handle.x}%`,

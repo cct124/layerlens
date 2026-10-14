@@ -21,6 +21,13 @@ tauri-build = { version = "2.6.3" }
 tauri-plugin-dialog = { version = "=2.7.3", default-features = false }
 tokio = { version = "=1.53.1", features = ["sync"] }
 ts-rs = "12.0.1"
+schemars = { version = "=1.2.2", features = ["derive"] }
+rmcp = { version = "=3.5.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
+axum = { version = "=0.8.9", default-features = false, features = ["http1", "tokio"] }
+tokio-util = "=0.7.19"
+uuid = { version = "=1.26.1", features = ["v4"] }
+base64 = "=0.23.1"
+reqwest = { version = "=0.13.5", default-features = false, features = ["json"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

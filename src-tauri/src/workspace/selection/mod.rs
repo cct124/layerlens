@@ -1,6 +1,12 @@
 //! 选区／任务适配。唯一核心句柄在有界后台使用；回执与按需内容分离。
 
+#[cfg(feature = "dev-mcp")]
+mod context;
 mod dto;
+#[cfg(feature = "dev-mcp")]
+pub(crate) use context::SelectionContext;
+#[cfg(feature = "dev-mcp")]
+pub(super) use context::read_context;
 pub(crate) use dto::summary;
 
 use super::{budget::check_size, domain_error, error};

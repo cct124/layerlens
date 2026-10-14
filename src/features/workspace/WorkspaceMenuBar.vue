@@ -173,6 +173,7 @@ onUnmounted(() => {
     >
       <button
         :id="`menu-trigger-${menu.id}`"
+        :data-dev-target="`menu:${menu.id}`"
         class="menu-trigger"
         role="menuitem"
         :aria-label="menu.label"
@@ -201,6 +202,7 @@ onUnmounted(() => {
               <button
                 :role="item.checked === undefined ? 'menuitem' : 'menuitemradio'"
                 :aria-label="item.label"
+                :data-dev-target="`command:${item.command}`"
                 :aria-checked="item.checked"
                 :disabled="item.disabled"
                 tabindex="-1"

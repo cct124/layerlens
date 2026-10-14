@@ -4,6 +4,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 /// 能力按对象分别报告，限制不能由空值或默认样式掩盖。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Support {
@@ -13,6 +14,7 @@ pub enum Support {
 }
 
 /// 描述本次解析或输出的支持程度及已知原因。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct Capability {
     pub status: Support,

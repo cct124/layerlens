@@ -6,10 +6,12 @@ use ts_rs::TS;
 use super::{capability::Capability, text_model::TextData};
 
 /// 仅在所属解析结果中有效的图层引用；不使用图层名称或 PSD 内部 ID 寻址。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 pub struct LayerId(pub u32);
 
 /// 文档像素坐标，原点位于画布左上角；保留负坐标及零面积。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 pub struct Bounds {
     pub x: i32,
@@ -19,6 +21,7 @@ pub struct Bounds {
 }
 
 /// 原型能识别的来源类型；识别类型不表示支持其渲染或样式读取。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum LayerKind {
@@ -32,6 +35,7 @@ pub enum LayerKind {
 }
 
 /// 独立素材导出的阻塞因素；同一节点可同时包含多项，统计不可直接相加为图层数。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ExportBlocker {

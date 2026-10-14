@@ -6,6 +6,7 @@ use ts_rs::TS;
 
 /// 一次工作区操作；打开成功前由作业代表请求，不创建虚假文档。
 /// 无参数操作也使用空结构体变体，使 Serde 严格拒绝额外字段。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(
     tag = "kind",
@@ -42,6 +43,7 @@ pub enum WorkspaceAction {
 }
 
 /// 每次调用校验协议版本；结构反序列化之后仍须校验 ID、路径及资源准入。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceRequest {
@@ -50,6 +52,7 @@ pub struct WorkspaceRequest {
 }
 
 /// 只允许读取当前活动文档、当前修订已经完成的预览。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PreviewRequest {
@@ -59,6 +62,7 @@ pub struct PreviewRequest {
 }
 
 /// 可恢复边界错误；message 保留操作原因，前端不得将错误当作空状态。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceError {
@@ -66,6 +70,7 @@ pub struct WorkspaceError {
     pub message: String,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkspaceErrorCode {
@@ -94,6 +99,7 @@ pub enum WorkspaceErrorCode {
 }
 
 /// 轻量文档信息。坐标和尺寸均为 PSD 原稿像素，不推导 CSS。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceDocument {
@@ -111,6 +117,7 @@ pub struct WorkspaceDocument {
 }
 
 /// 排队、计算和取消后的收尾分别展示，不将取消请求解释为计算已停止。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum WorkspaceJobPhase {
@@ -120,6 +127,7 @@ pub enum WorkspaceJobPhase {
     Finishing,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceJob {
@@ -129,6 +137,7 @@ pub struct WorkspaceJob {
 }
 
 /// 预览状态固定目标修订。ready 只表示核心 PNG 就绪，不表示界面已可见。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(
     tag = "phase",
@@ -149,6 +158,7 @@ pub enum WorkspacePreviewState {
     Cancelled,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacePreview {
@@ -158,6 +168,7 @@ pub struct WorkspacePreview {
 }
 
 /// 有界通知列表；保留最近 16 条失败／取消，确认后可移除。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceNotice {
@@ -166,6 +177,7 @@ pub struct WorkspaceNotice {
 }
 
 /// 资源计量是准入账本，非进程 RSS；数值以字节十进制字符串表示。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceResources {
@@ -176,6 +188,7 @@ pub struct WorkspaceResources {
 }
 
 /// 原子文档摘要及适配层作业状态。前端仅接受更大的 sequence；重连重新读取快照。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {
@@ -193,6 +206,7 @@ pub struct WorkspaceSnapshot {
 }
 
 /// 按需图层读取，不进入工作区通知。数量、文字偏移及目标修订由核心校验。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(
     tag = "kind",
@@ -205,6 +219,7 @@ pub enum LayerQuery {
     Details { layer_id: u32, text_start: u32 },
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LayerRequest {
@@ -214,6 +229,7 @@ pub struct LayerRequest {
     pub query: LayerQuery,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LayerResult {
@@ -227,6 +243,7 @@ pub enum LayerResult {
 }
 
 /// 响应携带实际固定的目标关联，前端不能仅凭到达顺序展示属性。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerResponse {

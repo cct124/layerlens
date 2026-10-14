@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useWorkspace } from './useWorkspace';
+import { useDevObservation } from './useDevObservation';
 import { useAppStatus } from './useAppStatus';
 import PreviewCanvas from './PreviewCanvas.vue';
 import LayerTree from './LayerTree.vue';
@@ -264,6 +265,36 @@ function shortcut(event: KeyboardEvent) {
 }
 onMounted(() => window.addEventListener('keydown', shortcut));
 onUnmounted(() => window.removeEventListener('keydown', shortcut));
+useDevObservation(() => ({
+  coreSequence: snapshot.value?.sequence ?? null,
+  sessionId: snapshot.value?.selection.sessionId ?? null,
+  activeDocument: active.value ? { id: active.value.id, revision: active.value.revision } : null,
+  selectionRevision: snapshot.value?.selection.selectionRevision ?? null,
+  snapshotId: snapshot.value?.selection.scope?.snapshotId ?? null,
+  region: snapshot.value?.selection.region ?? null,
+  tool: tool.value,
+  panel: resourceTab.value,
+  canvas: canvas.value?.observation() ?? null,
+  cleanup: {
+    opened:
+      cleanup.opened && document.querySelector<HTMLDialogElement>('.cleanup-dialog')?.open === true,
+    phase: cleanup.state?.kind ?? null,
+    planId: cleanup.plan?.planId ?? null,
+    taskIds: cleanup.plan?.tasks.map((t) => t.id) ?? [],
+  },
+  tasks: selection.tasks.map((t) => ({
+    id: t.id,
+    status: t.status,
+    snapshotId: t.scope.snapshotId,
+  })),
+  content: selection.content
+    ? {
+        taskId: selection.content.target.kind === 'task' ? selection.content.target.taskId : null,
+        snapshotId: selection.content.scope.snapshotId,
+        ready: selection.content.page !== null,
+      }
+    : null,
+}));
 </script>
 <template>
   <div class="app-shell">
@@ -281,7 +312,7 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
         class="snap-toggle"
         title="吸附画布与可见图层几何边缘；按住 Alt 临时关闭"
       >
-        <input v-model="snapEnabled" type="checkbox" />边缘吸附
+        <input v-model="snapEnabled" data-dev-target="canvas:snap" type="checkbox" />边缘吸附
       </label>
       <span class="scope-indicator" :class="{ 'has-scope': !!selection.summary?.scope }">{{
         scopeLabel
@@ -324,6 +355,7 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
           :class="{ 'tool-selected': tool === 'pan' }"
           title="移动工具（V）：清空当前选区并平移；保留选区请按住中键拖动"
           aria-label="平移画布"
+          data-dev-target="tool:pan"
           :aria-pressed="tool === 'pan'"
           :disabled="!active || toolsBusy"
           :aria-busy="!!pendingTool"
@@ -336,6 +368,7 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
           :class="{ 'tool-selected': tool === 'region' }"
           title="区域选择（M）：框选任务范围，不裁剪原稿"
           aria-label="区域选择"
+          data-dev-target="tool:region"
           :aria-pressed="tool === 'region'"
           :disabled="!active || toolsBusy"
           @click="chooseTool('region')"
@@ -357,6 +390,7 @@ onUnmounted(() => window.removeEventListener('keydown', shortcut));
               >
                 <button
                   class="tab-select"
+                  :data-dev-target="`document:${doc.id}`"
                   :aria-pressed="doc.id === active?.id"
                   :title="doc.path"
                   @click="act({ kind: 'activate', documentId: doc.id })"

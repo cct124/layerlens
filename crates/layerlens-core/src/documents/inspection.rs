@@ -16,6 +16,7 @@ const RUN_LIMIT: usize = 128;
 const RESPONSE_BYTES: u64 = 256 * 1024;
 
 /// 图层树摘要。名称最多 256 个 Unicode 标量；完整设计文字仅按需读取。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerSummary {
@@ -31,6 +32,7 @@ pub struct LayerSummary {
 }
 
 /// 固定修订内的顺序分页；offset 是规范化图层位置，不是 PSD 原始记录号。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerPage {
@@ -41,6 +43,7 @@ pub struct LayerPage {
 }
 
 /// 原文切片与相交样式段；样式区间仍使用完整原文的绝对索引。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TextSlice {
@@ -59,6 +62,7 @@ pub struct TextSlice {
 }
 
 /// 图层只读详情。几何边界直接来自 PSD，不推断视觉范围或 CSS。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerDetails {

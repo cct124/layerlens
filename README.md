@@ -64,9 +64,64 @@ npm run test:watch     # 交互式前端测试
 cargo test --locked -p layerlens-core # 单独验证不依赖 Tauri 的核心
 ```
 
-Windows CI 使用相同的完整检查入口并构建 NSIS 安装包；新增或变更的流水线需以远端实际运行结果为准。
+Windows CI 使用相同的完整检查入口、构建 NSIS 安装包并验证普通构建拒绝开发参数；新增独立的开发 MCP 作业执行重复回归并保留诊断产物。第三批本机验证已通过，新增工作流尚未在远端运行；必需检查与分支保护不由工作流文件自动生效。
 
-开发测试 MCP 已列入 [DEV-01 工程计划](devlog/_plan/261013/DEV-01-开发测试MCP与M2自动验收.md)，将分批提供受控测试实例的业务操作、真实 WebView 交互和状态观测，服务于 M2 收尾及后续回归。[方案与证据边界](docs/08-开发测试MCP.md)已确定，SDK／驱动、构建特性、运行命令和 CI 接入尚未实现；上述命令仍是当前真实检查入口。开发测试工具与面向 H5 Agent 的产品 MCP 分别管理权限。
+### 开发测试 MCP
+
+[DEV-01](devlog/_plan/261013/DEV-01-开发测试MCP与M2自动验收.md) 已接入受控实例业务操作、真实 WebView 输入、前端同步观测与截图，共享同一核心及准入规则。第三批 Windows CI 配置、重复回归和产物收集已实现，本机稳定性测试通过；新增远端 CI、系统选择器及跨屏 DPI 等仍待验收。业务工具见[第一批](docs/08-开发测试MCP.md#当前实现dev-01-第一批)，UI 工具见[第二批](docs/08-开发测试MCP.md#当前实现dev-01-第二批)，CI 与报告规则见[第三批](docs/08-开发测试MCP.md#当前实现dev-01-第三批)。
+
+```powershell
+npm run check:dev-mcp        # 开发特性的格式、Clippy、桌面 Rust 测试与观测 DTO 一致性
+npm run test:dev-mcp         # 单独运行开发特性下的桌面 Rust 测试，含官方 MCP 客户端
+npm run build:dev-mcp        # 构建 debug 桌面程序，内置静态前端，不生成安装包
+npm run test:dev-mcp:desktop # 启动独立桌面进程，经 HTTP MCP 验证业务闭环并正常退出
+npm run bindings:dev:generate # 修改 Rust 观测契约后重新生成前端类型
+```
+
+进程脚本默认使用 `target/debug/layerlens.exe`，可追加 `-- --app <可执行文件路径>`。每次生成独立实例目录，结果写入 `.local/dev-mcp/desktop-*/report.json`，失败诊断保留在同目录的 `process.log`。报告包含源码提交与工作区状态、程序／锁文件／样本指纹、系统信息、操作关联 ID 和最终状态；不得将强制结束或超时视作成功。预览逐像素对照由 Rust MCP 回归完成，桌面脚本核对 PNG 格式和尺寸。
+
+真实 WebView 回归需要匹配的 Microsoft Edge WebDriver。第三批准备脚本检测本机运行时、下载并校验驱动；2026-10-14 已在 `155.0.4283.45` 完成重复回归。完整复跑入口如下，准备步骤需要网络和注册表读取权限，测试需要启动子进程与 CIM 查询权限：
+
+```powershell
+npm run prepare:dev-mcp     # 检测 WebView2，下载匹配驱动并验证签名／版本／SHA-256
+npm run tauri -- build --no-bundle -- --locked # 普通 release，验证开发入口关闭
+npm run build:dev-mcp
+npm run test:dev-mcp:stability -- --repeat 5
+npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
+npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
+```
+
+套件默认先检查一次普通 release，再执行 5 轮业务／WebView 配对并行测试；允许 `--repeat 2` 至 `20`，不自动重试失败。`--app` 默认 `target/debug/layerlens.exe`，`--release-app` 默认 `target/release/layerlens.exe`；`--environment` 默认读取 `.local/dev-mcp/driver-preparation.json`，仅为测试子进程固定运行时。结果写入 `.local/dev-mcp/stability-*/summary.json`、`summary.md` 和逐次 `runs/` 目录。没有结果、实例重复、超时或退出后残留均不能通过。
+
+产物收集默认扫描 `.local/dev-mcp` 下已知回归目录；可用 `-- --source .local/dev-mcp/stability-本次目录` 限定一套结果。默认创建独立 `artifacts-*/files/`，也可用 `--output` 指定尚不存在的目标。只收集报告、日志与指定截图，生成 SHA-256 清单；连接文件、配置、profile、PSD 和驱动不进入副本。CI 在成功／失败后均尝试收集并上传，保留 14 天；本机原始运行目录保留到开发者自行清理。
+
+单次调试仍可用 `test:dev-mcp:webview -- --driver 驱动路径`，`--app` 默认同上，`--visible` 可显示独立测试窗口。该入口要求调用者保证运行时与驱动匹配；套件入口自动核验准备报告。场景经 MCP 操作菜单、草稿／吸附／Alt、任务和清理弹窗，验证刷新恢复和退出码 0；失败保留阶段、最后观测和可用截图。截图证明本次 WebView 捕获结果，物理首帧、系统窗口与其他 DPI 仍另行验收。
+
+手工连接时，在仓库根目录生成本机配置（UTF-8 无 BOM，不提交仓库）：
+
+```powershell
+New-Item -ItemType Directory -Force .local/dev-mcp/manual | Out-Null
+$devMcpConfigPath = Join-Path (Get-Location).Path '.local/dev-mcp/config.json'
+$devMcpConfig = @{
+  sampleRoot = (Resolve-Path 'crates/layerlens-core/tests/fixtures/psd').Path
+  runRoot = (Resolve-Path '.local/dev-mcp/manual').Path
+  port = 0
+  visible = $true
+}
+[IO.File]::WriteAllText($devMcpConfigPath, ($devMcpConfig | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+& ./target/debug/layerlens.exe --dev-mcp-config $devMcpConfigPath
+```
+
+`sampleRoot`、`runRoot` 必须是已存在且互不包含的绝对目录。`port=0` 分配回环端口，`visible` 默认 `false`。客户端在 `runRoot/<instanceId>/ready` 出现后读取同目录 `connection.json`，以其中的 `endpoint` 和 Bearer `token` 初始化 MCP，再调用 `dev_instance` 获取实例／会话身份。连接文件含凭据，不能复制进日志或提交仓库；正常停止监听后回收连接文件，保留 `stopped` 标记与隔离的 WebView profile。
+
+以上手工配置只开启 8 个业务工具。真实界面测试脚本另配置回环 `webDriverUrl`、由驱动启动应用，再用 `dev_ui_attach` 绑定经过身份核验的会话，共启用 13 个工具；前端只读观测桥随该配置启用。支持 `--dev-mcp-config=<路径>` 形式供驱动传参。
+
+需要前端热更新时使用 `npm run dev:mcp -- -- --locked -- --dev-mcp-config $devMcpConfigPath`；仅运行 `dev:mcp` 不启用监听。普通发行构建未编入开发工具，使用以下命令验证它拒绝开发参数：
+
+```powershell
+npm run tauri -- build --no-bundle -- --locked
+npm run test:dev-mcp:desktop -- --app target/release/layerlens.exe --expect-disabled
+```
 
 ## 核心文档服务
 
@@ -100,9 +155,9 @@ cargo run --release --locked -p layerlens-core --example document_preview -- --l
 
 `create_task` 以会话、快照与客户端请求 ID 绑定固定范围；`task_snapshot` 取得本次读取的强引用，`release_task` 幂等释放。切换选区、关闭和重载不改变任务；释放后拒绝新的任务读取，已经取得的引用仍可完成。`SnapshotLease::content_page` 按固定范围分页，保留几何交集、原始边界、全文 UTF-16 区间及绝对样式索引，结构组不增加兄弟图层授权。
 
-快照数量、范围字节、旧选择缓存和任务记录均受独立额度约束，不提高 M1 源修订／预览额度；已释放／失效任务仍保留有界幂等记录。桌面通过同一核心的 `SelectionHandle`／`CleanupHandle` 接入共用的有界操作后台；Rust 契约生成 DTO，`selection_request` 和 `cleanup_request` 分别校验完整请求／响应预算。工作区通知包含与文档列表原子采样的选择摘要、清理代次和完整失效任务 ID 集合，文字不进入通知。默认值、限制与未实现项见[当前核心选区与任务实现](docs/02-技术架构.md#当前核心选区与任务实现m2-01)；MCP 尚未接入。
+快照数量、范围字节、旧选择缓存和任务记录均受独立额度约束，不提高 M1 源修订／预览额度；已释放／失效任务仍保留有界幂等记录。桌面与开发测试 MCP 通过同一核心的 `SelectionHandle`／`CleanupHandle` 接入共用的有界操作后台；Rust 契约生成 DTO，`selection_request` 和 `cleanup_request` 分别校验完整请求／响应预算。工作区通知包含与文档列表原子采样的选择摘要、清理代次和完整失效任务 ID 集合，文字不进入通知。默认值、限制与未实现项见[当前核心选区与任务实现](docs/02-技术架构.md#当前核心选区与任务实现m2-01)；产品 MCP 尚未接入。
 
-桌面图层名称点击与勾选分别用于检查和任务范围。选定范围后在侧栏固定任务，已有任务可查看固定内容、复制引用或释放；关闭全部文档后任务面板仍可使用。任务引用仅在当前会话有效，MCP 未实现前不能据此声称 Agent 已可读取。复制失败时可从只读引用框手动复制。任务记录默认最多 128 条，含已释放／失效记录；释放不恢复记录名额，也不保证其他引用立即归零。
+桌面图层名称点击与勾选分别用于检查和任务范围。选定范围后在侧栏固定任务，已有任务可查看固定内容、复制引用或释放；关闭全部文档后任务面板仍可使用。任务引用仅在当前会话有效；开发测试 MCP 已可读取测试实例的任务，日常实例尚无面向 H5 Agent 的产品 MCP。复制失败时可从只读引用框手动复制。任务记录默认最多 128 条，含已释放／失效记录；释放不恢复记录名额，也不保证其他引用立即归零。
 
 ### 主动资源清理
 
@@ -112,7 +167,7 @@ cargo run --release --locked -p layerlens-core --example document_preview -- --l
 
 待确认计划最多 4 个、有效期 5 分钟；最多保留 128 个成功回执直至会话退出，待确认计划预留回执名额，满额后明确拒绝。清理立即使关联任务不可用并撤销当前旧预览／内容／引用，所有已加载任务页和晚到响应均受终态投影约束；工作区同步失败可重试同步，不重复清理。清理不会删除或改写 PSD 源文件及已导出文件，也不恢复任务记录名额。
 
-清理后旧租约的图层／内容读取在检查点返回失效错误；已返回的不可变元数据、PNG 或已导出文件不能撤回。同步计算和外部强引用仍按生命周期计费，回执不表示内存已归零。新增桌面命令、权限和 DTO 需重启桌面进程（仅 WebView 热更新不足），重启会结束旧会话。自动回归已覆盖上述协议和状态路径，原生弹窗焦点、DPI、桌面交互及资源实测仍待验收。详见[清理架构](docs/02-技术架构.md#当前核心主动清理m2-03)。
+清理后旧租约的图层／内容读取在检查点返回失效错误；已返回的不可变元数据、PNG 或已导出文件不能撤回。同步计算和外部强引用仍按生命周期计费，回执不表示内存已归零。新增桌面命令、权限和 DTO 需重启桌面进程（仅 WebView 热更新不足），重启会结束旧会话。自动回归覆盖上述协议和状态路径，DEV-01 已补充本机真实 WebView 弹窗焦点、Esc、确认与失效同步；系统窗口、跨屏 DPI 和资源实测仍待验收。详见[清理架构](docs/02-技术架构.md#当前核心主动清理m2-03)。
 
 ## PSD 解析实验
 

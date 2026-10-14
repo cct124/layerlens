@@ -7,6 +7,7 @@ use ts_rs::TS;
 use super::capability::Capability;
 
 /// TySh 原文、矩阵及经校验的样式；null 区间表示缺失或不可映射，空数组表示空文本。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TextData {
@@ -23,6 +24,7 @@ pub struct TextData {
 }
 
 /// 仅允许精确原文或原文后单个引擎段落结束符；不按归一化文本猜测区间。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum TextIndexMapping {
@@ -31,6 +33,7 @@ pub enum TextIndexMapping {
 }
 
 /// 属性值及其完整 EngineData 键路径；继承仅使用源文件显式 DefaultRunData。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct TextProperty<T> {
     pub value: T,
@@ -38,6 +41,7 @@ pub struct TextProperty<T> {
 }
 
 /// 尚未有独立参考确认 pt/px 的引擎量；保留数值而不按 DPI 或矩阵换算。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum TextUnit {
@@ -45,6 +49,7 @@ pub enum TextUnit {
 }
 
 /// 原始文字度量值；包含字号、行距、字距和段落间距。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct TextMetric {
     pub value: f64,
@@ -52,6 +57,7 @@ pub struct TextMetric {
 }
 
 /// 明确 Font 索引引用的 FontSet 项；名称不表示本机可用或确定的 CSS 字重。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TextFont {
@@ -62,6 +68,7 @@ pub struct TextFont {
 }
 
 /// 引擎 RGB 颜色的原始 0–1 通道；未执行 ICC 转换，不能直接声明为 sRGB。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct TextColor {
     pub red: f64,
@@ -71,6 +78,7 @@ pub struct TextColor {
 }
 
 /// 源中已读取的字符属性；null 表示缺失、非法或未支持，原因见文字诊断。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CharacterStyle {
@@ -91,6 +99,7 @@ pub struct CharacterStyle {
 }
 
 /// 字符样式的原文 UTF-16 左闭右开区间；边界不拆分代理对。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct TextStyleRun {
     pub start: u32,
@@ -99,6 +108,7 @@ pub struct TextStyleRun {
 }
 
 /// 引擎 Justification 显式枚举；未知值不回退到左对齐。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ParagraphAlignment {
@@ -112,6 +122,7 @@ pub enum ParagraphAlignment {
 }
 
 /// 已读取的段落属性；自动行距仅保留比率，不推算最终排版行高。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ParagraphStyle {
@@ -125,6 +136,7 @@ pub struct ParagraphStyle {
 }
 
 /// 段落属性的原文 UTF-16 左闭右开区间。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct ParagraphStyleRun {
     pub start: u32,
@@ -133,6 +145,7 @@ pub struct ParagraphStyleRun {
 }
 
 /// 缺失、非法、未实现与待独立核验的信息可机器区分。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum TextDiagnosticCode {
@@ -145,6 +158,7 @@ pub enum TextDiagnosticCode {
 }
 
 /// 文字局部诊断；路径指向字段或数组项，不记录文字原文及字体名称。
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct TextDiagnostic {
     pub code: TextDiagnosticCode,

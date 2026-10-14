@@ -3,6 +3,7 @@ name: Checks
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,6 +16,7 @@ jobs:
   windows:
     name: Windows desktop
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,9 +33,74 @@ jobs:
         run: npm run check
       - name: Build Windows installer
         run: npm run desktop:build
+      - name: Verify production has no development entry
+        id: production-gate
+        run: npm run test:dev-mcp:desktop -- --app target/release/layerlens.exe --expect-disabled
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: layerlens-windows
           path: target/release/bundle/nsis/*.exe
           if-no-files-found: error
+      - name: Collect production gate reports
+        if: always() && steps.production-gate.outcome != 'skipped'
+        run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts
+      - name: Retain production gate reports
+        if: always() && steps.production-gate.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: layerlens-production-gate-${{ github.run_attempt }}
+          path: .local/dev-mcp/ci-artifacts/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  dev-mcp-windows:
+    name: Windows development MCP
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install pinned npm
+        run: npm install --global npm@11.17.0
+      - name: Install Rust toolchain
+        run: rustup show
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Prepare matching WebView2 driver
+        id: driver
+        run: npm run prepare:dev-mcp
+      - name: Check development feature and runner
+        run: |
+          npm run check:dev-mcp
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:dev-mcp:scripts
+      - name: Build ordinary release for feature isolation
+        run: npm run tauri -- build --no-bundle -- --locked
+      - name: Build development test application
+        run: npm run build:dev-mcp
+      - name: Repeat isolated business and WebView scenarios
+        timeout-minutes: 15
+        run: npm run test:dev-mcp:stability -- --repeat 5
+      - name: Collect bounded diagnostic artifacts
+        if: always() && steps.driver.outcome != 'skipped'
+        run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts
+      - name: Add stability summary
+        if: always() && steps.driver.outcome != 'skipped'
+        run: |
+          Get-ChildItem -Path .local/dev-mcp/stability-*/summary.md -ErrorAction SilentlyContinue |
+            ForEach-Object { Get-Content -LiteralPath $_.FullName | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+      - name: Retain development reports and screenshots
+        if: always() && steps.driver.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: layerlens-dev-mcp-${{ github.run_attempt }}
+          # 收集器只输出白名单文件，不上传 instances/、profile、config 或驱动程序。
+          path: .local/dev-mcp/ci-artifacts/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

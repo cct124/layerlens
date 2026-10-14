@@ -42,15 +42,24 @@ function copyTask(task: TaskDto) {
           左上角（{{ model.summary.region.x }}, {{ model.summary.region.y }}），单位为原稿像素。
         </p>
       </details>
-      <button :disabled="model.busy" @click="model.clear">清空任务范围</button>
-      <button :disabled="model.busy" @click="model.viewScope()">查看当前范围内容</button>
+      <button data-dev-target="range:clear" :disabled="model.busy" @click="model.clear">
+        清空任务范围
+      </button>
+      <button data-dev-target="range:view" :disabled="model.busy" @click="model.viewScope()">
+        查看当前范围内容
+      </button>
     </template>
     <p v-else class="subtle">尚未选择范围。选择后可以查看内容，并固定为任务。</p>
     <label class="task-name"
-      >任务名称<input v-model="name" maxlength="256" :disabled="model.busy"
+      >任务名称<input
+        v-model="name"
+        data-dev-target="task:name"
+        maxlength="256"
+        :disabled="model.busy"
     /></label>
     <button
       class="primary-button"
+      data-dev-target="task:create"
       :disabled="model.busy || !model.summary?.scope?.targetCount || !name.trim()"
       @click="model.createTask(name)"
     >
@@ -66,7 +75,9 @@ function copyTask(task: TaskDto) {
     </details>
     <div class="panel-heading">
       <h3>固定任务</h3>
-      <button :disabled="model.busy" @click="model.refreshTasks()">刷新任务</button>
+      <button data-dev-target="task:refresh" :disabled="model.busy" @click="model.refreshTasks()">
+        刷新任务
+      </button>
     </div>
     <p v-if="!model.total" class="subtle">暂无固定任务。</p>
     <details v-else class="technical-details">
@@ -85,16 +96,28 @@ function copyTask(task: TaskDto) {
             {{ task.scope.documentRevision }} · 快照 #{{ task.scope.snapshotId }}
           </p>
         </details>
-        <button :disabled="model.busy || task.status !== 'active'" @click="model.viewScope(task)">
+        <button
+          :data-dev-target="`task:${task.id}:view`"
+          :disabled="model.busy || task.status !== 'active'"
+          @click="model.viewScope(task)"
+        >
           查看任务内容
         </button>
         <button :disabled="model.busy || task.status !== 'active'" @click="copyTask(task)">
           复制引用
         </button>
-        <button :disabled="model.busy || task.status !== 'active'" @click="model.releaseTask(task)">
+        <button
+          :data-dev-target="`task:${task.id}:release`"
+          :disabled="model.busy || task.status !== 'active'"
+          @click="model.releaseTask(task)"
+        >
           释放任务
         </button>
-        <button :disabled="model.busy || task.status !== 'active'" @click="emit('cleanup', task)">
+        <button
+          :data-dev-target="`task:${task.id}:cleanup`"
+          :disabled="model.busy || task.status !== 'active'"
+          @click="emit('cleanup', task)"
+        >
           清理所属文档资源…
         </button>
       </li>

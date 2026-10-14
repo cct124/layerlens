@@ -87,11 +87,12 @@ onBeforeUnmount(() => {
     </p>
     <p v-if="model.error" role="alert" class="cleanup-warning">{{ model.error }}</p>
     <footer>
-      <button :disabled="model.busy" @click="model.cancel">
+      <button data-dev-target="cleanup:cancel" :disabled="model.busy" @click="model.cancel">
         {{ model.state?.kind === 'complete' ? '关闭' : '取消' }}
       </button>
       <button
         v-if="model.state?.kind === 'failed' || model.state?.kind === 'stale'"
+        data-dev-target="cleanup:recheck"
         :disabled="model.busy"
         @click="model.recheck"
       >
@@ -99,6 +100,7 @@ onBeforeUnmount(() => {
       </button>
       <button
         v-if="model.state?.kind === 'complete' && model.error"
+        data-dev-target="cleanup:sync"
         :disabled="model.busy"
         @click="model.synchronize"
       >
@@ -111,6 +113,7 @@ onBeforeUnmount(() => {
           model.state?.kind === 'confirming'
         "
         class="cleanup-confirm"
+        data-dev-target="cleanup:confirm"
         :disabled="model.busy"
         @click="model.confirm"
       >

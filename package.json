@@ -12,6 +12,18 @@
     "prepare": "husky",
     "dev": "tauri dev",
     "dev:web": "vite",
+    "dev:mcp": "tauri dev --features dev-mcp",
+    "build:dev-mcp": "tauri build --debug --no-bundle --features dev-mcp -- --locked",
+    "test:dev-mcp": "cargo test --locked -p layerlens-desktop --features dev-mcp --lib",
+    "test:dev-mcp:desktop": "node scripts/test-dev-mcp.mjs",
+    "test:dev-mcp:webview": "node scripts/test-dev-webview.mjs",
+    "prepare:dev-mcp": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-dev-webdriver.ps1",
+    "test:dev-mcp:stability": "node scripts/test-dev-stability.mjs",
+    "test:dev-mcp:scripts": "node --test scripts/dev-mcp-runner.test.mjs",
+    "artifacts:dev-mcp": "node scripts/collect-dev-mcp-artifacts.mjs",
+    "bindings:dev:generate": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings",
+    "bindings:dev:check": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings -- --check",
+    "check:dev-mcp": "npm run format:check && cargo clippy --locked -p layerlens-desktop --features dev-mcp --all-targets -- -D warnings && npm run test:dev-mcp && npm run bindings:dev:check",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -38,7 +50,7 @@
     "bindings:check": "cargo run --locked -p layerlens-core --example export_bindings -- --check",
     "check:frontend": "npm run format:web:check && npm run typecheck && npm run lint && npm run test && vite build",
     "check:rust": "npm run fixtures:check && npm run format:rust:check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked && cargo test --locked -p layerlens-core --example inspect_psd && npm run test:parser && npm run bindings:check && npm run test:measurement",
-    "check": "npm run check:frontend && npm run check:rust && npm run test:hooks"
+    "check": "npm run check:frontend && npm run check:rust && npm run test:hooks && npm run test:dev-mcp:scripts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
