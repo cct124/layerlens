@@ -80,13 +80,11 @@ impl Pending {
         let now = Instant::now();
         let started_at = self.execution.started_at();
         let started = started_at.unwrap_or(now);
-        self.handle
-            .signal
-            .set(JobStatus::Finished(Arc::new(JobCompletion {
-                outcome,
-                queued_for: started.duration_since(self.queued_at),
-                executed_for: started_at.map_or(Duration::ZERO, |time| now.duration_since(time)),
-            })));
+        self.handle.signal.finish(JobCompletion {
+            outcome,
+            queued_for: started.duration_since(self.queued_at),
+            executed_for: started_at.map_or(Duration::ZERO, |time| now.duration_since(time)),
+        });
     }
 }
 

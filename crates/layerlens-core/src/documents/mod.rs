@@ -104,7 +104,7 @@ impl DocumentService {
             let summary = entry.summary();
             let id = state.allocate_id()?;
             let signal = Arc::new(JobSignal::new());
-            signal.set(JobStatus::Finished(Arc::new(JobCompletion {
+            Arc::clone(&signal).finish(JobCompletion {
                 outcome: OpenOutcome::Opened {
                     document_id: summary.id,
                     revision_id: summary.revision,
@@ -112,7 +112,7 @@ impl DocumentService {
                 },
                 queued_for: Duration::ZERO,
                 executed_for: Duration::ZERO,
-            })));
+            });
             state.set_active(Some(summary.id))?;
             state.activation = None;
             return Ok(OpenJob { id, signal });

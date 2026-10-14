@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { redact, summarize } from './dev-mcp-artifacts.mjs';
 import { isolatedEnvironment, runProcess } from './dev-mcp-runner.mjs';
+import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values } = parseArgs({
@@ -132,7 +133,7 @@ async function execute(kind, iteration) {
         path.join(runs, name),
         '-Terminate',
       ],
-      { cwd: root, timeoutMs: 15000 },
+      { cwd: root, env: windowsPowerShellEnvironment(), timeoutMs: 15000 },
     );
     try {
       assert.equal(checked.code, 0, checked.output);

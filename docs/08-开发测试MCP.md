@@ -4,7 +4,7 @@
 
 在 LayerLens 测试实例内提供显式启用的 MCP，供开发 Agent 探索、定位故障，并供确定性脚本重复执行跨层回归。目标是逐步覆盖应用的全部已实现功能，包括业务操作、界面交互和状态观测；覆盖范围随功能交付维护，不为尚未实现的局部参考图、导出或产品工具提供假成功入口。
 
-本文件维护设计与已实现边界。DEV-01 第一批已实现[业务入口与有界等待](#当前实现dev-01-第一批)，第二批已接入[真实 WebView 输入与前端观测](#当前实现dev-01-第二批)，第三批已配置[Windows CI、稳定性与产物保留](#当前实现dev-01-第三批)。本机重复回归通过，新增远端流水线尚未运行。具体证据和优先顺序见[开发记录](../devlog/README.md)与 [DEV-01](../devlog/_plan/261013/DEV-01-开发测试MCP与M2自动验收.md)，运行命令见[项目 README](../README.md#开发测试-mcp)。
+本文件维护设计与已实现边界。DEV-01 第一批已实现[业务入口与有界等待](#当前实现dev-01-第一批)，第二批已接入[真实 WebView 输入与前端观测](#当前实现dev-01-第二批)，第三批已配置[Windows CI、稳定性与产物保留](#当前实现dev-01-第三批)。本机重复回归已有证据；远端运行暴露的阻塞及修复验证统一记录在 [DEV-01](../devlog/_plan/261013/DEV-01-开发测试MCP与M2自动验收.md)，当前优先顺序见[开发记录](../devlog/README.md)，运行命令见[项目 README](../README.md#开发测试-mcp)。
 
 开发测试 MCP 提供可操作、可等待、可观测的入口，测试预期由样本和验收规范独立给出。保留已有 Rust 单元／集成测试与 Vitest 测试；跨层回归只覆盖需要真实实例、状态同步或文件行为的场景。M2 的系统窗口、文件选择器、跨屏 DPI 等验收继续保留，不能因增加测试协议而自动归档。
 
@@ -112,6 +112,8 @@ Schema 从 Rust DTO 与 `schemars` 生成，核心只增加可选 `schema` 派�
 [Windows 工作流](../.github/workflows/ci.yml)保留原普通构建检查与 NSIS 安装包，并在普通产物上执行开发入口关闭检查；另有独立的 `Windows development MCP` 作业（`windows-2022`），使用锁定 Node／npm／Rust，执行开发特性检查、脚本回归、普通 release 和开发 debug 构建，再运行与本地相同的稳定性入口。两种构建分别启动验证，不能用开发程序代替普通发行关闭检查。新增工作流已通过本地静态检查；实际 GitHub runner 兼容性仍以首次远端运行结果为准。
 
 `prepare:dev-mcp` 按 Microsoft 的[运行时检测规则](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)读取机器／用户注册版本，核对实际程序文件，从 Microsoft 的版本化 URL 获取 x64 EdgeDriver，仅提取预期可执行文件并核对 Authenticode 签名、完整版本与 SHA-256。已有匹配驱动可复用，但仍校验；不安装或升级系统运行时，也不回退到任意旧驱动。准备成功或失败均写入 `.local/dev-mcp/driver-preparation.json`。
+
+Windows PowerShell 5.1 子进程统一移除继承的 `PSModulePath`，由该版本重建标准模块路径；变量名按 Windows 大小写不敏感规则处理，不修改父进程或用户／系统环境。npm 准备／测量入口经 `run-powershell.mjs` 启动，WebView 退出监测、稳定性进程检查与测量测试复用同一环境函数，避免 CI 的 `pwsh → Node → powershell` 链路丢失哈希、签名等系统命令。真实子进程回归覆盖错误模块路径、参数透传和非零退出码。
 
 稳定性套件读取准备报告，重新核验驱动／运行时指纹，只向测试子进程指定该运行时目录，并移除继承的其他 `WEBVIEW2_*` 覆盖项，避免使用日常 profile 或调试会话。不修改用户／系统环境。Evergreen 版本可能随系统更新变化，因此采用“每套运行固定版本并记录指纹”，不宣称不同 runner 镜像天然相同；版本对应的下载不可用或指纹发生变化时明确失败。
 

@@ -10,6 +10,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { redact } from './dev-mcp-artifacts.mjs';
+import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -175,6 +176,7 @@ function observeProcess(pid) {
     pid +
     "); $null=$testProcess.Handle; Write-Output 'watching'; $testProcess.WaitForExit(); Write-Output $testProcess.ExitCode";
   const child = spawn('powershell', ['-NoProfile', '-Command', command], {
+    env: windowsPowerShellEnvironment(),
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });

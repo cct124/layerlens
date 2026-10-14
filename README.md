@@ -91,6 +91,8 @@ npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
 npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
 ```
 
+上述 npm 入口可从 Windows PowerShell 5.1 或 PowerShell 7 启动。调用 5.1 的子进程会独立重建模块搜索路径，避免继承 PowerShell 7 的 `PSModulePath` 导致哈希／签名校验命令不可用；不修改用户或系统环境，脚本失败仍返回非零退出码。
+
 套件默认先检查一次普通 release，再执行 5 轮业务／WebView 配对并行测试；允许 `--repeat 2` 至 `20`，不自动重试失败。`--app` 默认 `target/debug/layerlens.exe`，`--release-app` 默认 `target/release/layerlens.exe`；`--environment` 默认读取 `.local/dev-mcp/driver-preparation.json`，仅为测试子进程固定运行时。结果写入 `.local/dev-mcp/stability-*/summary.json`、`summary.md` 和逐次 `runs/` 目录。没有结果、实例重复、超时或退出后残留均不能通过。
 
 产物收集默认扫描 `.local/dev-mcp` 下已知回归目录；可用 `-- --source .local/dev-mcp/stability-本次目录` 限定一套结果。默认创建独立 `artifacts-*/files/`，也可用 `--output` 指定尚不存在的目标。只收集报告、日志与指定截图，生成 SHA-256 清单；连接文件、配置、profile、PSD 和驱动不进入副本。CI 在成功／失败后均尝试收集并上传，保留 14 天；本机原始运行目录保留到开发者自行清理。

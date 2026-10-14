@@ -33,15 +33,13 @@ impl Pending {
     fn finish(self, outcome: PreviewOutcome, timings: Option<crate::psd::PngTimings>) {
         let now = Instant::now();
         let started = self.execution.started_at();
-        self.handle
-            .signal
-            .set(JobStatus::Finished(Arc::new(PreviewCompletion {
-                outcome,
-                cache_hit: false,
-                queued_for: started.unwrap_or(now).duration_since(self.queued_at),
-                executed_for: started.map_or(Duration::ZERO, |at| now.duration_since(at)),
-                png_timings: timings,
-            })));
+        self.handle.signal.finish(PreviewCompletion {
+            outcome,
+            cache_hit: false,
+            queued_for: started.unwrap_or(now).duration_since(self.queued_at),
+            executed_for: started.map_or(Duration::ZERO, |at| now.duration_since(at)),
+            png_timings: timings,
+        });
     }
 }
 
@@ -213,15 +211,13 @@ impl DocumentService {
             signal: Arc::new(JobSignal::new()),
         };
         if let Some(image) = state.previews.cached(key) {
-            handle
-                .signal
-                .set(JobStatus::Finished(Arc::new(PreviewCompletion {
-                    outcome: PreviewOutcome::Ready(image),
-                    cache_hit: true,
-                    queued_for: Duration::ZERO,
-                    executed_for: Duration::ZERO,
-                    png_timings: None,
-                })));
+            Arc::clone(&handle.signal).finish(PreviewCompletion {
+                outcome: PreviewOutcome::Ready(image),
+                cache_hit: true,
+                queued_for: Duration::ZERO,
+                executed_for: Duration::ZERO,
+                png_timings: None,
+            });
             return Ok(handle);
         }
         if state.pending_count() >= self.shared.config.max_pending_jobs {

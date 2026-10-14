@@ -215,48 +215,73 @@ pub enum JobStatus<C = JobCompletion> {
     Cancelling,
     /// 发布决定已提交，正在锁外释放被丢弃的数据；此时不再接受取消。
     Finishing,
+    /// 后台发布句柄已释放；结果仅由调用方句柄、返回值及缓存继续保留。
     Finished(Arc<C>),
 }
 
 pub(super) struct JobSignal<C = JobCompletion> {
     status: Mutex<JobStatus<C>>,
-    changed: Condvar,
+    // 完成通知独立于结果：通知方在释放最后一个后台结果引用后仍可唤醒等待方。
+    finished: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl<C: Clone> JobSignal<C> {
     pub fn new() -> Self {
         Self {
             status: Mutex::new(JobStatus::Queued),
-            changed: Condvar::new(),
+            finished: Arc::new((Mutex::new(false), Condvar::new())),
         }
     }
     pub fn set(&self, status: JobStatus<C>) {
+        assert!(
+            !matches!(status, JobStatus::Finished(_)),
+            "终态必须通过 finish 移交后台句柄"
+        );
         *lock(&self.status) = status;
-        self.changed.notify_all();
+    }
+    pub fn finish(self: Arc<Self>, completion: C) {
+        self.finish_with(completion, || {});
+    }
+    fn finish_with(self: Arc<Self>, completion: C, before_release: impl FnOnce()) {
+        let finished = Arc::clone(&self.finished);
+        *lock(&self.status) = JobStatus::Finished(Arc::new(completion));
+        // 测试在结果写入与后台引用释放之间设置同步检查点，生产闭包为空。
+        before_release();
+        drop(self);
+        *lock(&finished.0) = true;
+        finished.1.notify_all();
     }
     pub fn status(&self) -> JobStatus<C> {
-        lock(&self.status).clone()
-    }
-    pub fn wait(&self) -> Arc<C> {
-        let mut status = lock(&self.status);
-        loop {
-            if let JobStatus::Finished(result) = &*status {
-                return Arc::clone(result);
-            }
-            status = self.changed.wait(status).expect("作业信号锁不应中毒");
+        let finished = *lock(&self.finished.0);
+        let status = lock(&self.status);
+        // 轮询和阻塞等待共享发布边界，不能从尚未移交的结果提前观察到终态。
+        if !finished && matches!(*status, JobStatus::Finished(_)) {
+            JobStatus::Finishing
+        } else {
+            status.clone()
         }
     }
-    pub fn wait_timeout(&self, timeout: Duration) -> Option<Arc<C>> {
-        let status = lock(&self.status);
-        let (status, _) = self
-            .changed
-            .wait_timeout_while(status, timeout, |value| {
-                !matches!(value, JobStatus::Finished(_))
-            })
+    pub fn wait(&self) -> Arc<C> {
+        let (finished, changed) = &*self.finished;
+        let guard = changed
+            .wait_while(lock(finished), |value| !*value)
             .expect("作业信号锁不应中毒");
-        match &*status {
-            JobStatus::Finished(result) => Some(Arc::clone(result)),
-            _ => None,
+        drop(guard);
+        self.result()
+    }
+    pub fn wait_timeout(&self, timeout: Duration) -> Option<Arc<C>> {
+        let (finished, changed) = &*self.finished;
+        let (guard, _) = changed
+            .wait_timeout_while(lock(finished), timeout, |value| !*value)
+            .expect("作业信号锁不应中毒");
+        let ready = *guard;
+        drop(guard);
+        ready.then(|| self.result())
+    }
+    fn result(&self) -> Arc<C> {
+        match &*lock(&self.status) {
+            JobStatus::Finished(result) => Arc::clone(result),
+            _ => unreachable!("完成通知前必须已发布结果"),
         }
     }
 }
@@ -294,3 +319,7 @@ impl OpenJob {
 pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().expect("文档服务内部状态锁不应中毒")
 }
+
+#[cfg(test)]
+#[path = "job_signal_tests.rs"]
+mod job_signal_tests;

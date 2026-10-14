@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -29,7 +30,7 @@ async function measure(input, output, ...extra) {
       '2',
       ...extra,
     ],
-    { cwd: root, windowsHide: true, timeout: 120_000 },
+    { cwd: root, env: windowsPowerShellEnvironment(), windowsHide: true, timeout: 120_000 },
   );
 }
 
