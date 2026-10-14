@@ -68,7 +68,7 @@ Windows CI 使用相同的完整检查入口、构建 NSIS 安装包并验证普
 
 ### 开发测试 MCP
 
-[DEV-01](devlog/_plan/261013/DEV-01-开发测试MCP与M2自动验收.md) 已接入受控实例业务操作、真实 WebView 输入、前端同步观测与截图，共享同一核心及准入规则。第三批 Windows CI 配置、重复回归和产物收集已实现，本机稳定性测试通过；新增远端 CI、系统选择器及跨屏 DPI 等仍待验收。业务工具见[第一批](docs/08-开发测试MCP.md#当前实现dev-01-第一批)，UI 工具见[第二批](docs/08-开发测试MCP.md#当前实现dev-01-第二批)，CI 与报告规则见[第三批](docs/08-开发测试MCP.md#当前实现dev-01-第三批)。
+[DEV-01](devlog/_fin/261014/DEV-01-开发测试MCP与M2自动验收.md) 已完成业务／真实 WebView、隔离、重复回归和本机／Windows CI 产物验证并归档；剩余产品场景与原生专项由 M2 继续验收。业务工具见[第一批](docs/08-开发测试MCP.md#当前实现dev-01-第一批)，UI 工具见[第二批](docs/08-开发测试MCP.md#当前实现dev-01-第二批)，CI 与报告规则见[第三批](docs/08-开发测试MCP.md#当前实现dev-01-第三批)。
 
 ```powershell
 npm run check:dev-mcp        # 开发特性的格式、Clippy、桌面 Rust 测试与观测 DTO 一致性
@@ -87,6 +87,7 @@ npm run prepare:dev-mcp     # 检测 WebView2，下载匹配驱动并验证签�
 npm run tauri -- build --no-bundle -- --locked # 普通 release，验证开发入口关闭
 npm run build:dev-mcp
 npm run test:dev-mcp:stability -- --repeat 5
+npm run test:dev-mcp:m2     # 独立实例验证基线、三种缩放几何及当前文档清理
 npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
 npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
 ```
@@ -98,6 +99,8 @@ npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；�
 产物收集默认扫描 `.local/dev-mcp` 下已知回归目录；可用 `-- --source .local/dev-mcp/stability-本次目录` 限定一套结果。默认创建独立 `artifacts-*/files/`，也可用 `--output` 指定尚不存在的目标。只收集报告、日志与指定截图，生成 SHA-256 清单；连接文件、配置、profile、PSD 和驱动不进入副本。CI 在成功／失败后均尝试收集并上传，保留 14 天；本机原始运行目录保留到开发者自行清理。
 
 单次调试仍可用 `test:dev-mcp:webview -- --driver 驱动路径`，`--app` 默认同上，`--visible` 可显示独立测试窗口。该入口要求调用者保证运行时与驱动匹配；套件入口自动核验准备报告。场景经 MCP 操作菜单、草稿／吸附／Alt、任务和清理弹窗，验证刷新恢复和退出码 0；失败保留阶段、最后观测和可用截图。截图证明本次 WebView 捕获结果，物理首帧、系统窗口与其他 DPI 仍另行验收。
+
+M2 套件使用 `--webview-suite m2`，至少 5 轮，依次执行 `baseline`、`geometry-25`、`geometry-100`、`geometry-200`、`cleanup`；单场景调试可给 `test:dev-mcp:webview` 追加 `--scenario`。每场景使用新实例，保持 128 条变更回执上限；滚轮整数步长使 25%／200% 有不超过 0.2 个百分点的偏差，报告保留实际比例，断言按 CSS 像素取整误差核对文档坐标。这些是画布缩放测试，不代表系统 DPI 验收。
 
 手工连接时，在仓库根目录生成本机配置（UTF-8 无 BOM，不提交仓库）：
 

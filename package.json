@@ -19,6 +19,7 @@
     "test:dev-mcp:webview": "node scripts/test-dev-webview.mjs",
     "prepare:dev-mcp": "node scripts/run-powershell.mjs -ExecutionPolicy Bypass -File scripts/prepare-dev-webdriver.ps1",
     "test:dev-mcp:stability": "node scripts/test-dev-stability.mjs",
+    "test:dev-mcp:m2": "node scripts/test-dev-stability.mjs --repeat 5 --webview-suite m2",
     "test:dev-mcp:scripts": "node --test scripts/dev-mcp-runner.test.mjs scripts/windows-powershell.test.mjs",
     "artifacts:dev-mcp": "node scripts/collect-dev-mcp-artifacts.mjs",
     "bindings:dev:generate": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings",

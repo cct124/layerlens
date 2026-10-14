@@ -25,6 +25,7 @@ pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
         "task:name",
         "task:create",
         "task:refresh",
+        "task:more",
         "cleanup:cancel",
         "cleanup:confirm",
         "cleanup:recheck",

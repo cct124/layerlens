@@ -122,7 +122,12 @@ function copyTask(task: TaskDto) {
         </button>
       </li>
     </ul>
-    <button v-if="model.nextAfter" :disabled="model.busy" @click="model.refreshTasks(true)">
+    <button
+      v-if="model.nextAfter"
+      data-dev-target="task:more"
+      :disabled="model.busy"
+      @click="model.refreshTasks(true)"
+    >
       加载更多任务
     </button>
     <section v-if="model.content" class="scope-content" aria-label="固定范围内容">

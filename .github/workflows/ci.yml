@@ -86,6 +86,9 @@ jobs:
       - name: Repeat isolated business and WebView scenarios
         timeout-minutes: 15
         run: npm run test:dev-mcp:stability -- --repeat 5
+      - name: Verify M2 geometry reload and cleanup scenarios
+        timeout-minutes: 15
+        run: npm run test:dev-mcp:m2
       - name: Collect bounded diagnostic artifacts
         if: always() && steps.driver.outcome != 'skipped'
         run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts

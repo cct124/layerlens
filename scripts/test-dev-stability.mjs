@@ -17,11 +17,18 @@ const { values } = parseArgs({
     app: { type: 'string', default: 'target/debug/layerlens.exe' },
     'release-app': { type: 'string', default: 'target/release/layerlens.exe' },
     repeat: { type: 'string', default: '5' },
+    'webview-suite': { type: 'string', default: 'baseline' },
   },
 });
 assert.equal(process.platform, 'win32', '稳定性测试当前只支持 Windows。');
 assert.match(values.repeat, /^(?:[2-9]|1[0-9]|20)$/, '重复次数为 2–20。');
 const repeats = Number(values.repeat);
+assert(['baseline', 'm2'].includes(values['webview-suite']));
+const scenarios =
+  values['webview-suite'] === 'm2'
+    ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
+    : ['baseline'];
+assert(repeats >= scenarios.length, 'M2 套件至少 5 轮，不能遗漏场景。');
 const base = path.join(root, '.local/dev-mcp');
 await mkdir(base, { recursive: true });
 const directory = await mkdtemp(path.join(base, 'stability-'));
@@ -35,6 +42,7 @@ const report = {
   repeats,
   concurrency: 2,
   automaticRetries: 0,
+  webviewScenarios: scenarios,
   expectedBuildModes: { development: 'debug with dev-mcp', production: 'release without dev-mcp' },
   ci: {
     runId: process.env.GITHUB_RUN_ID ?? null,
@@ -72,11 +80,13 @@ async function execute(kind, iteration) {
     path.resolve(root, kind === 'disabled' ? values['release-app'] : values.app),
   ];
   if (kind === 'disabled') args.push('--expect-disabled');
-  if (kind === 'webview') args.push('--driver', environment.driverPath);
+  const scenario = kind === 'webview' ? scenarios[(iteration - 1) % scenarios.length] : null;
+  if (kind === 'webview') args.push('--driver', environment.driverPath, '--scenario', scenario);
   const outcome = await runProcess(process.execPath, args, { cwd: root, env: childEnv });
   const result = {
     kind,
     iteration,
+    scenario,
     passed: false,
     code: outcome.code,
     timedOut: outcome.timedOut,
@@ -107,6 +117,7 @@ async function execute(kind, iteration) {
     assert.equal(data.appSha256, kind === 'disabled' ? releaseHash : appHash, '轮间程序指纹变化。');
     if (kind !== 'disabled') assert.match(data.instanceId, /^[a-f0-9-]{36}$/);
     if (kind === 'webview') {
+      assert.equal(data.scenario, scenario, 'WebView 报告必须对应本轮指定场景。');
       assert.equal(
         data.driver.browserVersion,
         environment.runtimeVersion,
@@ -207,6 +218,7 @@ try {
     '# 开发 MCP 稳定性报告',
     '',
     '状态：' + report.status + '；自动重试：0。',
+    'WebView 场景：' + scenarios.join('、') + '。',
     '',
     '| 场景 | 次数 | 通过 | 失败 | 最小 / 中位 / 最大 ms |',
     '| --- | --- | --- | --- | --- |',

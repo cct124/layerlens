@@ -94,6 +94,7 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
         "menu:file",
         "command:tasks",
         "task:1:view",
+        "task:more",
         "document:2",
         "layer:0:check",
         "handle:se",
@@ -117,6 +118,53 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
         .is_err()
     );
 }
+#[test]
+fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
+    let mut view = observation(100, 1);
+    assert!(super::driver::validate_scroll(&view, 10, 20, 1).is_err());
+    view.canvas = Some(UiCanvas {
+        viewport: UiRect {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 80.0,
+        },
+        image: None,
+        document_width: 256,
+        document_height: 128,
+        image_decoded: true,
+        paint_prepared: true,
+        image_error: None,
+        zoom: 1.0,
+        draft: None,
+        alt: false,
+        snap_guides: 0,
+    });
+    for delta in [-200, -1, 1, 200] {
+        assert!(super::driver::validate_scroll(&view, 10, 20, delta).is_ok());
+    }
+    for (x, y, delta) in [
+        (9, 20, 1),
+        (110, 20, 1),
+        (10, 100, 1),
+        (10, 20, 0),
+        (10, 20, i32::MIN),
+        (10, 20, 201),
+    ] {
+        assert_eq!(
+            super::driver::validate_scroll(&view, x, y, delta)
+                .unwrap_err()
+                .code,
+            Code::InvalidInput
+        );
+    }
+    view.cleanup.opened = true;
+    assert!(super::driver::validate_scroll(&view, 10, 20, 1).is_err());
+    view.cleanup.opened = false;
+    view.canvas.as_mut().unwrap().image_decoded = false;
+    assert!(super::driver::validate_scroll(&view, 10, 20, 1).is_err());
+}
+
 #[tokio::test]
 async fn wait_wakes_on_actual_report_times_out_with_last_state_and_rejects_generation_change() {
     let state = Observations::default();

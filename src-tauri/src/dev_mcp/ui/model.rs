@@ -131,6 +131,12 @@ pub(crate) enum UiAction {
         end_y: i32,
         hold: bool,
     },
+    /// 真实 W3C 滚轮输入；位置限定已显示画布，单次 deltaY 为非零且绝对值不超过 200。
+    Scroll {
+        x: i32,
+        y: i32,
+        delta_y: i32,
+    },
     Key {
         key: UiKey,
         phase: KeyPhase,

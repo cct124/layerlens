@@ -12,6 +12,46 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
+fn validate_canvas_input(
+    before: &UiObservation,
+    points: &[(i32, i32)],
+) -> Result<(), WorkspaceError> {
+    let canvas = before
+        .canvas
+        .as_ref()
+        .ok_or_else(|| error(Code::InvalidInput, "当前没有可操作的画布。"))?;
+    if !canvas.image_decoded
+        || before.cleanup.opened
+        || points.iter().any(|&(x, y)| {
+            f64::from(x) < canvas.viewport.x
+                || f64::from(x) >= canvas.viewport.x + canvas.viewport.width
+                || f64::from(y) < canvas.viewport.y
+                || f64::from(y) >= canvas.viewport.y + canvas.viewport.height
+        })
+    {
+        return Err(error(
+            Code::InvalidInput,
+            "输入须在已显示的画布内，且不能穿过模态窗口。",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn validate_scroll(
+    before: &UiObservation,
+    x: i32,
+    y: i32,
+    delta_y: i32,
+) -> Result<(), WorkspaceError> {
+    if delta_y == 0 || !(-200..=200).contains(&delta_y) {
+        return Err(error(
+            Code::InvalidInput,
+            "滚轮 deltaY 须非零且在 -200 至 200 内。",
+        ));
+    }
+    validate_canvas_input(before, &[(x, y)])
+}
+
 pub(crate) struct Driver {
     client: Client,
     endpoint: Url,
@@ -262,26 +302,7 @@ impl Driver {
                 end_y,
                 hold,
             } => {
-                let canvas = before
-                    .canvas
-                    .as_ref()
-                    .ok_or_else(|| error(Code::InvalidInput, "当前没有可拖动的画布。"))?;
-                let inside = |x: i32, y: i32| {
-                    f64::from(x) >= canvas.viewport.x
-                        && f64::from(x) < canvas.viewport.x + canvas.viewport.width
-                        && f64::from(y) >= canvas.viewport.y
-                        && f64::from(y) < canvas.viewport.y + canvas.viewport.height
-                };
-                if !canvas.image_decoded
-                    || before.cleanup.opened
-                    || !inside(start_x, start_y)
-                    || !inside(end_x, end_y)
-                {
-                    return Err(error(
-                        Code::InvalidInput,
-                        "拖动须在已显示的画布内，且不能穿过模态窗口。",
-                    ));
-                }
+                validate_canvas_input(&before, &[(start_x, start_y), (end_x, end_y)])?;
                 let mut actions = vec![
                     json!({"type":"pointerMove","origin":"viewport","x":start_x,"y":start_y,"duration":0}),
                     json!({"type":"pointerDown","button":0}),
@@ -295,6 +316,20 @@ impl Driver {
                 self.held.store(true, Ordering::Release);
                 self.session_command(Method::POST,"actions",Some(json!({"actions":[{"type":"pointer","id":"layerlens-pointer","parameters":{"pointerType":"mouse"},"actions":actions}]}))).await?;
                 self.held.store(hold, Ordering::Release);
+            }
+            UiAction::Scroll { x, y, delta_y } => {
+                validate_scroll(&before, x, y, delta_y)?;
+                self.session_command(
+                    Method::POST,
+                    "actions",
+                    Some(json!({
+                        "actions":[{"type":"wheel","id":"layerlens-wheel","actions":[{
+                            "type":"scroll","origin":"viewport","x":x,"y":y,
+                            "deltaX":0,"deltaY":delta_y,"duration":0
+                        }]}]
+                    })),
+                )
+                .await?;
             }
             UiAction::Key { key, phase } => {
                 let value = match key {

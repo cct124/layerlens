@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { redact } from './dev-mcp-artifacts.mjs';
 import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
+import { exerciseOpenCleanup, exerciseRegionControls } from './dev-mcp-m2-webview.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -18,9 +19,13 @@ const { values: options } = parseArgs({
     app: { type: 'string' },
     visible: { type: 'boolean', default: false },
     'output-root': { type: 'string' },
+    scenario: { type: 'string', default: 'baseline' },
   },
 });
 assert.equal(process.platform, 'win32', '当前真实 WebView 回归仅验证 Windows。');
+assert(
+  ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup'].includes(options.scenario),
+);
 assert(
   options.driver,
   '用法：npm run test:dev-mcp:webview -- --driver <msedgedriver.exe> [--app <layerlens.exe>]',
@@ -43,6 +48,7 @@ async function hash(file) {
 const sourceHashes = await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s))));
 const report = {
   evidence: 'webview-webdriver-mcp',
+  scenario: options.scenario,
   passed: false,
   phase: 'driver-start',
   checks: [],
@@ -257,6 +263,11 @@ const core = async () =>
     .snapshot;
 const workspace = async (action) =>
   (await tool('dev_workspace', args({ protocolVersion: 1, action }, true))).value;
+const selection = (operation, mutation = true) =>
+  tool(
+    'dev_selection',
+    args({ protocolVersion: 1, sessionId: info.sessionId, operation }, mutation),
+  );
 async function wait(condition) {
   const r = (
     await tool('dev_ui_wait', args({ frontendId: frontend ?? null, condition, timeoutMs: 10000 }))
@@ -280,6 +291,12 @@ async function action(input) {
 }
 const click = (target) => action({ kind: 'click', target });
 const key = (key, phase = 'press') => action({ kind: 'key', key, phase });
+const inspectDialog = () =>
+  wd('/session/' + session + '/execute/sync', {
+    script:
+      "const dialog=document.querySelector('dialog[open]'); const list=dialog?.querySelector('.cleanup-tasks'); return {focusInside:!!dialog?.contains(document.activeElement),taskCount:list?.children.length??0,scrollable:!!list&&list.scrollHeight>list.clientHeight};",
+    args: [],
+  });
 function point(view, x, y) {
   const r = view.canvas.image;
   return { x: Math.round(r.x + x * view.canvas.zoom), y: Math.round(r.y + y * view.canvas.zoom) };
@@ -361,211 +378,267 @@ try {
   });
   report.checks.push('匹配驱动、WebView 身份、前端握手及 13 个真实工具');
   report.phase = 'document-sync';
-  await workspace({ kind: 'open', path: samples[0] });
+  await workspace({ kind: 'open', path: options.scenario === 'cleanup' ? samples[1] : samples[0] });
   let workspaceState = await waitCore({ kind: 'documentCount', count: 1 });
   const a = workspaceState.documents[0];
   await wait({ kind: 'applied', atLeast: workspaceState.sequence });
   view = await wait({ kind: 'imageReady', documentId: a.id, revision: a.revision });
   assert.equal(view.sessionId, info.sessionId);
-  assert.equal(view.canvas.documentWidth, 256);
-  assert.equal(view.canvas.documentHeight, 128);
-  report.phase = 'menu-and-draft';
-  await click('menu:window');
-  await wait({ kind: 'menu', menu: 'window' });
-  const waitingPanel = wait({ kind: 'panel', panel: 'tasks' });
-  await click('command:tasks');
-  await waitingPanel;
-  await click('tool:region');
-  await click('canvas:snap');
-  view = await state();
-  const p0 = point(view, 17, 17),
-    p1 = point(view, 47, 39);
-  const originalRevision = view.selectionRevision;
-  await action({ kind: 'drag', startX: p0.x, startY: p0.y, endX: p1.x, endY: p1.y, hold: true });
-  const draft = await wait({ kind: 'draft', active: true });
-  assert.equal(draft.selectionRevision, originalRevision);
-  assert.equal((await core()).selection.selectionRevision, originalRevision);
-  await key('escape');
-  await wait({ kind: 'draft', active: false });
-  await action({ kind: 'releaseInputs' });
-  assert.equal((await core()).selection.selectionRevision, originalRevision);
-  await action({ kind: 'drag', startX: p0.x, startY: p0.y, endX: p1.x, endY: p1.y, hold: false });
-  view = await wait({ kind: 'selection', after: originalRevision, hasScope: true });
-  for (const [field, expected] of Object.entries({ x: 17, y: 17, width: 30, height: 22 }))
-    assert(Math.abs(view.region[field] - expected) <= 1, field + '：' + view.region[field]);
-  workspaceState = await core();
-  assert.equal(workspaceState.selection.scope.targetCount, 12);
-  const snapshotId = view.snapshotId,
-    selectionRevision = view.selectionRevision;
-  await click('menu:file');
-  await wait({ kind: 'menu', menu: 'file' });
-  await key('escape');
-  await wait({ kind: 'menu', menu: null });
-  assert.equal((await core()).selection.selectionRevision, selectionRevision);
-  assert(BigInt((await state()).input.pointerEvents) > 0n);
-  assert(BigInt((await state()).input.keyEvents) > 0n);
-  report.checks.push('真实菜单输入、并发前端等待、草稿不提交、Esc 取消与 12 个独立网格命中预期');
-  report.phase = 'task-panel';
-  await action({ kind: 'fillTaskName', text: 'WebView 固定范围 A' });
-  await click('task:create');
-  view = await wait({ kind: 'taskCount', count: 1 });
-  const task = view.tasks[0];
-  assert.equal(task.snapshotId, snapshotId);
-  await click('task:' + task.id + ':view');
-  await wait({ kind: 'content', snapshotId });
-  await screenshot('fixed-task.png');
-  report.phase = 'snapping-and-alt';
-  await click('canvas:snap');
-  view = await state();
-  const s0 = point(view, 65, 17),
-    s1 = point(view, 95, 39),
-    beforeSnap = view.selectionRevision;
-  await action({ kind: 'drag', startX: s0.x, startY: s0.y, endX: s1.x, endY: s1.y, hold: true });
-  view = await wait({ kind: 'draft', active: true });
-  assert.equal(view.canvas.snapGuides, 2);
-  assert(Math.abs(view.canvas.draft.x + view.canvas.draft.width - 96) < 0.01);
-  assert(Math.abs(view.canvas.draft.y + view.canvas.draft.height - 40) < 0.01);
-  let keyResult = await key('alt', 'down');
-  view = await wait({
-    kind: 'viewRevision',
-    atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
-  });
-  assert.equal(view.canvas.alt, true);
-  assert.equal(view.canvas.snapGuides, 0);
-  keyResult = await key('alt', 'up');
-  view = await wait({
-    kind: 'viewRevision',
-    atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
-  });
-  assert.equal(view.canvas.alt, false);
-  assert.equal(view.canvas.snapGuides, 2);
-  await key('escape');
-  await wait({ kind: 'draft', active: false });
-  await action({ kind: 'releaseInputs' });
-  assert.equal((await core()).selection.selectionRevision, beforeSnap);
-  await action({ kind: 'drag', startX: s0.x, startY: s0.y, endX: s1.x, endY: s1.y, hold: false });
-  view = await wait({ kind: 'selection', after: beforeSnap, hasScope: true });
-  assert(Math.abs(view.region.x + view.region.width - 96) < 0.01);
-  assert(Math.abs(view.region.y + view.region.height - 40) < 0.01);
-  assert.notEqual(view.snapshotId, snapshotId);
-  assert.equal(view.tasks[0].snapshotId, snapshotId);
-  report.checks.push('真实几何边缘吸附、Alt 临时关闭／恢复、取消与改选不改变固定任务');
-  report.phase = 'task-panel';
-  await workspace({ kind: 'open', path: samples[1] });
-  workspaceState = await waitCore({ kind: 'documentCount', count: 2 });
-  const b = workspaceState.documents.find((d) => d.id !== a.id);
-  await wait({ kind: 'imageReady', documentId: b.id, revision: b.revision });
-  await click('document:' + a.id);
-  await wait({ kind: 'imageReady', documentId: a.id, revision: a.revision });
-  await click('menu:file');
-  await click('command:close');
-  workspaceState = await waitCore({ kind: 'documentCount', count: 1 });
-  await wait({ kind: 'applied', atLeast: workspaceState.sequence });
-  await click('task:' + task.id + ':view');
-  view = await wait({ kind: 'content', snapshotId });
-  assert.equal(view.activeDocument.id, b.id);
-  report.checks.push('任务面板真实键入／固定／读取，以及 UI 关闭标签后保留原快照');
-  report.phase = 'cleanup-dialog';
-  const beforeCleanup = (await core()).selection.selectionRevision;
-  await click('task:' + task.id + ':cleanup');
-  view = await wait({ kind: 'cleanup', phase: 'ready' });
-  assert.deepEqual(view.cleanup.taskIds, [task.id]);
-  assert.equal(view.focus, 'cleanup-title');
-  await key('escape');
-  await wait({ kind: 'cleanup', phase: null });
-  assert.equal((await core()).selection.selectionRevision, beforeCleanup);
-  assert.equal((await state()).tasks[0].status, 'active');
-  await click('task:' + task.id + ':cleanup');
-  await wait({ kind: 'cleanup', phase: 'ready' });
-  await screenshot('cleanup-confirmation.png');
-  const confirm = args(
-    {
-      frontendId: frontend,
-      expectedViewRevision: null,
-      action: { kind: 'click', target: 'cleanup:confirm' },
-    },
-    true,
-  );
-  const first = await tool('dev_ui_action', confirm);
-  await wait({ kind: 'cleanup', phase: 'complete' });
-  view = await wait({ kind: 'task', taskId: task.id, status: 'invalidated' });
-  assert.equal(view.content, null);
-  assert.equal(view.activeDocument.id, b.id);
-  assert.deepEqual(await tool('dev_ui_action', confirm), first);
-  await click('cleanup:cancel');
-  await wait({ kind: 'cleanup', phase: null });
-  report.checks.push('真实清理模态、焦点、Esc 隔离、确认幂等、任务失效及前端同步');
-  report.phase = 'frontend-navigation';
-  const oldFrontend = frontend;
-  const disconnected = tool(
-    'dev_ui_wait',
-    args({
-      frontendId: oldFrontend,
-      condition: { kind: 'viewRevision', atLeast: '1000000' },
-      timeoutMs: 10000,
-    }),
-    true,
-  );
-  await wd('/session/' + session + '/refresh', {});
-  const terminated = await disconnected;
-  assert(['NOT_FOUND', 'STALE_REVISION'].includes(terminated.error.code));
-  frontend = undefined;
-  view = await wait({ kind: 'ready' });
-  frontend = view.frontendId;
-  assert.notEqual(frontend, oldFrontend);
-  assert.equal(view.sessionId, info.sessionId);
-  assert.equal(view.activeDocument.id, b.id);
-  await wait({ kind: 'imageReady', documentId: b.id, revision: b.revision });
-  await click('panel:tasks');
-  await wait({ kind: 'task', taskId: task.id, status: 'invalidated' });
-  report.checks.push('真实页面刷新使旧等待失效，新前端代次重连同一核心会话');
-  report.phase = 'negative-and-screenshot';
-  const stale = await tool(
-    'dev_ui_action',
-    args(
-      {
-        frontendId: 'stale-page',
-        expectedViewRevision: null,
-        action: { kind: 'click', target: 'tool:pan' },
-      },
-      true,
-    ),
-    true,
-  );
-  assert.equal(stale.error.code, 'STALE_REVISION');
-  const rejected = await tool(
-    'dev_ui_action',
-    args(
+  assert.equal(view.canvas.documentWidth, options.scenario === 'cleanup' ? 4 : 256);
+  assert.equal(view.canvas.documentHeight, options.scenario === 'cleanup' ? 3 : 128);
+  if (options.scenario === 'baseline') {
+    report.phase = 'menu-and-draft';
+    await click('menu:window');
+    await wait({ kind: 'menu', menu: 'window' });
+    const waitingPanel = wait({ kind: 'panel', panel: 'tasks' });
+    await click('command:tasks');
+    await waitingPanel;
+    await click('tool:region');
+    await click('canvas:snap');
+    view = await state();
+    const p0 = point(view, 17, 17),
+      p1 = point(view, 47, 39);
+    const originalRevision = view.selectionRevision;
+    await action({ kind: 'drag', startX: p0.x, startY: p0.y, endX: p1.x, endY: p1.y, hold: true });
+    const draft = await wait({ kind: 'draft', active: true });
+    assert.equal(draft.selectionRevision, originalRevision);
+    assert.equal((await core()).selection.selectionRevision, originalRevision);
+    await key('escape');
+    await wait({ kind: 'draft', active: false });
+    await action({ kind: 'releaseInputs' });
+    assert.equal((await core()).selection.selectionRevision, originalRevision);
+    await action({ kind: 'drag', startX: p0.x, startY: p0.y, endX: p1.x, endY: p1.y, hold: false });
+    view = await wait({ kind: 'selection', after: originalRevision, hasScope: true });
+    for (const [field, expected] of Object.entries({ x: 17, y: 17, width: 30, height: 22 }))
+      assert(Math.abs(view.region[field] - expected) <= 1, field + '：' + view.region[field]);
+    workspaceState = await core();
+    assert.equal(workspaceState.selection.scope.targetCount, 12);
+    const snapshotId = view.snapshotId,
+      selectionRevision = view.selectionRevision;
+    await click('menu:file');
+    await wait({ kind: 'menu', menu: 'file' });
+    await key('escape');
+    await wait({ kind: 'menu', menu: null });
+    assert.equal((await core()).selection.selectionRevision, selectionRevision);
+    assert(BigInt((await state()).input.pointerEvents) > 0n);
+    assert(BigInt((await state()).input.keyEvents) > 0n);
+    report.checks.push('真实菜单输入、并发前端等待、草稿不提交、Esc 取消与 12 个独立网格命中预期');
+    report.phase = 'task-panel';
+    await action({ kind: 'fillTaskName', text: 'WebView 固定范围 A' });
+    await click('task:create');
+    view = await wait({ kind: 'taskCount', count: 1 });
+    const task = view.tasks[0];
+    assert.equal(task.snapshotId, snapshotId);
+    await click('task:' + task.id + ':view');
+    await wait({ kind: 'content', snapshotId });
+    await screenshot('fixed-task.png');
+    report.phase = 'snapping-and-alt';
+    await click('canvas:snap');
+    view = await state();
+    const s0 = point(view, 65, 17),
+      s1 = point(view, 95, 39),
+      beforeSnap = view.selectionRevision;
+    await action({ kind: 'drag', startX: s0.x, startY: s0.y, endX: s1.x, endY: s1.y, hold: true });
+    view = await wait({ kind: 'draft', active: true });
+    assert.equal(view.canvas.snapGuides, 2);
+    assert(Math.abs(view.canvas.draft.x + view.canvas.draft.width - 96) < 0.01);
+    assert(Math.abs(view.canvas.draft.y + view.canvas.draft.height - 40) < 0.01);
+    let keyResult = await key('alt', 'down');
+    view = await wait({
+      kind: 'viewRevision',
+      atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
+    });
+    assert.equal(view.canvas.alt, true);
+    assert.equal(view.canvas.snapGuides, 0);
+    keyResult = await key('alt', 'up');
+    view = await wait({
+      kind: 'viewRevision',
+      atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
+    });
+    assert.equal(view.canvas.alt, false);
+    assert.equal(view.canvas.snapGuides, 2);
+    await key('escape');
+    await wait({ kind: 'draft', active: false });
+    await action({ kind: 'releaseInputs' });
+    assert.equal((await core()).selection.selectionRevision, beforeSnap);
+    await action({ kind: 'drag', startX: s0.x, startY: s0.y, endX: s1.x, endY: s1.y, hold: false });
+    view = await wait({ kind: 'selection', after: beforeSnap, hasScope: true });
+    assert(Math.abs(view.region.x + view.region.width - 96) < 0.01);
+    assert(Math.abs(view.region.y + view.region.height - 40) < 0.01);
+    assert.notEqual(view.snapshotId, snapshotId);
+    assert.equal(view.tasks[0].snapshotId, snapshotId);
+    report.checks.push('真实几何边缘吸附、Alt 临时关闭／恢复、取消与改选不改变固定任务');
+    report.phase = 'm2-reload';
+    const beforeReload = await core();
+    await click('menu:file');
+    await click('command:reload');
+    await waitCore({ kind: 'sequence', atLeast: (BigInt(beforeReload.sequence) + 1n).toString() });
+    const reloaded = await waitCore({ kind: 'idle' });
+    const newRevision = reloaded.documents.find((d) => d.id === a.id).revision;
+    assert.notEqual(newRevision, a.revision);
+    view = await wait({ kind: 'imageReady', documentId: a.id, revision: newRevision });
+    assert.equal(view.region, null);
+    assert.equal(view.snapshotId, null);
+    const retained = await selection(
+      { kind: 'content', target: { kind: 'task', taskId: task.id }, cursor: null, limit: 32 },
+      false,
+    );
+    assert.equal(retained.value.page.documentRevision, a.revision);
+    assert.equal(retained.value.page.snapshotId, snapshotId);
+    a.revision = newRevision;
+    report.checks.push('真实菜单重载清空当前范围，固定任务仍读取原修订');
+    report.phase = 'task-panel';
+    await workspace({ kind: 'open', path: samples[1] });
+    workspaceState = await waitCore({ kind: 'documentCount', count: 2 });
+    const b = workspaceState.documents.find((d) => d.id !== a.id);
+    await wait({ kind: 'imageReady', documentId: b.id, revision: b.revision });
+    await click('document:' + a.id);
+    await wait({ kind: 'imageReady', documentId: a.id, revision: a.revision });
+    await click('menu:file');
+    await click('command:close');
+    workspaceState = await waitCore({ kind: 'documentCount', count: 1 });
+    await wait({ kind: 'applied', atLeast: workspaceState.sequence });
+    await click('task:' + task.id + ':view');
+    view = await wait({ kind: 'content', snapshotId });
+    assert.equal(view.activeDocument.id, b.id);
+    report.checks.push('任务面板真实键入／固定／读取，以及 UI 关闭标签后保留原快照');
+    report.phase = 'cleanup-dialog';
+    const beforeCleanup = (await core()).selection.selectionRevision;
+    await click('task:' + task.id + ':cleanup');
+    view = await wait({ kind: 'cleanup', phase: 'ready' });
+    assert.deepEqual(view.cleanup.taskIds, [task.id]);
+    assert.equal(view.focus, 'cleanup-title');
+    await key('escape');
+    await wait({ kind: 'cleanup', phase: null });
+    assert.equal((await core()).selection.selectionRevision, beforeCleanup);
+    assert.equal((await state()).tasks[0].status, 'active');
+    await click('task:' + task.id + ':cleanup');
+    await wait({ kind: 'cleanup', phase: 'ready' });
+    await screenshot('cleanup-confirmation.png');
+    const confirm = args(
       {
         frontendId: frontend,
         expectedViewRevision: null,
-        action: { kind: 'click', target: 'body' },
+        action: { kind: 'click', target: 'cleanup:confirm' },
       },
       true,
-    ),
-    true,
-  );
-  assert.equal(rejected.error.code, 'INVALID_INPUT');
-  const timeout = (
-    await tool(
+    );
+    const first = await tool('dev_ui_action', confirm);
+    await wait({ kind: 'cleanup', phase: 'complete' });
+    view = await wait({ kind: 'task', taskId: task.id, status: 'invalidated' });
+    assert.equal(view.content, null);
+    assert.equal(view.activeDocument.id, b.id);
+    assert.deepEqual(await tool('dev_ui_action', confirm), first);
+    await click('cleanup:cancel');
+    await wait({ kind: 'cleanup', phase: null });
+    report.checks.push('真实清理模态、焦点、Esc 隔离、确认幂等、任务失效及前端同步');
+    report.phase = 'frontend-navigation';
+    const oldFrontend = frontend;
+    const disconnected = tool(
       'dev_ui_wait',
       args({
-        frontendId: frontend,
-        condition: { kind: 'task', taskId: task.id, status: 'active' },
-        timeoutMs: 1,
+        frontendId: oldFrontend,
+        condition: { kind: 'viewRevision', atLeast: '1000000' },
+        timeoutMs: 10000,
       }),
-    )
-  ).value;
-  assert.equal(timeout.timedOut, true);
-  assert.equal(timeout.lastState.tasks[0].status, 'invalidated');
-  await screenshot('final-state.png');
+      true,
+    );
+    await wd('/session/' + session + '/refresh', {});
+    const terminated = await disconnected;
+    assert(['NOT_FOUND', 'STALE_REVISION'].includes(terminated.error.code));
+    frontend = undefined;
+    view = await wait({ kind: 'ready' });
+    frontend = view.frontendId;
+    assert.notEqual(frontend, oldFrontend);
+    assert.equal(view.sessionId, info.sessionId);
+    assert.equal(view.activeDocument.id, b.id);
+    await wait({ kind: 'imageReady', documentId: b.id, revision: b.revision });
+    await click('panel:tasks');
+    await wait({ kind: 'task', taskId: task.id, status: 'invalidated' });
+    report.checks.push('真实页面刷新使旧等待失效，新前端代次重连同一核心会话');
+    report.phase = 'negative-and-screenshot';
+    const stale = await tool(
+      'dev_ui_action',
+      args(
+        {
+          frontendId: 'stale-page',
+          expectedViewRevision: null,
+          action: { kind: 'click', target: 'tool:pan' },
+        },
+        true,
+      ),
+      true,
+    );
+    assert.equal(stale.error.code, 'STALE_REVISION');
+    const rejected = await tool(
+      'dev_ui_action',
+      args(
+        {
+          frontendId: frontend,
+          expectedViewRevision: null,
+          action: { kind: 'click', target: 'body' },
+        },
+        true,
+      ),
+      true,
+    );
+    assert.equal(rejected.error.code, 'INVALID_INPUT');
+    const timeout = (
+      await tool(
+        'dev_ui_wait',
+        args({
+          frontendId: frontend,
+          condition: { kind: 'task', taskId: task.id, status: 'active' },
+          timeoutMs: 1,
+        }),
+      )
+    ).value;
+    assert.equal(timeout.timedOut, true);
+    assert.equal(timeout.lastState.tasks[0].status, 'invalidated');
+    await screenshot('final-state.png');
+    assert.deepEqual(
+      await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s)))),
+      sourceHashes,
+    );
+    report.checks.push('旧前端／非法目标拒绝、超时末态、截图版本关联与源文件不变');
+  } else if (options.scenario.startsWith('geometry-')) {
+    const zoom = Number(options.scenario.slice('geometry-'.length)) / 100;
+    await exerciseRegionControls({
+      state,
+      core,
+      wait,
+      action,
+      click,
+      key,
+      point,
+      selection,
+      report,
+      document: a,
+      zoom,
+    });
+    await screenshot('final-state.png');
+  } else {
+    await exerciseOpenCleanup({
+      core,
+      state,
+      wait,
+      waitCore,
+      click,
+      key,
+      selection,
+      report,
+      document: a,
+      inspectDialog,
+      screenshot,
+    });
+    await screenshot('final-state.png');
+  }
   report.finalView = await state();
   report.finalCore = await core();
   assert.deepEqual(
     await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s)))),
     sourceHashes,
   );
-  report.checks.push('旧前端／非法目标拒绝、超时末态、截图版本关联与源文件不变');
   report.phase = 'shutdown';
   await tool('dev_shutdown', args({}));
   assert.equal(await deadline(monitor.exit, 10000, '应用正常退出超时'), 0);
