@@ -16,9 +16,13 @@ export type UiContent = { taskId: string | null, snapshotId: string, ready: bool
 
 export type UiInputEvidence = { pointerEvents: string, keyEvents: string, lastKey: string | null, };
 
+export type UiWindowControl = { target: string, label: string, rect: UiRect, disabled: boolean, };
+
+export type UiWindow = { focused: boolean, focusEvents: string, blurEvents: string, width: number, height: number, devicePixelRatio: number, titlebar: UiRect | null, controls: Array<UiWindowControl>, };
+
 export type UiObservation = { instanceId: string, frontendId: string,
 /**
  * 前端挂载时 timeOrigin + now 的微秒整数，用于丢弃旧挂载或旧页面迟到报告。
  */
-documentEpoch: string, viewRevision: string, coreSequence: string | null, sessionId: string | null, activeDocument: UiDocument | null, selectionRevision: string | null, snapshotId: string | null, region: UiRect | null, tool: string, panel: string, menu: string | null, focus: string | null, cleanup: UiCleanup, canvas: UiCanvas | null, tasks: Array<UiTask>, selectionRunning: boolean, content: UiContent | null, input: UiInputEvidence, };
+documentEpoch: string, viewRevision: string, coreSequence: string | null, sessionId: string | null, activeDocument: UiDocument | null, selectionRevision: string | null, snapshotId: string | null, region: UiRect | null, tool: string, panel: string, menu: string | null, focus: string | null, cleanup: UiCleanup, canvas: UiCanvas | null, tasks: Array<UiTask>, selectionRunning: boolean, content: UiContent | null, input: UiInputEvidence, window: UiWindow, };
 

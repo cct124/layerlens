@@ -41,6 +41,16 @@ fn observation(epoch: u64, revision: u64) -> UiObservation {
             key_events: "0".into(),
             last_key: None,
         },
+        window: UiWindow {
+            focused: false,
+            focus_events: "0".into(),
+            blur_events: "0".into(),
+            width: 1280,
+            height: 800,
+            device_pixel_ratio: 1.0,
+            titlebar: None,
+            controls: vec![],
+        },
     }
 }
 #[test]
@@ -83,6 +93,38 @@ fn old_pages_out_of_order_reports_and_foreign_instances_cannot_replace_observati
     );
     assert_eq!(state.read().unwrap(), new);
 }
+
+#[tokio::test]
+async fn focus_wait_requires_new_trusted_evidence_and_keeps_last_state_on_timeout() {
+    let state = Observations::default();
+    let mut view = observation(100, 1);
+    view.window.blur_events = "2".into();
+    state.publish("instance", view.clone()).unwrap();
+    let request = UiWaitRequest {
+        frontend_id: Some(view.frontend_id.clone()),
+        timeout_ms: 1,
+        condition: UiCondition::WindowFocus {
+            focused: false,
+            events_after: Some("2".into()),
+        },
+    };
+    let result = state
+        .wait(request.clone(), &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(result.timed_out && !result.satisfied);
+    assert_eq!(result.last_state.unwrap().window.blur_events, "2");
+    view.view_revision = "2".into();
+    view.window.blur_events = "3".into();
+    state.publish("instance", view).unwrap();
+    assert!(
+        state
+            .wait(request, &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+}
 #[test]
 fn observation_size_numbers_and_semantic_targets_are_validated() {
     let state = Observations::default();
@@ -124,6 +166,39 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
             serde_json::json!({"kind":"click","target":"canvas","script":"bad"})
         )
         .is_err()
+    );
+}
+
+#[tokio::test]
+async fn tool_wait_requires_keyboard_delivery_even_when_tool_already_matches() {
+    let state = Observations::default();
+    let mut view = observation(100, 1);
+    view.input.key_events = "1".into();
+    state.publish("instance", view.clone()).unwrap();
+    let request = UiWaitRequest {
+        frontend_id: Some(view.frontend_id.clone()),
+        timeout_ms: 1,
+        condition: UiCondition::Tool {
+            tool: "pan".into(),
+            key_events_at_least: "2".into(),
+        },
+    };
+    assert!(
+        state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .timed_out
+    );
+    view.view_revision = "2".into();
+    view.input.key_events = "2".into();
+    state.publish("instance", view).unwrap();
+    assert!(
+        state
+            .wait(request, &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
     );
 }
 fn canvas_observation() -> UiObservation {

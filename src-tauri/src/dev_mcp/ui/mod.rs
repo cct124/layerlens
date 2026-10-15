@@ -2,7 +2,7 @@
 mod driver;
 mod gesture;
 pub(crate) mod model;
-mod observation;
+pub(super) mod observation;
 mod targets;
 #[cfg(test)]
 mod tests;

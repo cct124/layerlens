@@ -12,6 +12,7 @@ type Projection = Omit<
   | 'focus'
   | 'input'
   | 'cleanup'
+  | 'window'
 > & {
   cleanup: Omit<
     UiObservation['cleanup'],
@@ -52,7 +53,9 @@ export function useDevObservation(project: () => Projection) {
       sending = false;
     let revision = 0n,
       pointers = 0n,
-      keys = 0n;
+      keys = 0n,
+      focuses = 0n,
+      blurs = 0n;
     let lastKey: string | null = null,
       transportError: string | null = null;
     let previous = '',
@@ -84,6 +87,11 @@ export function useDevObservation(project: () => Projection) {
       const dialog = document.querySelector('dialog[open].cleanup-dialog');
       const list = dialog?.querySelector('.cleanup-tasks');
       const projection = project();
+      const bounds = (element: Element) => {
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return { x, y, width, height };
+      };
+      const titlebar = document.querySelector('.app-header');
       const value = {
         ...projection,
         cleanup: {
@@ -99,6 +107,23 @@ export function useDevObservation(project: () => Projection) {
             ? (focused.dataset.devTarget ?? (focused.id || focused.tagName)).slice(0, 128)
             : null,
         input: { pointerEvents: pointers.toString(), keyEvents: keys.toString(), lastKey },
+        window: {
+          focused: document.hasFocus(),
+          focusEvents: focuses.toString(),
+          blurEvents: blurs.toString(),
+          width: window.innerWidth,
+          height: window.innerHeight,
+          devicePixelRatio: window.devicePixelRatio,
+          titlebar: titlebar ? bounds(titlebar) : null,
+          controls: Array.from(
+            document.querySelectorAll<HTMLButtonElement>('.window-controls button'),
+          ).map((button) => ({
+            target: button.dataset.devTarget ?? '',
+            label: button.getAttribute('aria-label') ?? '',
+            rect: bounds(button),
+            disabled: button.disabled,
+          })),
+        },
       };
       const serialized = JSON.stringify(value);
       if (serialized === previous) return;
@@ -152,6 +177,14 @@ export function useDevObservation(project: () => Projection) {
       }
       schedule();
     }
+    function focus(event: FocusEvent) {
+      // 元素 focus 不算系统窗口切换；合成事件永远不能增加可信证据计数。
+      if (event.target === window && event.isTrusted) {
+        if (event.type === 'focus') focuses++;
+        else blurs++;
+      }
+      schedule();
+    }
     const bridge = Object.freeze({
       read: () => (latest ? structuredClone(latest) : null),
       get error() {
@@ -165,9 +198,10 @@ export function useDevObservation(project: () => Projection) {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ['open', 'aria-expanded', 'aria-selected'],
+      attributeFilter: ['open', 'aria-expanded', 'aria-selected', 'aria-label', 'disabled'],
     });
     document.addEventListener('pointerdown', pointer, true);
+    document.addEventListener('pointermove', pointer, true);
     document.addEventListener('pointerup', pointer, true);
     document.addEventListener('keydown', key, true);
     document.addEventListener('keyup', key, true);
@@ -176,12 +210,15 @@ export function useDevObservation(project: () => Projection) {
     document.addEventListener('load', schedule, true);
     document.addEventListener('error', schedule, true);
     window.addEventListener('resize', schedule);
+    window.addEventListener('focus', focus);
+    window.addEventListener('blur', focus);
     stop = () => {
       disposed = true;
       pending = null;
       unwatch();
       observer.disconnect();
       document.removeEventListener('pointerdown', pointer, true);
+      document.removeEventListener('pointermove', pointer, true);
       document.removeEventListener('pointerup', pointer, true);
       document.removeEventListener('keydown', key, true);
       document.removeEventListener('keyup', key, true);
@@ -190,6 +227,8 @@ export function useDevObservation(project: () => Projection) {
       document.removeEventListener('load', schedule, true);
       document.removeEventListener('error', schedule, true);
       window.removeEventListener('resize', schedule);
+      window.removeEventListener('focus', focus);
+      window.removeEventListener('blur', focus);
       if (window.__LAYERLENS_DEV_VIEW__ === bridge) delete window.__LAYERLENS_DEV_VIEW__;
     };
     schedule();

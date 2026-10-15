@@ -131,8 +131,12 @@ describe('开发观测生命周期', () => {
     setup();
     await flushPromises();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    window.dispatchEvent(new FocusEvent('blur'));
+    window.dispatchEvent(new FocusEvent('focus'));
     await flushPromises();
     expect(window.__LAYERLENS_DEV_VIEW__?.read()?.input.keyEvents).toBe('0');
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.window.blurEvents).toBe('0');
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.window.focusEvents).toBe('0');
     expect(window.__LAYERLENS_DEV_VIEW__?.error).toBe('disconnected');
     expect(warning).toHaveBeenCalledOnce();
   });

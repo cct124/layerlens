@@ -34,7 +34,7 @@ function titlebarMouseDown(event: MouseEvent) {
     <div class="brand" data-window-drag-region><WorkspaceIcon name="brand" />LayerLens</div>
     <slot />
     <span v-if="picking" role="status" class="menu-status">选择文件中…</span>
-    <span class="header-spacer" data-window-drag-region></span>
+    <span class="header-spacer" data-window-drag-region data-dev-target="window:drag"></span>
     <span class="connection-status" data-window-drag-region
       ><span class="status-dot" :class="{ ready: connected }"></span
       >{{ connected ? '工作区已连接' : desktop ? '未连接' : '浏览器预览' }}</span
@@ -46,6 +46,7 @@ function titlebarMouseDown(event: MouseEvent) {
       <button
         type="button"
         aria-label="最小化窗口"
+        data-dev-target="window:minimize"
         title="最小化窗口"
         :disabled="!!pending"
         @click="run('minimize')"
@@ -55,6 +56,7 @@ function titlebarMouseDown(event: MouseEvent) {
       <button
         type="button"
         :aria-label="maximizeLabel"
+        data-dev-target="window:maximize"
         :title="maximizeLabel"
         :disabled="!!pending"
         @click="run('toggleMaximize')"
@@ -68,6 +70,7 @@ function titlebarMouseDown(event: MouseEvent) {
         type="button"
         class="window-close"
         aria-label="关闭窗口"
+        data-dev-target="window:close"
         title="关闭窗口 (Alt+F4)"
         :disabled="!!pending"
         @click="run('close')"

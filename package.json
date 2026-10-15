@@ -22,6 +22,7 @@
     "test:dev-mcp:m2": "node scripts/test-dev-stability.mjs --repeat 5 --webview-suite m2",
     "test:dev-mcp:m2-input": "node scripts/test-dev-stability.mjs --repeat 15 --webview-suite m2-input",
     "test:dev-mcp:m2-cleanup": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-cleanup",
+    "test:dev-mcp:m2-window": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-window",
     "test:dev-mcp:scripts": "node --test scripts/dev-mcp-runner.test.mjs scripts/windows-powershell.test.mjs",
     "artifacts:dev-mcp": "node scripts/collect-dev-mcp-artifacts.mjs",
     "bindings:dev:generate": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings",

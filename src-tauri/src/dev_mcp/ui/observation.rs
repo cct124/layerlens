@@ -26,7 +26,7 @@ impl Default for Observations {
         }
     }
 }
-pub(super) fn number(value: &str) -> Result<u64, WorkspaceError> {
+pub(in crate::dev_mcp) fn number(value: &str) -> Result<u64, WorkspaceError> {
     let parsed = value
         .parse::<u64>()
         .map_err(|_| error(Code::InvalidInput, "观测版本必须是十进制整数字符串。"))?;
@@ -71,6 +71,18 @@ impl Observations {
                 .as_deref()
                 .is_some_and(|s| !["file", "view", "window"].contains(&s))
             || value.focus.as_ref().is_some_and(|s| s.len() > 128)
+            || !value.window.device_pixel_ratio.is_finite()
+            || !(0.1..=16.0).contains(&value.window.device_pixel_ratio)
+            || value.window.width > 100_000
+            || value.window.height > 100_000
+            || value.window.titlebar.as_ref().is_some_and(|r| !rect(r))
+            || value.window.controls.len() > 3
+            || value.window.controls.iter().any(|c| {
+                !rect(&c.rect)
+                    || c.label.len() > 128
+                    || !["window:minimize", "window:maximize", "window:close"]
+                        .contains(&c.target.as_str())
+            })
             || value.region.as_ref().is_some_and(|r| !rect(r))
             || value.canvas.as_ref().is_some_and(|c| {
                 !rect(&c.viewport)
@@ -108,6 +120,8 @@ impl Observations {
         }
         number(&value.input.pointer_events)?;
         number(&value.input.key_events)?;
+        number(&value.window.focus_events)?;
+        number(&value.window.blur_events)?;
         let mut current = self.version.lock().unwrap_or_else(|p| p.into_inner());
         if epoch < current.epoch
             || (epoch == current.epoch
@@ -191,6 +205,13 @@ impl UiCondition {
                 true
             }
             Self::Panel { panel } => ["tasks", "layers"].contains(&panel.as_str()),
+            Self::Tool {
+                tool,
+                key_events_at_least,
+            } => {
+                number(key_events_at_least)?;
+                ["pan", "region"].contains(&tool.as_str())
+            }
             Self::Menu { menu } => menu
                 .as_deref()
                 .is_none_or(|s| ["file", "view", "window"].contains(&s)),
@@ -226,6 +247,15 @@ impl UiCondition {
                 true
             }
             Self::TaskCount { count } => *count <= 128,
+            Self::WindowFocus { events_after, .. } => {
+                if let Some(n) = events_after {
+                    number(n)?;
+                }
+                true
+            }
+            Self::WindowLayout { width, height, .. } => {
+                (1..=100_000).contains(width) && (1..=100_000).contains(height)
+            }
             _ => true,
         };
         if valid {
@@ -236,6 +266,38 @@ impl UiCondition {
     }
     fn matches(&self, value: &UiObservation) -> bool {
         match self {
+            Self::WindowFocus {
+                focused,
+                events_after,
+            } => {
+                value.window.focused == *focused
+                    && events_after.as_ref().is_none_or(|after| {
+                        let count = if *focused {
+                            &value.window.focus_events
+                        } else {
+                            &value.window.blur_events
+                        };
+                        number(count).ok() > number(after).ok()
+                    })
+            }
+            Self::WindowLayout {
+                width,
+                height,
+                maximized,
+            } => {
+                value.window.width.abs_diff(*width) <= 1
+                    && value.window.height.abs_diff(*height) <= 1
+                    && value.window.controls.iter().any(|c| {
+                        c.target == "window:maximize"
+                            && !c.disabled
+                            && c.label
+                                == if *maximized {
+                                    "还原窗口"
+                                } else {
+                                    "最大化窗口"
+                                }
+                    })
+            }
             Self::Ready {} => value.core_sequence.is_some(),
             Self::Applied { at_least } => value
                 .core_sequence
@@ -255,6 +317,13 @@ impl UiCondition {
                         .is_some_and(|c| c.image_decoded && c.paint_prepared)
             }
             Self::Panel { panel } => &value.panel == panel,
+            Self::Tool {
+                tool,
+                key_events_at_least,
+            } => {
+                &value.tool == tool
+                    && number(&value.input.key_events).ok() >= number(key_events_at_least).ok()
+            }
             Self::Menu { menu } => &value.menu == menu,
             Self::Draft { active } => {
                 value.canvas.as_ref().is_some_and(|c| c.draft.is_some()) == *active

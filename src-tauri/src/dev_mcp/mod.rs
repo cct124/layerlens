@@ -10,6 +10,7 @@ mod receipts;
 mod server;
 mod tools;
 pub(crate) mod ui;
+pub(crate) mod windows;
 
 pub(crate) use config::Instance;
 pub(crate) use server::{Running, start};

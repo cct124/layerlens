@@ -3,6 +3,10 @@ use crate::workspace::error;
 use layerlens_core::workspace_contract::{WorkspaceError, WorkspaceErrorCode};
 pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
     let fixed = [
+        "window:minimize",
+        "window:maximize",
+        "window:close",
+        "window:drag",
         "menu:file",
         "menu:view",
         "menu:window",

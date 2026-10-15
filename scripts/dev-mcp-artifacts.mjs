@@ -16,6 +16,14 @@ const runFiles = [
   'cleanup-sync-failure.png',
   'final-state.png',
   'failure.png',
+  'window-minimum.png',
+  'window-default.png',
+  'window-maximized.png',
+  'window-restored.png',
+  'window-recovered.png',
+  'window-blur.png',
+  'window-menu.png',
+  'window-exit.png',
 ];
 
 /** 保留诊断与指纹，删除显式凭据字段、Bearer 值及已知实例令牌。 */
@@ -84,8 +92,9 @@ export async function collectArtifacts(source, destination) {
     }
     if (!info.isFile() || info.isSymbolicLink() || info.size > 8 * 1024 * 1024)
       throw new Error('产物不是有效的有界普通文件：' + file);
-    if (manifest.files.length >= 512 || manifest.bytes + info.size > 64 * 1024 * 1024)
-      throw new Error('产物超过 512 文件／64 MiB 上限。');
+    // 五套 CI 场景合计超过 512 文件，保留固定上限，字节与单文件预算不变。
+    if (manifest.files.length >= 768 || manifest.bytes + info.size > 64 * 1024 * 1024)
+      throw new Error('产物超过 768 文件／64 MiB 上限。');
     const relative = path.relative(root, file);
     const original = await readFile(file);
     const bytes = name.endsWith('.png') ? original : Buffer.from(redact(original.toString('utf8')));

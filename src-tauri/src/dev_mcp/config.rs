@@ -19,6 +19,8 @@ pub(super) struct Config {
     pub visible: bool,
     #[serde(default)]
     pub web_driver_url: Option<String>,
+    #[serde(default)]
+    pub native_windows: bool,
 }
 
 pub(crate) struct Instance {
@@ -30,6 +32,8 @@ pub(crate) struct Instance {
     pub(crate) visible: bool,
     pub(super) web_driver_url: Option<reqwest::Url>,
     pub(crate) observations: std::sync::Arc<super::ui::Observations>,
+    pub(crate) native_windows: bool,
+    pub(crate) windows: std::sync::OnceLock<std::sync::Arc<super::windows::Windows>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -58,6 +62,9 @@ impl Config {
     }
 
     pub(super) fn prepare(self) -> io::Result<Instance> {
+        if self.native_windows && (!self.visible || self.web_driver_url.is_none()) {
+            return Err(invalid("nativeWindows 需显式可见窗口及 WebDriver 配置"));
+        }
         let web_driver_url = self
             .web_driver_url
             .map(|value| {
@@ -103,6 +110,8 @@ impl Config {
             visible: self.visible,
             web_driver_url,
             observations: std::sync::Arc::new(super::ui::Observations::default()),
+            native_windows: self.native_windows,
+            windows: std::sync::OnceLock::new(),
         })
     }
 }

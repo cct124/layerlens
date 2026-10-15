@@ -5,6 +5,7 @@ use super::fixtures::{self, PrepareTasks, PreparedTasks};
 use super::model::Request;
 use super::ui::model::InputRequest;
 use super::ui::{Driver, model::*};
+use super::windows::{WindowAction, WindowActionResult, WindowState, WindowWait, WindowWaitResult};
 use super::{
     config::Instance,
     model::*,
@@ -146,6 +147,13 @@ impl Shared {
                 definition::<Request<ScreenshotRequest>,ScreenshotResult>("dev_ui_screenshot","采集真实 WebView PNG，并附捕获前后前端版本；unchanged 仅比较观测，不代表物理显示验收。",true)?,
             ]);
         }
+        if instance.windows.get().is_some() {
+            tools.extend([
+                definition::<Request<Empty>,WindowState>("dev_window_state", "读取本测试实例 main／辅助窗口的真实焦点、尺寸、DPI 及事件计数。", true)?,
+                definition::<Request<WindowAction>,WindowActionResult>("dev_window_action", "只操作测试实例自有窗口：焦点转移、最小化、最大化、还原、预设尺寸、正常关闭；需请求 ID。dispatched 后须等待实际状态。", false)?,
+                definition::<Request<WindowWait>,WindowWaitResult>("dev_window_wait", "有界等待原生窗口状态及事件序号；超时保留末态，不占输入名额。", true)?,
+            ]);
+        }
         host.operations.testing.enable();
         Ok(Arc::new(Self {
             host,
@@ -262,8 +270,11 @@ impl ServerHandler for Handler {
         }
         let arguments = Value::Object(request.arguments.unwrap_or_default());
         check_size(&arguments, 64 * 1024).map_err(|e| McpError::invalid_params(e.message, None))?;
-        let permits = if matches!(request.name.as_ref(), "dev_wait" | "dev_ui_wait")
-            || (request.name == "dev_test_control" && arguments["request"]["kind"] == "wait")
+        let permits = if matches!(
+            request.name.as_ref(),
+            "dev_wait" | "dev_ui_wait" | "dev_window_wait"
+        ) || (request.name == "dev_test_control"
+            && arguments["request"]["kind"] == "wait")
         {
             &shared.waits
         } else if request.name == "dev_test_control" {
@@ -276,6 +287,44 @@ impl ServerHandler for Handler {
             .map_err(|_| McpError::internal_error("开发请求名额已满；未接受新操作。", None))?;
         let work = async {
             match request.name.as_ref() {
+                "dev_window_state" | "dev_window_action" | "dev_window_wait" => {
+                    let windows = shared.instance.windows.get().cloned().ok_or_else(|| {
+                        McpError::invalid_params("此实例未启用 nativeWindows。", None)
+                    })?;
+                    let result = match request.name.as_ref() {
+                        "dev_window_state" => {
+                            let _: Request<Empty> = shared.parse(arguments)?;
+                            windows.read().await.and_then(value)
+                        }
+                        "dev_window_wait" => {
+                            let args: Request<WindowWait> = shared.parse(arguments)?;
+                            windows
+                                .wait(args.request, &shared.stopping)
+                                .await
+                                .and_then(value)
+                        }
+                        _ => {
+                            let args: Request<WindowAction> = shared.parse(arguments)?;
+                            let input = args.request.clone();
+                            let ui = shared.ui.as_ref().ok_or_else(|| {
+                                McpError::invalid_params("未配置 WebDriver。", None)
+                            })?;
+                            match ui.acquire() {
+                                Ok(guard) => {
+                                    match shared.mutation("window_action", &args, async move {
+                                        let _guard = guard;
+                                        windows.action(input).await.and_then(value)
+                                    }) {
+                                        Ok(wait) => wait.await,
+                                        Err(error) => Err(error),
+                                    }
+                                }
+                                Err(error) => Err(error),
+                            }
+                        }
+                    };
+                    shared.reply(result, None, None).await
+                }
                 "dev_prepare_tasks" => {
                     let args: Request<PrepareTasks> = shared.parse(arguments)?;
                     let host = shared.host.clone();

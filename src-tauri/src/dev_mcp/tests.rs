@@ -82,6 +82,7 @@ impl App {
                 port: 0,
                 visible: false,
                 web_driver_url: None,
+                native_windows: false,
             }
             .prepare()
             .unwrap(),
@@ -842,6 +843,20 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
     fs::create_dir(&runs).unwrap();
     fs::write(samples.join("input.psd"), b"fixture").unwrap();
     fs::write(temp.0.join("outside.psd"), b"outside").unwrap();
+    for (visible, driver) in [(false, Some("http://127.0.0.1:1234/".into())), (true, None)] {
+        assert!(
+            Config {
+                sample_root: samples.clone(),
+                run_root: runs.clone(),
+                port: 0,
+                visible,
+                web_driver_url: driver,
+                native_windows: true
+            }
+            .prepare()
+            .is_err()
+        );
+    }
     let make = || {
         Config {
             sample_root: samples.clone(),
@@ -849,6 +864,7 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
             port: 0,
             visible: false,
             web_driver_url: None,
+            native_windows: false,
         }
         .prepare()
         .unwrap()
@@ -881,6 +897,7 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
             port: 0,
             visible: false,
             web_driver_url: None,
+            native_windows: false,
         }
         .prepare()
         .is_err()

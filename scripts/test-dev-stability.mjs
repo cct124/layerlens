@@ -1,4 +1,4 @@
-// 每轮并行一个业务实例和一个 WebView 实例；轮间重新启动，不重试失败样本。
+// 默认每轮并行业务与 WebView；原生焦点套件串行，避免另一实例的启动／退出争用系统焦点。
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -23,7 +23,7 @@ const { values } = parseArgs({
 assert.equal(process.platform, 'win32', '稳定性测试当前只支持 Windows。');
 assert.match(values.repeat, /^(?:[2-9]|1[0-9]|20)$/, '重复次数为 2–20。');
 const repeats = Number(values.repeat);
-assert(['baseline', 'm2', 'm2-input', 'm2-cleanup'].includes(values['webview-suite']));
+assert(['baseline', 'm2', 'm2-input', 'm2-cleanup', 'm2-window'].includes(values['webview-suite']));
 const scenarios =
   values['webview-suite'] === 'm2'
     ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
@@ -31,7 +31,9 @@ const scenarios =
       ? ['input-pan', 'input-chord', 'input-snapping']
       : values['webview-suite'] === 'm2-cleanup'
         ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
-        : ['baseline'];
+        : values['webview-suite'] === 'm2-window'
+          ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
+          : ['baseline'];
 assert(
   repeats >= scenarios.length && repeats % scenarios.length === 0,
   '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',
@@ -47,7 +49,7 @@ const report = {
   status: 'running',
   startedAt: new Date().toISOString(),
   repeats,
-  concurrency: 2,
+  concurrency: values['webview-suite'] === 'm2-window' ? 1 : 2,
   automaticRetries: 0,
   webviewScenarios: scenarios,
   expectedBuildModes: { development: 'debug with dev-mcp', production: 'release without dev-mcp' },
@@ -215,9 +217,17 @@ try {
     throw new Error('普通构建检查出现进程清理异常，停止开发场景。');
   }
   for (let iteration = 1; iteration <= repeats; iteration++) {
-    report.results.push(
-      ...(await Promise.all([execute('business', iteration), execute('webview', iteration)])),
-    );
+    if (report.concurrency === 1) {
+      report.results.push(await execute('business', iteration));
+      await checkpoint();
+      if (report.results.at(-1).processError)
+        throw new Error('业务实例未正常清理，禁止启动原生窗口场景。');
+      report.results.push(await execute('webview', iteration));
+    } else {
+      report.results.push(
+        ...(await Promise.all([execute('business', iteration), execute('webview', iteration)])),
+      );
+    }
     await checkpoint();
     if (report.results.some((result) => result.processError)) {
       throw new Error('存在进程清理异常，停止后续轮次以免污染隔离证据。');
@@ -260,7 +270,7 @@ try {
     lines.push('| ' + [scenario, data.expected, data.completed, data.passed].join(' | ') + ' |');
   lines.push(
     '',
-    '每轮业务与 WebView 各一个独立实例并行，轮次之间重新启动。耗时包含启动与测试，不是产品性能或提速结论。',
+    `每轮业务与 WebView 各一个独立实例，${report.concurrency === 1 ? '串行以独占原生焦点' : '并行执行'}，轮次之间重新启动。耗时包含启动与测试，不是产品性能或提速结论。`,
     '',
     '完整操作、失败阶段、版本、指纹和截图见同目录的逐次报告。',
   );

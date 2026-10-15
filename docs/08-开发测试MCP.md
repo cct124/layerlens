@@ -127,11 +127,31 @@ Windows PowerShell 5.1 子进程统一移除继承的 `PSModulePath`，由该版
 
 套件在 `.local/dev-mcp/stability-*/` 保留 `summary.json`、`summary.md`、运行环境与各次 `runs/` 报告；开始和每轮后原子更新汇总，未完成状态不会报告成功。保留失败阶段、退出码、超时、实例、指纹、操作、截图和进程检查。耗时统计给出最小／中位／最大场景进程耗时，包含启动和测试，不是产品性能、物理首帧或相比桌面控制的效率结论。
 
-`artifacts:dev-mcp` 创建独立产物目录，默认扫描本机已知回归目录，`--source` 可限定一套运行；`--output` 指定的目标必须尚不存在。收集器只复制准备报告、汇总、各场景 JSON、指定日志和关键 PNG，拒绝目录联接／符号链接和超量文件；限单文件 8 MiB、512 文件／64 MiB，生成逐文件 SHA-256 清单。凭据字段、Bearer 值与已知实例令牌被遮盖；不收集 `connection.json`、`config.json`、WebView profile、PSD、ZIP 或驱动程序。超限／空产物返回非零并保留诊断清单，不静默丢弃为成功。
+`artifacts:dev-mcp` 创建独立产物目录，默认扫描本机已知回归目录，`--source` 可限定一套运行；`--output` 指定的目标必须尚不存在。收集器只复制准备报告、汇总、各场景 JSON、指定日志和关键 PNG，拒绝目录联接／符号链接和超量文件；限单文件 8 MiB、768 文件／64 MiB，生成逐文件 SHA-256 清单。文件数上限覆盖新增窗口套件后的五套 CI 场景，字节预算与核心预算不变。凭据字段、Bearer 值与已知实例令牌被遮盖；不收集 `connection.json`、`config.json`、WebView profile、PSD、ZIP 或驱动程序。超限／空产物返回非零并保留诊断清单，不静默丢弃为成功。
 
 CI 的收集与上传步骤使用 `always()`，测试准备或运行失败后仍尝试保留产物；只上传收集器输出的 `ci-artifacts/`，按[上传工具约定](https://github.com/actions/upload-artifact/blob/v4.6.2/README.md)显式允许 `.local` 内的白名单产物，缺失产物报错，保留 14 天，名称带运行尝试编号。套件摘要进入 Job Summary。CI 作业期限 45 分钟、稳定性步骤 15 分钟；runner 被强制回收等情况可能只能保留最后一次已落盘检查点，不把不完整报告算作通过。
 
 ## 协议、状态与等待
+
+### 窗口与真实失焦扩展
+
+`nativeWindows` 默认为 `false`；只有显式 `true`、`visible: true` 且配置有效 `webDriverUrl` 的隔离实例启用。启动时持有 `main` 和一个固定标签、无 WebView 的焦点辅助窗口；不接收窗口句柄、任意标签、外部进程或屏幕输入。锁定的 Tauri 2.11.5 将无 WebView `WindowBuilder` 放在 `unstable` feature 下，因此仅 `dev-mcp` 构建启用该 feature，没有新增依赖或生产 IPC 权限。辅助窗口不授予业务能力，主窗口销毁后通过正常 close 关闭辅助窗口，随后沿用既有服务／核心退出流程。
+
+| 工具                | 契约                                                                                                                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dev_window_state`  | 读取原生焦点、辅助窗口焦点、可见／最小化／最大化、物理位置和客户区尺寸、逻辑尺寸及当前 scaleFactor；附事件序号与 main 的 focus／blur／resize／move 计数                                                                                                            |
+| `dev_window_action` | 带请求 ID，接受 `focusMain`、`focusAuxiliary`、`minimize`、`maximize`、`restore`、`resize { size: minimum 或 default }`、`close`。尺寸预设为 900×600／1280×800 逻辑像素；restore 同时解除最小化与最大化。返回操作前状态和 dispatched，不宣称事件已到达或应用已退出 |
+| `dev_window_wait`   | `condition` 为 `focus { main, auxiliary }`、`state { minimized, maximized }` 或 `size { size }`；可带 `afterSequence` 要求新原生事件，`timeoutMs` 为 1–30000。事件唤醒并每至多 50 ms 补查未必触发 resize 的最小化状态，超时保留实际末态，退出立即终止等待          |
+
+窗口变更与 WebDriver 输入／截图共用一个执行锁，等待复用既有四个等待名额。外层实例／会话校验、变更回执、未知字段拒绝和有界响应沿用原协议；未启用时不注册这三个工具。`dev_ui_action` 新增 `titlebarDoubleClick`（仅窗口测试实例，通过 W3C 双击真实空白标题栏）及 `movePointer { x, y }`（仅已解码画布内，无按键）。窗口按钮使用固定语义目标 `window:minimize`／`window:maximize`／`window:close`。
+
+Windows 的顶层 HWND 焦点查询不包含 WebView2 子窗口。main 的 `focused` 使用 Tauri 原生 `Focused` 事件（来自 WebView2 的 GotFocus／LostFocus）维护，尚未收到事件时为 `null`；辅助窗口没有子视图，使用其原生查询。聚焦 main 同时请求顶层激活与 WebView2 原生 MoveFocus。套件先在自有窗口间转移一次焦点建立基线，后续恢复／失焦必须看到新的原生事件和 DOM 可信事件。窗口套件串行业务与 WebView 实例，避免实例启动／退出争用系统焦点；其余套件继续并行验证。
+
+前端 `window` 投影记录 `document.hasFocus()`、只统计 `isTrusted` 且目标为 window 的 focus／blur 事件、CSS 视口、devicePixelRatio、标题栏与三个按钮的实际边界／名称／禁用状态。`windowFocus { focused, eventsAfter }` 等待相应可信计数增加，`windowLayout { width, height, maximized }` 等待视口及最大化按钮名称同步。系统焦点与前端投影必须分别满足，`dispatchEvent(new FocusEvent(...))` 不增加证据计数。
+
+`tool { tool: pan 或 region, keyEventsAtLeast }` 同时等待工具状态与可信键盘事件计数，保证快捷键已进入实际前端投影。即使工具值原本就匹配，也不能用尚未达到计数的旧投影作为键盘作用域测试的证据。
+
+`test:dev-mcp:m2-window` 在新实例中执行四类场景各 5 次：最小／默认／最大化／还原、双击和最小化恢复；新建／移动／调整草稿与中键平移真实失焦后取消、迟到松键不提交；菜单失焦收起及恢复后键盘作用域；固定任务内容和预览交付在途时点击关闭按钮，由外部运行器验证退出码 0、无归属进程残留及源 PSD 哈希不变。退出可能中断驱动响应，报告保留该诊断，独立的进程和文件断言决定结果。CI 运行该入口并保留关键窗口 PNG；未提供可交互桌面的环境明确失败。当前 scaleFactor 观测不等于多 DPI／跨屏验收，标题栏系统拖动、文件选择器、贴靠和 Alt+F4 仍保留独立专项。
 
 ### 清理测试扩展
 

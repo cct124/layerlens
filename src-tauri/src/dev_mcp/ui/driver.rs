@@ -264,7 +264,37 @@ impl Driver {
             ));
         }
         match request.action {
+            UiAction::TitlebarDoubleClick {} => {
+                if !self.instance.native_windows {
+                    return Err(error(
+                        Code::InvalidInput,
+                        "标题栏输入需 nativeWindows 实例。",
+                    ));
+                }
+                let element = self.element("window:drag").await?;
+                self.held.store(true, Ordering::Release);
+                self.session_command(Method::POST, "actions", Some(json!({"actions":[{
+                    "type":"pointer", "id":"layerlens-pointer", "parameters":{"pointerType":"mouse"},
+                    "actions":[{ "type":"pointerMove", "origin":{"element-6066-11e4-a52e-4f735466cecf":element}, "x":0,"y":0,"duration":0 },
+                        {"type":"pointerDown","button":0},{"type":"pointerUp","button":0},
+                        {"type":"pointerDown","button":0},{"type":"pointerUp","button":0}]
+                }]}))).await?;
+                self.held.store(false, Ordering::Release);
+            }
+            UiAction::MovePointer { x, y } => {
+                validate_canvas_input(&before, &[(x, y)])?;
+                self.session_command(Method::POST, "actions", Some(json!({"actions":[{
+                    "type":"pointer","id":"layerlens-pointer","parameters":{"pointerType":"mouse"},
+                    "actions":[{"type":"pointerMove","origin":"viewport","x":x,"y":y,"duration":0}]
+                }]}))).await?;
+            }
             UiAction::Click { target } => {
+                if target.starts_with("window:") && !self.instance.native_windows {
+                    return Err(error(
+                        Code::InvalidInput,
+                        "窗口控件输入需 nativeWindows 实例。",
+                    ));
+                }
                 let element = self.element(&target).await?;
                 self.session_command(
                     Method::POST,

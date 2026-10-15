@@ -1,6 +1,21 @@
 // 测试子进程有明确期限；输出只保留末尾诊断，不以超时后的强制结束作为通过。
 import { spawn } from 'node:child_process';
+import assert from 'node:assert/strict';
 import { redact } from './dev-mcp-artifacts.mjs';
+
+/** 附带选区观测与操作结果独立；只接受契约声明的忙碌降级，不重做已接受操作。 */
+export function checkSelectionObservation(observation, sessionId) {
+  assert(observation && typeof observation === 'object', '缺少附带选区观测');
+  if ('unavailable' in observation) {
+    assert.deepEqual(Object.keys(observation), ['unavailable']);
+    assert.equal(observation.unavailable?.code, 'BUSY', JSON.stringify(observation));
+    assert.equal(typeof observation.unavailable.message, 'string');
+    assert(observation.unavailable.message.length > 0);
+    return observation.unavailable;
+  }
+  assert.equal(observation.sessionId, sessionId, JSON.stringify(observation));
+  return null;
+}
 
 /** 防止开发者全局 WebView2 覆盖项把测试指向日常 profile 或调试会话。 */
 export function isolatedEnvironment(runtimePath, parent = process.env) {

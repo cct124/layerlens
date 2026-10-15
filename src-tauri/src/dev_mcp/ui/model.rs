@@ -90,6 +90,28 @@ pub(crate) struct UiInputEvidence {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiWindowControl {
+    pub target: String,
+    pub label: String,
+    pub rect: UiRect,
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiWindow {
+    pub focused: bool,
+    pub focus_events: String,
+    pub blur_events: String,
+    pub width: u32,
+    pub height: u32,
+    pub device_pixel_ratio: f64,
+    pub titlebar: Option<UiRect>,
+    pub controls: Vec<UiWindowControl>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiObservation {
     pub instance_id: String,
     pub frontend_id: String,
@@ -112,6 +134,7 @@ pub(crate) struct UiObservation {
     pub selection_running: bool,
     pub content: Option<UiContent>,
     pub input: UiInputEvidence,
+    pub window: UiWindow,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -169,6 +192,13 @@ pub(crate) enum UiAction {
         phase: KeyPhase,
     },
     ReleaseInputs {},
+    /// 只允许 nativeWindows 实例的真实标题栏双击。
+    TitlebarDoubleClick {},
+    /// 无按键的真实画布移动，用于证明失焦后的平移／草稿不会继续。
+    MovePointer {
+        x: i32,
+        y: i32,
+    },
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -244,6 +274,11 @@ pub(crate) enum UiCondition {
     Panel {
         panel: String,
     },
+    /// 工具状态与指定可信键盘事件均已投影，避免把驱动返回当作前端已处理。
+    Tool {
+        tool: String,
+        key_events_at_least: String,
+    },
     Menu {
         menu: Option<String>,
     },
@@ -278,6 +313,15 @@ pub(crate) enum UiCondition {
     },
     ViewRevision {
         at_least: String,
+    },
+    WindowFocus {
+        focused: bool,
+        events_after: Option<String>,
+    },
+    WindowLayout {
+        width: u32,
+        height: u32,
+        maximized: bool,
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

@@ -8,6 +8,8 @@ description = "LayerLens Tauri 桌面适配层"
 
 [features]
 dev-mcp = [
+  # 锁定版本的无 WebView WindowBuilder 仍属于 unstable，仅开发测试构建启用。
+  "tauri/unstable",
   "dep:rmcp", "dep:axum", "dep:schemars", "dep:tokio-util",
   "dep:uuid", "dep:base64", "dep:reqwest", "dep:ts-rs", "layerlens-core/schema",
   "tokio/net", "tokio/time", "tokio/macros", "tokio/io-util",

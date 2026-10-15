@@ -14,6 +14,7 @@ import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
 import { exerciseOpenCleanup, exerciseRegionControls } from './dev-mcp-m2-webview.mjs';
 import { exerciseCanvasInput } from './dev-mcp-input-webview.mjs';
 import { exerciseCleanupBoundaries } from './dev-mcp-cleanup-webview.mjs';
+import { exerciseWindows } from './dev-mcp-window-webview.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -39,6 +40,10 @@ assert(
     'input-pan',
     'input-chord',
     'input-snapping',
+    'window-controls',
+    'window-blur',
+    'window-menu',
+    'window-exit',
   ].includes(options.scenario),
 );
 assert(
@@ -345,7 +350,13 @@ try {
   const config = path.join(run, 'config.json');
   await writeFile(
     config,
-    JSON.stringify({ sampleRoot, runRoot: runs, visible: options.visible, webDriverUrl: endpoint }),
+    JSON.stringify({
+      sampleRoot,
+      runRoot: runs,
+      visible: options.visible || options.scenario.startsWith('window-'),
+      webDriverUrl: endpoint,
+      nativeWindows: options.scenario.startsWith('window-'),
+    }),
     { flag: 'wx' },
   );
   report.phase = 'webview-start';
@@ -376,7 +387,8 @@ try {
   info = (await tool('dev_instance', {})).value;
   assert.equal(info.instanceId, connection.instanceId);
   report.instanceId = info.instanceId;
-  assert.equal((await rpc('tools/list', {})).tools.length, 15);
+  const expectedTools = options.scenario.startsWith('window-') ? 18 : 15;
+  assert.equal((await rpc('tools/list', {})).tools.length, expectedTools);
   let view = await wait({ kind: 'ready' });
   frontend = view.frontendId;
   report.frontendId = frontend;
@@ -394,7 +406,7 @@ try {
   `,
     args: [],
   });
-  report.checks.push('匹配驱动、WebView 身份、前端握手及 15 个真实工具');
+  report.checks.push(`匹配驱动、WebView 身份、前端握手及 ${expectedTools} 个真实工具`);
   report.phase = 'document-sync';
   await workspace({
     kind: 'open',
@@ -622,6 +634,25 @@ try {
       sourceHashes,
     );
     report.checks.push('旧前端／非法目标拒绝、超时末态、截图版本关联与源文件不变');
+  } else if (options.scenario.startsWith('window-')) {
+    report.windowResult = await exerciseWindows({
+      scenario: options.scenario,
+      state,
+      core,
+      wait,
+      waitCore,
+      action,
+      click,
+      key,
+      point,
+      selection,
+      workspace,
+      tool,
+      args,
+      report,
+      screenshot,
+      document: a,
+    });
   } else if (options.scenario.startsWith('geometry-')) {
     const zoom = Number(options.scenario.slice('geometry-'.length)) / 100;
     await exerciseRegionControls({
@@ -695,8 +726,20 @@ try {
     sourceHashes,
   );
   report.phase = 'shutdown';
-  await tool('dev_shutdown', args({}));
+  if (report.windowResult?.closeWindow) {
+    // 关闭导致 WebDriver 断连时保留原因；是否正常退出只由外部进程句柄判定。
+    try {
+      await click('window:close');
+    } catch (error) {
+      report.closeResponseError = String(error);
+    }
+  } else await tool('dev_shutdown', args({}));
   assert.equal(await deadline(monitor.exit, 10000, '应用正常退出超时'), 0);
+  report.exitCode = 0;
+  assert.deepEqual(
+    await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s)))),
+    sourceHashes,
+  );
   const remaining = await readdir(connection.directory);
   assert(remaining.includes('stopped'));
   assert(!remaining.includes('ready') && !remaining.includes('connection.json'));

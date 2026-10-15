@@ -23,6 +23,8 @@ fn main() -> io::Result<()> {
         UiCleanup::decl(&config),
         UiContent::decl(&config),
         UiInputEvidence::decl(&config),
+        UiWindowControl::decl(&config),
+        UiWindow::decl(&config),
         UiObservation::decl(&config),
     ] {
         output.push_str("export ");

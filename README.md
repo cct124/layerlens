@@ -90,6 +90,7 @@ npm run test:dev-mcp:stability -- --repeat 5
 npm run test:dev-mcp:m2     # 独立实例验证基线、三种缩放几何及当前文档清理
 npm run test:dev-mcp:m2-input # 中键、组合手势和吸附边界各重复 5 次
 npm run test:dev-mcp:m2-cleanup # 128 项清理、过期、恢复及迟到结果各重复 5 次
+npm run test:dev-mcp:m2-window # 窗口控制、真实失焦、菜单焦点及正常退出各重复 5 次
 npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
 npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
 ```
@@ -124,6 +125,10 @@ $devMcpConfig = @{
 以上手工配置开启 8 个业务工具及 `dev_prepare_tasks`／`dev_test_control` 两个测试工具，并安装只读前端观测桥，供业务测试等待图像实际就绪。真实界面测试另配置回环 `webDriverUrl`、由驱动启动应用，再用 `dev_ui_attach` 绑定经过身份核验的会话，共启用 15 个工具。支持 `--dev-mcp-config=<路径>` 形式供驱动传参。
 
 清理边界套件使用 `--webview-suite m2-cleanup`，20 轮覆盖 `cleanup-max`／`cleanup-expiry`／`cleanup-recovery`／`cleanup-late` 各 5 次。任务准备复用真实服务且保留部分失败与幂等回执；计划时钟只控制清理 TTL，命名检查点最多 4 个活跃、32 个会话记录，最长 30 秒并随退出终止。具体协议见[清理测试扩展](docs/08-开发测试MCP.md#清理测试扩展)。业务脚本的 `frontendImageReady` 等待同时校验文档修订、核心序号、解码和绘制准备，避免核心就绪时与前端争用单次 PNG 复制额度。
+
+窗口套件 `--webview-suite m2-window` 运行 `window-controls`／`window-blur`／`window-menu`／`window-exit`，必须使用可交互的 Windows 桌面会话。它显式设置 `visible: true` 与 `nativeWindows: true`，额外注册 `dev_window_state`／`dev_window_action`／`dev_window_wait`，共 18 个工具。系统焦点只在本实例主窗口与无 WebView 的辅助窗口间转移；窗口会显示并实际取得焦点，不应同时操作测试窗口。完整契约见[窗口与真实失焦扩展](docs/08-开发测试MCP.md#窗口与真实失焦扩展)。没有相应桌面能力时场景失败，不降级为合成事件或静默跳过。原生位置／尺寸／DPI、前端可信 focus／blur 计数和截图进入报告；正常退出由外部进程句柄、连接回收、源文件哈希及残留扫描确认。系统文件选择器、跨屏 DPI、贴靠和 Alt+F4 仍属独立验收。
+
+业务操作结果与附带 `userSelection` 观测分别校验。附带观测因有界后台忙碌返回 `unavailable: { code: "BUSY", ... }` 时写入报告，后续明确状态断言继续执行；不能据此重做已接受变更，也不能容忍未知错误或缺失观测。
 
 需要前端热更新时使用 `npm run dev:mcp -- -- --locked -- --dev-mcp-config $devMcpConfigPath`；仅运行 `dev:mcp` 不启用监听。普通发行构建未编入开发工具，使用以下命令验证它拒绝开发参数：
 

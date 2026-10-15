@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { redact } from './dev-mcp-artifacts.mjs';
+import { checkSelectionObservation } from './dev-mcp-runner.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values: options } = parseArgs({
@@ -198,10 +199,18 @@ async function tool(name, args, error = false) {
   const result = await rpc('tools/call', { name, arguments: args });
   assert.equal(result.isError, error);
   assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
-  assert.equal(
-    result.structuredContent.userSelection.sessionId,
+  const unavailable = checkSelectionObservation(
+    result.structuredContent.userSelection,
     info?.sessionId ?? result.structuredContent.data.value.sessionId,
   );
+  if (unavailable) {
+    report.unavailableObservations ??= [];
+    report.unavailableObservations.push({
+      tool: name,
+      clientRequestId: args.clientRequestId,
+      ...unavailable,
+    });
+  }
   return result.structuredContent;
 }
 const workspace = (action, mutation = true) =>

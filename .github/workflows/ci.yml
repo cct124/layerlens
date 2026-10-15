@@ -95,6 +95,9 @@ jobs:
       - name: Repeat M2 bounded cleanup expiry recovery and late responses five times each
         timeout-minutes: 15
         run: npm run test:dev-mcp:m2-cleanup
+      - name: Repeat M2 native window focus and shutdown scenarios five times each
+        timeout-minutes: 15
+        run: npm run test:dev-mcp:m2-window
       - name: Collect bounded diagnostic artifacts
         if: always() && steps.driver.outcome != 'skipped'
         run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts

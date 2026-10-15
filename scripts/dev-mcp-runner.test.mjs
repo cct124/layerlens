@@ -4,7 +4,21 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { collectArtifacts, redact, summarize } from './dev-mcp-artifacts.mjs';
-import { isolatedEnvironment, runProcess } from './dev-mcp-runner.mjs';
+import { checkSelectionObservation, isolatedEnvironment, runProcess } from './dev-mcp-runner.mjs';
+
+test('操作成功时附带观测可忙碌降级，但跨会话、缺失与其他错误仍失败', () => {
+  assert.equal(checkSelectionObservation({ sessionId: 'session' }, 'session'), null);
+  const unavailable = { code: 'BUSY', message: '选区与清理后台已满' };
+  assert.deepEqual(checkSelectionObservation({ unavailable }, 'session'), unavailable);
+  for (const invalid of [
+    undefined,
+    {},
+    { sessionId: 'other' },
+    { unavailable: { code: 'INTERNAL', message: 'failure' } },
+    { unavailable, sessionId: 'session' },
+  ])
+    assert.throws(() => checkSelectionObservation(invalid, 'session'));
+});
 
 test('测试子进程只使用指定运行时，不继承日常 WebView profile／调试覆盖项', () => {
   const parent = {
@@ -77,6 +91,7 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   );
   await writeFile(path.join(run, 'driver.log'), 'Authorization: Bearer credential');
   await writeFile(path.join(run, 'failure.png'), Buffer.from([137, 80, 78, 71]));
+  await writeFile(path.join(run, 'window-minimum.png'), Buffer.from([137, 80, 78, 71]));
   await writeFile(
     path.join(source, 'stability-abc', 'summary.json'),
     JSON.stringify({ status: 'failed' }),
@@ -84,7 +99,8 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   const output = path.join(directory, 'output');
   const manifest = await collectArtifacts(source, output);
   assert.deepEqual(manifest.errors, []);
-  assert.equal(manifest.files.length, 4);
+  assert.equal(manifest.files.length, 5);
+  assert(manifest.files.some((entry) => entry.path.endsWith('/window-minimum.png')));
   assert(manifest.files.every((entry) => !/instances|config|exe/.test(entry.path)));
   const copy = JSON.parse(
     await readFile(path.join(output, 'stability-abc/runs/webview-test/report.json'), 'utf8'),
@@ -101,7 +117,7 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
     path.join(directory, 'single'),
   );
   assert.deepEqual(single.errors, []);
-  assert.equal(single.files.length, 4);
+  assert.equal(single.files.length, 5);
 });
 
 test('来源目录联接不能导出外部文件，空产物明确报错', async (t) => {

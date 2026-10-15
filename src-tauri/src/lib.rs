@@ -144,7 +144,11 @@ pub fn run() -> tauri::Result<()> {
                             if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) { observation.invalidate(); }
                         });
                 }
-                builder.build()?;
+                let main = builder.build()?;
+                if instance.native_windows {
+                    instance.windows.set(dev_mcp::windows::Windows::install(main)?)
+                        .map_err(|_| std::io::Error::other("重复初始化测试窗口"))?;
+                }
                 let exit = app.handle().clone();
                 let running =
                     tauri::async_runtime::block_on(dev_mcp::start(host, instance, move || {
