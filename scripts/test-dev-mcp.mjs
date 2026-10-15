@@ -232,7 +232,7 @@ async function exerciseInstance() {
   assert.equal(initialization.protocolVersion, '2025-11-25');
   await rpc('notifications/initialized', {}, true);
   const listed = await rpc('tools/list', {});
-  assert.equal(listed.tools.length, 8);
+  assert.equal(listed.tools.length, 10);
   assert(listed.tools.every((entry) => entry.inputSchema && entry.outputSchema));
   info = (await tool('dev_instance', {})).data.value;
   report.instanceId = info.instanceId;
@@ -251,6 +251,13 @@ async function exerciseInstance() {
   assert(a && b);
   await workspace({ kind: 'activate', documentId: a.id });
   state = await waitFor({ kind: 'previewReady', documentId: a.id, revision: a.revision });
+  // 核心就绪时前端可能正在复制同一 PNG；等实际 decode/绘制准备，保持单次复制预算和 BUSY 语义。
+  await waitFor({
+    kind: 'frontendImageReady',
+    documentId: a.id,
+    revision: a.revision,
+    atLeast: state.sequence,
+  });
   const preview = await rpc('tools/call', {
     name: 'dev_preview',
     arguments: argumentsFor({ protocolVersion: 1, documentId: a.id, revision: a.revision }),

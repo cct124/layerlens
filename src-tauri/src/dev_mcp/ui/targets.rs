@@ -30,6 +30,7 @@ pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
         "cleanup:confirm",
         "cleanup:recheck",
         "cleanup:sync",
+        "cleanup:tasks",
         "canvas",
         "canvas:reframe",
         "canvas:snap",

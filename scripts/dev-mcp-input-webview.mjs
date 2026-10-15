@@ -65,8 +65,9 @@ export async function exerciseCanvasInput({
   }
   async function resetView() {
     await click('menu:view');
+    await wait({ kind: 'menu', menu: 'view' });
     await click('command:actual');
-    return state();
+    return wait({ kind: 'menu', menu: null });
   }
   if (scenario === 'input-pan') {
     const start = point(fixed, 160, 96);

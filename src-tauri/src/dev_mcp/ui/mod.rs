@@ -19,7 +19,7 @@ pub(crate) fn dev_view_report<R: tauri::Runtime>(
     instance: tauri::State<'_, Arc<Instance>>,
     observation: model::UiObservation,
 ) -> Result<(), WorkspaceError> {
-    if window.label() != "main" || instance.web_driver_url.is_none() {
+    if window.label() != "main" {
         return Err(crate::workspace::error(
             WorkspaceErrorCode::InvalidInput,
             "此窗口未启用开发观测。",

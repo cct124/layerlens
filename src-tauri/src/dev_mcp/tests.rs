@@ -32,6 +32,7 @@ use tokio::{
 };
 
 type Client = RunningService<RoleClient, ClientConfig>;
+mod cleanup;
 
 struct Temporary(PathBuf);
 impl Temporary {
@@ -241,7 +242,7 @@ async fn sdk_round_trip_preserves_snapshots_replays_cleanup_and_isolates_reopene
     let before = fs::read(app.instance.sample_root.join("bitmap-raw.psd")).unwrap();
     let client = app.client().await;
     let tools = client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 8);
+    assert_eq!(tools.len(), 10);
     assert!(
         tools
             .iter()

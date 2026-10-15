@@ -251,6 +251,7 @@ pub(crate) async fn start(
         let result = tokio::select! {
             result = &mut serve => result,
             _ = stop.cancelled() => {
+                host.operations.testing.stop();
                 tokio::select! {
                     result = &mut serve => result,
                     _ = tokio::time::sleep(Duration::from_secs(3)) => { force.cancel(); transport_stop.cancel(); serve.await }
@@ -259,6 +260,7 @@ pub(crate) async fn start(
         };
         stop.cancel();
         transport_stop.cancel();
+        host.operations.testing.stop();
         shared.receipts.finish().await;
         let result = result.and_then(|()| instance.finish());
         if let Err(error) = result {

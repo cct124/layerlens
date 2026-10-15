@@ -1,5 +1,7 @@
 //! 开发 MCP 工具路由；协议只包装真实业务结果，不代替核心授权或伪造前端同步。
 
+use super::control::{ControlRequest, ControlResult};
+use super::fixtures::{self, PrepareTasks, PreparedTasks};
 use super::model::Request;
 use super::ui::model::InputRequest;
 use super::ui::{Driver, model::*};
@@ -35,6 +37,7 @@ pub(super) struct Shared {
     pub receipts: Receipts,
     calls: Semaphore,
     waits: Semaphore,
+    controls: Semaphore,
     tools: Vec<Tool>,
     ui: Option<Arc<Driver>>,
 }
@@ -78,6 +81,16 @@ impl Shared {
             .await
             .map_err(|e| io::Error::other(e.message))?;
         let mut tools = vec![
+            definition::<Request<PrepareTasks>, PreparedTasks>(
+                "dev_prepare_tasks",
+                "在固定快照上准备 1–128 个任务；逐项使用真实服务，完整／部分结果由同一请求回放，不提高预算。",
+                false,
+            )?,
+            definition::<Request<ControlRequest>, ControlResult>(
+                "dev_test_control",
+                "开发实例计划时钟与命名检查点；arm/advancePlanClock 需请求 ID，按票据释放幂等，等待不占业务执行名额。",
+                false,
+            )?,
             definition::<Empty, InstanceInfo>(
                 "dev_instance",
                 "查询当前开发测试实例、会话及已实现能力；先读取此工具再操作。",
@@ -133,6 +146,7 @@ impl Shared {
                 definition::<Request<ScreenshotRequest>,ScreenshotResult>("dev_ui_screenshot","采集真实 WebView PNG，并附捕获前后前端版本；unchanged 仅比较观测，不代表物理显示验收。",true)?,
             ]);
         }
+        host.operations.testing.enable();
         Ok(Arc::new(Self {
             host,
             instance,
@@ -141,6 +155,7 @@ impl Shared {
             receipts: Receipts::default(),
             calls: Semaphore::new(CALLS),
             waits: Semaphore::new(WAITS),
+            controls: Semaphore::new(1),
             tools,
             ui,
         }))
@@ -247,8 +262,12 @@ impl ServerHandler for Handler {
         }
         let arguments = Value::Object(request.arguments.unwrap_or_default());
         check_size(&arguments, 64 * 1024).map_err(|e| McpError::invalid_params(e.message, None))?;
-        let permits = if matches!(request.name.as_ref(), "dev_wait" | "dev_ui_wait") {
+        let permits = if matches!(request.name.as_ref(), "dev_wait" | "dev_ui_wait")
+            || (request.name == "dev_test_control" && arguments["request"]["kind"] == "wait")
+        {
             &shared.waits
+        } else if request.name == "dev_test_control" {
+            &shared.controls
         } else {
             &shared.calls
         };
@@ -257,6 +276,65 @@ impl ServerHandler for Handler {
             .map_err(|_| McpError::internal_error("开发请求名额已满；未接受新操作。", None))?;
         let work = async {
             match request.name.as_ref() {
+                "dev_prepare_tasks" => {
+                    let args: Request<PrepareTasks> = shared.parse(arguments)?;
+                    let host = shared.host.clone();
+                    let session = shared.session.clone();
+                    let input = args.request.clone();
+                    let result = match shared.mutation("prepare_tasks", &args, async move {
+                        fixtures::prepare(&host, session, input)
+                            .await
+                            .and_then(value)
+                    }) {
+                        Ok(wait) => wait.await,
+                        Err(error) => Err(error),
+                    };
+                    shared.reply(result, None, None).await
+                }
+                "dev_test_control" => {
+                    let args: Request<ControlRequest> = shared.parse(arguments)?;
+                    let controls = shared.host.operations.testing.clone();
+                    let input = args.request.clone();
+                    let result = match input {
+                        ControlRequest::Release { id } => controls
+                            .release(id)
+                            .map(|gate| ControlResult::Gate { gate })
+                            .and_then(value),
+                        ControlRequest::State { id } => controls
+                            .state(id)
+                            .map(|gate| ControlResult::Gate { gate })
+                            .and_then(value),
+                        ControlRequest::Wait {
+                            id,
+                            phase,
+                            timeout_ms,
+                        } => controls
+                            .wait(id, phase, timeout_ms)
+                            .await
+                            .map(|(satisfied, gate)| ControlResult::Wait { satisfied, gate })
+                            .and_then(value),
+                        _ => match shared.mutation("test_control", &args, async move {
+                            match input {
+                                ControlRequest::AdvancePlanClock { seconds } => controls
+                                    .advance(seconds)
+                                    .map(|offset_seconds| ControlResult::Clock { offset_seconds }),
+                                ControlRequest::Arm {
+                                    checkpoint,
+                                    mode,
+                                    timeout_ms,
+                                } => controls
+                                    .arm(checkpoint, mode, timeout_ms)
+                                    .map(|gate| ControlResult::Gate { gate }),
+                                _ => unreachable!("只有时钟／arm 使用变更回执"),
+                            }
+                            .and_then(value)
+                        }) {
+                            Ok(wait) => wait.await,
+                            Err(error) => Err(error),
+                        },
+                    };
+                    shared.reply(result, None, None).await
+                }
                 "dev_ui_attach" | "dev_ui_state" | "dev_ui_action" | "dev_ui_wait"
                 | "dev_ui_screenshot" => {
                     let ui = shared.ui.clone().ok_or_else(|| {
@@ -462,8 +540,13 @@ impl ServerHandler for Handler {
                 }
                 "dev_wait" => {
                     let args: Request<WaitRequest> = shared.parse(arguments)?;
-                    let result =
-                        operations::wait(&shared.host, args.request, &shared.stopping).await;
+                    let result = operations::wait(
+                        &shared.host,
+                        &shared.instance.observations,
+                        args.request,
+                        &shared.stopping,
+                    )
+                    .await;
                     let fixed = result.as_ref().ok().map(|r| r.last_state.selection.clone());
                     shared.reply(result.and_then(value), fixed, None).await
                 }

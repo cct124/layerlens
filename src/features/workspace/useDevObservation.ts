@@ -4,8 +4,20 @@ import type { UiObservation } from '../../shared/api/devGenerated';
 
 type Projection = Omit<
   UiObservation,
-  'instanceId' | 'frontendId' | 'documentEpoch' | 'viewRevision' | 'menu' | 'focus' | 'input'
->;
+  | 'instanceId'
+  | 'frontendId'
+  | 'documentEpoch'
+  | 'viewRevision'
+  | 'menu'
+  | 'focus'
+  | 'input'
+  | 'cleanup'
+> & {
+  cleanup: Omit<
+    UiObservation['cleanup'],
+    'renderedTasks' | 'scrollable' | 'scrolledToEnd' | 'focusInside'
+  >;
+};
 declare global {
   interface Window {
     __LAYERLENS_DEV_BOOT__?: unknown;
@@ -69,8 +81,18 @@ export function useDevObservation(project: () => Projection) {
       if (disposed) return;
       const selectedMenu = document.querySelector<HTMLElement>('.menu-trigger[aria-expanded=true]');
       const focused = document.activeElement;
+      const dialog = document.querySelector('dialog[open].cleanup-dialog');
+      const list = dialog?.querySelector('.cleanup-tasks');
+      const projection = project();
       const value = {
-        ...project(),
+        ...projection,
+        cleanup: {
+          ...projection.cleanup,
+          renderedTasks: list?.children.length ?? 0,
+          scrollable: !!list && list.scrollHeight > list.clientHeight,
+          scrolledToEnd: !!list && list.scrollTop + list.clientHeight >= list.scrollHeight - 1,
+          focusInside: !!dialog?.contains(focused),
+        },
         menu: selectedMenu?.id.replace('menu-trigger-', '') ?? null,
         focus:
           focused instanceof HTMLElement
@@ -122,6 +144,8 @@ export function useDevObservation(project: () => Projection) {
             'ArrowRight',
             'ArrowUp',
             'ArrowDown',
+            'Home',
+            'End',
           ].includes(event.key)
         )
           lastKey = event.key;
@@ -148,6 +172,7 @@ export function useDevObservation(project: () => Projection) {
     document.addEventListener('keydown', key, true);
     document.addEventListener('keyup', key, true);
     document.addEventListener('focusin', schedule);
+    document.addEventListener('scroll', schedule, true);
     document.addEventListener('load', schedule, true);
     document.addEventListener('error', schedule, true);
     window.addEventListener('resize', schedule);
@@ -161,6 +186,7 @@ export function useDevObservation(project: () => Projection) {
       document.removeEventListener('keydown', key, true);
       document.removeEventListener('keyup', key, true);
       document.removeEventListener('focusin', schedule);
+      document.removeEventListener('scroll', schedule, true);
       document.removeEventListener('load', schedule, true);
       document.removeEventListener('error', schedule, true);
       window.removeEventListener('resize', schedule);

@@ -21,7 +21,27 @@ pub(crate) async fn selection_request(
     request: layerlens_core::selection_contract::SelectionRequest,
     host: tauri::State<'_, Arc<WorkspaceHost>>,
 ) -> Result<layerlens_core::selection_contract::SelectionReply, WorkspaceError> {
-    host.operations.request(request).await
+    #[cfg(feature = "dev-mcp")]
+    let creating = matches!(
+        request.operation,
+        layerlens_core::selection_contract::SelectionOperation::CreateTask { .. }
+    );
+    let reply = host.operations.request(request).await?;
+    #[cfg(feature = "dev-mcp")]
+    {
+        use crate::workspace::testing::Checkpoint;
+        use layerlens_core::selection_contract::SelectionReply;
+        let point = match &reply {
+            SelectionReply::Tasks { .. } => Some(Checkpoint::DesktopTasks),
+            SelectionReply::Task { .. } if creating => Some(Checkpoint::DesktopTaskCreated),
+            SelectionReply::Content { .. } => Some(Checkpoint::DesktopContent),
+            _ => None,
+        };
+        if let Some(point) = point {
+            host.operations.testing.hit(point).await?;
+        }
+    }
+    Ok(reply)
 }
 
 /// 预检和确认均进入同一有界操作后台；客户端不能传入自造的清理影响集合。
@@ -30,7 +50,18 @@ pub(crate) async fn cleanup_request(
     request: layerlens_core::cleanup_contract::CleanupRequest,
     host: tauri::State<'_, Arc<WorkspaceHost>>,
 ) -> Result<layerlens_core::cleanup_contract::CleanupReply, WorkspaceError> {
-    host.operations.cleanup(request).await
+    let reply = host.operations.cleanup(request).await?;
+    #[cfg(feature = "dev-mcp")]
+    if matches!(
+        reply,
+        layerlens_core::cleanup_contract::CleanupReply::Committed { .. }
+    ) {
+        host.operations
+            .testing
+            .hit(crate::workspace::testing::Checkpoint::DesktopCleanupCommitted)
+            .await?;
+    }
+    Ok(reply)
 }
 
 #[tauri::command]
@@ -39,7 +70,20 @@ pub(crate) async fn workspace_action(
     host: tauri::State<'_, Arc<WorkspaceHost>>,
 ) -> Result<WorkspaceSnapshot, WorkspaceError> {
     check_version(request.protocol_version)?;
-    host.action(request.action).await
+    #[cfg(feature = "dev-mcp")]
+    let snapshot = matches!(
+        request.action,
+        layerlens_core::workspace_contract::WorkspaceAction::Snapshot {}
+    );
+    let reply = host.action(request.action).await?;
+    #[cfg(feature = "dev-mcp")]
+    if snapshot {
+        host.operations
+            .testing
+            .hit(crate::workspace::testing::Checkpoint::DesktopSnapshot)
+            .await?;
+    }
+    Ok(reply)
 }
 
 #[tauri::command]

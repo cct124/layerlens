@@ -89,6 +89,7 @@ npm run build:dev-mcp
 npm run test:dev-mcp:stability -- --repeat 5
 npm run test:dev-mcp:m2     # 独立实例验证基线、三种缩放几何及当前文档清理
 npm run test:dev-mcp:m2-input # 中键、组合手势和吸附边界各重复 5 次
+npm run test:dev-mcp:m2-cleanup # 128 项清理、过期、恢复及迟到结果各重复 5 次
 npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
 npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
 ```
@@ -120,7 +121,9 @@ $devMcpConfig = @{
 
 `sampleRoot`、`runRoot` 必须是已存在且互不包含的绝对目录。`port=0` 分配回环端口，`visible` 默认 `false`。客户端在 `runRoot/<instanceId>/ready` 出现后读取同目录 `connection.json`，以其中的 `endpoint` 和 Bearer `token` 初始化 MCP，再调用 `dev_instance` 获取实例／会话身份。连接文件含凭据，不能复制进日志或提交仓库；正常停止监听后回收连接文件，保留 `stopped` 标记与隔离的 WebView profile。
 
-以上手工配置只开启 8 个业务工具。真实界面测试脚本另配置回环 `webDriverUrl`、由驱动启动应用，再用 `dev_ui_attach` 绑定经过身份核验的会话，共启用 13 个工具；前端只读观测桥随该配置启用。支持 `--dev-mcp-config=<路径>` 形式供驱动传参。
+以上手工配置开启 8 个业务工具及 `dev_prepare_tasks`／`dev_test_control` 两个测试工具，并安装只读前端观测桥，供业务测试等待图像实际就绪。真实界面测试另配置回环 `webDriverUrl`、由驱动启动应用，再用 `dev_ui_attach` 绑定经过身份核验的会话，共启用 15 个工具。支持 `--dev-mcp-config=<路径>` 形式供驱动传参。
+
+清理边界套件使用 `--webview-suite m2-cleanup`，20 轮覆盖 `cleanup-max`／`cleanup-expiry`／`cleanup-recovery`／`cleanup-late` 各 5 次。任务准备复用真实服务且保留部分失败与幂等回执；计划时钟只控制清理 TTL，命名检查点最多 4 个活跃、32 个会话记录，最长 30 秒并随退出终止。具体协议见[清理测试扩展](docs/08-开发测试MCP.md#清理测试扩展)。业务脚本的 `frontendImageReady` 等待同时校验文档修订、核心序号、解码和绘制准备，避免核心就绪时与前端争用单次 PNG 复制额度。
 
 需要前端热更新时使用 `npm run dev:mcp -- -- --locked -- --dev-mcp-config $devMcpConfigPath`；仅运行 `dev:mcp` 不启用监听。普通发行构建未编入开发工具，使用以下命令验证它拒绝开发参数：
 

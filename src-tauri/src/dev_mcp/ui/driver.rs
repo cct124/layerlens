@@ -351,6 +351,8 @@ impl Driver {
                     UiKey::ArrowUp => "\u{e013}",
                     UiKey::ArrowRight => "\u{e014}",
                     UiKey::ArrowDown => "\u{e015}",
+                    UiKey::Home => "\u{e011}",
+                    UiKey::End => "\u{e010}",
                     UiKey::V => "v",
                     UiKey::M => "m",
                 };

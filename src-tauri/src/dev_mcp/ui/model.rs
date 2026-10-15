@@ -63,6 +63,13 @@ pub(crate) struct UiCleanup {
     pub phase: Option<String>,
     pub plan_id: Option<String>,
     pub task_ids: Vec<String>,
+    pub syncing: bool,
+    pub sync_error: bool,
+    pub pending: bool,
+    pub rendered_tasks: u32,
+    pub scrollable: bool,
+    pub scrolled_to_end: bool,
+    pub focus_inside: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -102,6 +109,7 @@ pub(crate) struct UiObservation {
     pub cleanup: UiCleanup,
     pub canvas: Option<UiCanvas>,
     pub tasks: Vec<UiTask>,
+    pub selection_running: bool,
     pub content: Option<UiContent>,
     pub input: UiInputEvidence,
 }
@@ -196,6 +204,8 @@ pub(crate) enum UiKey {
     ArrowRight,
     ArrowUp,
     ArrowDown,
+    Home,
+    End,
     V,
     M,
 }
@@ -247,6 +257,11 @@ pub(crate) enum UiCondition {
     Cleanup {
         phase: Option<String>,
     },
+    CleanupSync {
+        failed: bool,
+    },
+    SelectionIdle {},
+    CleanupListEnd {},
     Task {
         task_id: String,
         status: String,

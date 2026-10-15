@@ -32,6 +32,11 @@ impl WorkspaceHost {
         let guard = SingleOperation::acquire(&self.image_reading)?;
         let cleanup = self.cleanup_handle.clone();
         let image = self.image(request).await?;
+        #[cfg(feature = "dev-mcp")]
+        self.operations
+            .testing
+            .hit(super::testing::Checkpoint::PreviewPublication)
+            .await?;
         tauri::async_runtime::spawn_blocking(move || {
             let _guard = guard;
             let result = encode(&image)?;

@@ -2,6 +2,8 @@
 //! 普通构建不编译此模块；业务规则仍属于核心及共享桌面入口。
 
 mod config;
+mod control;
+mod fixtures;
 mod model;
 mod operations;
 mod receipts;

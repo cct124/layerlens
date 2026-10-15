@@ -87,6 +87,9 @@ fn number(value: &str) -> Result<u64, WorkspaceError> {
 
 impl WaitCondition {
     pub(super) fn validate(&self) -> Result<(), WorkspaceError> {
+        if let Self::FrontendImageReady { at_least, .. } = self {
+            number(at_least)?;
+        }
         match self {
             Self::Sequence { at_least } | Self::Cleanup { at_least } => {
                 number(at_least)?;
@@ -98,6 +101,11 @@ impl WaitCondition {
             | Self::PreviewReady {
                 document_id,
                 revision,
+            }
+            | Self::FrontendImageReady {
+                document_id,
+                revision,
+                ..
             } => {
                 number(document_id)?;
                 number(revision)?;
@@ -114,6 +122,7 @@ impl WaitCondition {
     }
     fn matches(&self, state: &WorkspaceSnapshot) -> Result<bool, WorkspaceError> {
         Ok(match self {
+            Self::FrontendImageReady { .. } => false,
             Self::Sequence { at_least } => number(&state.sequence)? >= number(at_least)?,
             Self::Cleanup { at_least } => number(&state.cleanup.revision)? >= number(at_least)?,
             Self::DocumentCount { count } => state.documents.len() == *count as usize,
@@ -125,6 +134,12 @@ impl WaitCondition {
                 .iter()
                 .any(|d| d.id == *document_id && d.revision == *revision),
             Self::Idle {} => state.jobs.is_empty(),
+            Self::ResourcesReleased {} => {
+                state.resources.source_bytes == "0"
+                    && state.resources.output_bytes == "0"
+                    && state.resources.decoded_bytes == "0"
+                    && state.resources.cache_bytes == "0"
+            }
             Self::PreviewReady {
                 document_id,
                 revision,
@@ -139,6 +154,7 @@ impl WaitCondition {
 
 pub(super) async fn wait(
     host: &WorkspaceHost,
+    observations: &super::ui::Observations,
     request: WaitRequest,
     stopping: &CancellationToken,
 ) -> Result<WaitResult, WorkspaceError> {
@@ -151,6 +167,7 @@ pub(super) async fn wait(
     request.condition.validate()?;
     // 先订阅再采样，避免检查与订阅之间丢失状态变化；等待不占工作区邮箱。
     let mut receiver = host.observe();
+    let mut frontend = observations.subscribe();
     let mut last = host.action(WorkspaceAction::Snapshot {}).await?;
     let deadline = tokio::time::Instant::now()
         + std::time::Duration::from_millis(u64::from(request.timeout_ms));
@@ -161,7 +178,28 @@ pub(super) async fn wait(
         {
             last = observed;
         }
-        if request.condition.matches(&last)? {
+        let rendered = frontend.borrow_and_update().clone();
+        let satisfied = match &request.condition {
+            WaitCondition::FrontendImageReady {
+                document_id,
+                revision,
+                at_least,
+            } => rendered.as_ref().is_some_and(|view| {
+                view.active_document
+                    .as_ref()
+                    .is_some_and(|d| &d.id == document_id && &d.revision == revision)
+                    && view
+                        .core_sequence
+                        .as_ref()
+                        .is_some_and(|sequence| number(sequence).ok() >= number(at_least).ok())
+                    && view
+                        .canvas
+                        .as_ref()
+                        .is_some_and(|c| c.image_decoded && c.paint_prepared)
+            }),
+            _ => request.condition.matches(&last)?,
+        };
+        if satisfied {
             return Ok(WaitResult {
                 satisfied: true,
                 timed_out: false,
@@ -173,6 +211,7 @@ pub(super) async fn wait(
             _ = stopping.cancelled() => return Err(error(WorkspaceErrorCode::ShuttingDown, "测试实例正在退出，等待已终止。")),
             _ = tokio::time::sleep_until(deadline) => return Ok(WaitResult { satisfied: false, timed_out: true, condition: request.condition, last_state: last }),
             changed = receiver.changed() => changed.map_err(|_| error(WorkspaceErrorCode::ShuttingDown, "工作区观测通道已断开。"))?,
+            changed = frontend.changed(), if matches!(request.condition, WaitCondition::FrontendImageReady { .. }) => changed.map_err(|_| error(WorkspaceErrorCode::ShuttingDown, "前端观测通道已断开。"))?,
         }
     }
 }

@@ -10,6 +10,8 @@ use layerlens_core::{
     selection_contract::*,
     workspace_contract::*,
 };
+#[cfg(not(feature = "dev-mcp"))]
+use std::time::Instant;
 use std::{
     sync::{
         Arc,
@@ -17,7 +19,7 @@ use std::{
         mpsc,
     },
     thread::JoinHandle,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tokio::sync::oneshot;
 
@@ -36,6 +38,8 @@ enum Operation {
 }
 
 pub(crate) struct OperationsClient {
+    #[cfg(feature = "dev-mcp")]
+    pub(crate) testing: Arc<super::testing::Controls>,
     sender: mpsc::SyncSender<Operation>,
     stopping: Arc<AtomicBool>,
 }
@@ -51,12 +55,20 @@ impl OperationsWorker {
         let (sender, receiver) = mpsc::sync_channel::<Operation>(1);
         let stopping = Arc::new(AtomicBool::new(false));
         let stop = stopping.clone();
+        #[cfg(feature = "dev-mcp")]
+        let testing = Arc::new(super::testing::Controls::default());
+        #[cfg(feature = "dev-mcp")]
+        let clock = testing.clone();
         let thread = std::thread::Builder::new()
             .name("layerlens-operations".into())
             .spawn(move || {
                 let mut plans = cleanup::Plans::default();
+                #[cfg(feature = "dev-mcp")]
+                let now = || clock.plan_now();
+                #[cfg(not(feature = "dev-mcp"))]
+                let now = Instant::now;
                 while !stop.load(Ordering::Acquire) {
-                    plans.expire(Instant::now());
+                    plans.expire(now());
                     match receiver.recv_timeout(Duration::from_millis(50)) {
                         Ok(operation) => {
                             if stop.load(Ordering::Acquire) {
@@ -76,7 +88,7 @@ impl OperationsWorker {
                                         &handle,
                                         &cleanup_handle,
                                         request,
-                                        Instant::now(),
+                                        now(),
                                         cleanup::RESPONSE_BYTES,
                                     ));
                                 }
@@ -97,6 +109,8 @@ impl OperationsWorker {
             })?;
         Ok((
             OperationsClient {
+                #[cfg(feature = "dev-mcp")]
+                testing,
                 sender,
                 stopping: stopping.clone(),
             },
@@ -156,6 +170,8 @@ impl OperationsClient {
         })?
     }
     pub(crate) fn stop(&self) {
+        #[cfg(feature = "dev-mcp")]
+        self.testing.stop();
         self.stopping.store(true, Ordering::Release);
     }
     pub(crate) async fn request(
@@ -317,6 +333,8 @@ mod tests {
     fn bounded_admission_rejects_overflow_and_disconnect_wakes_pending_calls() {
         let (sender, receiver) = mpsc::sync_channel(1);
         let client = OperationsClient {
+            #[cfg(feature = "dev-mcp")]
+            testing: Arc::new(super::super::testing::Controls::default()),
             sender,
             stopping: Arc::new(AtomicBool::new(false)),
         };

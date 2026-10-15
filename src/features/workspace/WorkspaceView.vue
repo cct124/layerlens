@@ -281,7 +281,11 @@ useDevObservation(() => ({
     phase: cleanup.state?.kind ?? null,
     planId: cleanup.plan?.planId ?? null,
     taskIds: cleanup.plan?.tasks.map((t) => t.id) ?? [],
+    syncing: cleanup.syncing,
+    syncError: cleanup.state?.kind === 'complete' && cleanup.error !== null,
+    pending: cleanupPending.value,
   },
+  selectionRunning: selection.running,
   tasks: selection.tasks.map((t) => ({
     id: t.id,
     status: t.status,

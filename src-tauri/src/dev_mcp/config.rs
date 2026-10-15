@@ -108,9 +108,6 @@ impl Config {
 }
 
 impl Instance {
-    pub(crate) fn web_driver_enabled(&self) -> bool {
-        self.web_driver_url.is_some()
-    }
     pub(crate) fn instance_id(&self) -> &str {
         &self.id
     }

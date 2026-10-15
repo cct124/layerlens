@@ -43,6 +43,9 @@ fn rect(value: &UiRect) -> bool {
         && value.height >= 0.0
 }
 impl Observations {
+    pub(crate) fn subscribe(&self) -> tokio::sync::watch::Receiver<Option<Arc<UiObservation>>> {
+        self.latest.subscribe()
+    }
     pub(crate) fn invalidate(&self) {
         let mut version = self.version.lock().unwrap_or_else(|p| p.into_inner());
         version.loading = true;
@@ -60,6 +63,7 @@ impl Observations {
         if uuid::Uuid::parse_str(&value.frontend_id).is_err()
             || value.tasks.len() > 128
             || value.cleanup.task_ids.len() > 128
+            || value.cleanup.rendered_tasks > 128
             || !["pan", "region"].contains(&value.tool.as_str())
             || !["layers", "tasks"].contains(&value.panel.as_str())
             || value
@@ -272,6 +276,15 @@ impl UiCondition {
                 .iter()
                 .any(|t| &t.id == task_id && &t.status == status),
             Self::TaskCount { count } => value.tasks.len() == *count as usize,
+            Self::CleanupSync { failed } => {
+                value.cleanup.phase.as_deref() == Some("complete")
+                    && !value.cleanup.syncing
+                    && value.cleanup.sync_error == *failed
+            }
+            Self::SelectionIdle {} => !value.selection_running,
+            Self::CleanupListEnd {} => {
+                value.cleanup.opened && value.cleanup.scrollable && value.cleanup.scrolled_to_end
+            }
             Self::Selection { after, has_scope } => {
                 value
                     .selection_revision

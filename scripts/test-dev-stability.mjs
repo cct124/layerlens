@@ -23,13 +23,15 @@ const { values } = parseArgs({
 assert.equal(process.platform, 'win32', '稳定性测试当前只支持 Windows。');
 assert.match(values.repeat, /^(?:[2-9]|1[0-9]|20)$/, '重复次数为 2–20。');
 const repeats = Number(values.repeat);
-assert(['baseline', 'm2', 'm2-input'].includes(values['webview-suite']));
+assert(['baseline', 'm2', 'm2-input', 'm2-cleanup'].includes(values['webview-suite']));
 const scenarios =
   values['webview-suite'] === 'm2'
     ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
     : values['webview-suite'] === 'm2-input'
       ? ['input-pan', 'input-chord', 'input-snapping']
-      : ['baseline'];
+      : values['webview-suite'] === 'm2-cleanup'
+        ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
+        : ['baseline'];
 assert(
   repeats >= scenarios.length && repeats % scenarios.length === 0,
   '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',

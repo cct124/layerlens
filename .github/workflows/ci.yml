@@ -92,6 +92,9 @@ jobs:
       - name: Repeat M2 pan chord and snapping scenarios five times each
         timeout-minutes: 15
         run: npm run test:dev-mcp:m2-input
+      - name: Repeat M2 bounded cleanup expiry recovery and late responses five times each
+        timeout-minutes: 15
+        run: npm run test:dev-mcp:m2-cleanup
       - name: Collect bounded diagnostic artifacts
         if: always() && steps.driver.outcome != 'skipped'
         run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts

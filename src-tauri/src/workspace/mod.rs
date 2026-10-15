@@ -8,6 +8,8 @@ mod engine;
 mod operations;
 mod runtime;
 mod selection;
+#[cfg(feature = "dev-mcp")]
+pub(crate) mod testing;
 
 pub(crate) use access::SingleOperation;
 #[cfg(feature = "dev-mcp")]

@@ -22,8 +22,17 @@ function setup(checkDom = false) {
           tool: 'pan',
           panel: 'layers',
           canvas: null,
-          cleanup: { opened: false, phase: null, planId: null, taskIds: [] },
+          cleanup: {
+            opened: false,
+            phase: null,
+            planId: null,
+            taskIds: [],
+            syncing: false,
+            syncError: false,
+            pending: false,
+          },
           tasks: [],
+          selectionRunning: false,
           content: null,
         }));
         return () =>

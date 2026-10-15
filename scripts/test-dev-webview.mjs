@@ -13,6 +13,7 @@ import { redact } from './dev-mcp-artifacts.mjs';
 import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
 import { exerciseOpenCleanup, exerciseRegionControls } from './dev-mcp-m2-webview.mjs';
 import { exerciseCanvasInput } from './dev-mcp-input-webview.mjs';
+import { exerciseCleanupBoundaries } from './dev-mcp-cleanup-webview.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -31,6 +32,10 @@ assert(
     'geometry-100',
     'geometry-200',
     'cleanup',
+    'cleanup-max',
+    'cleanup-expiry',
+    'cleanup-recovery',
+    'cleanup-late',
     'input-pan',
     'input-chord',
     'input-snapping',
@@ -286,6 +291,8 @@ async function wait(condition) {
   return r.lastState;
 }
 async function waitCore(condition) {
+  if (condition.kind === 'frontendImageReady')
+    condition = { ...condition, atLeast: (await core()).sequence };
   const r = (await tool('dev_wait', args({ condition, timeoutMs: 10000 }))).value;
   assert.equal(r.satisfied, true, JSON.stringify(r));
   return r.lastState;
@@ -369,7 +376,7 @@ try {
   info = (await tool('dev_instance', {})).value;
   assert.equal(info.instanceId, connection.instanceId);
   report.instanceId = info.instanceId;
-  assert.equal((await rpc('tools/list', {})).tools.length, 13);
+  assert.equal((await rpc('tools/list', {})).tools.length, 15);
   let view = await wait({ kind: 'ready' });
   frontend = view.frontendId;
   report.frontendId = frontend;
@@ -387,16 +394,19 @@ try {
   `,
     args: [],
   });
-  report.checks.push('匹配驱动、WebView 身份、前端握手及 13 个真实工具');
+  report.checks.push('匹配驱动、WebView 身份、前端握手及 15 个真实工具');
   report.phase = 'document-sync';
-  await workspace({ kind: 'open', path: options.scenario === 'cleanup' ? samples[1] : samples[0] });
+  await workspace({
+    kind: 'open',
+    path: options.scenario.startsWith('cleanup') ? samples[1] : samples[0],
+  });
   let workspaceState = await waitCore({ kind: 'documentCount', count: 1 });
   const a = workspaceState.documents[0];
   await wait({ kind: 'applied', atLeast: workspaceState.sequence });
   view = await wait({ kind: 'imageReady', documentId: a.id, revision: a.revision });
   assert.equal(view.sessionId, info.sessionId);
-  assert.equal(view.canvas.documentWidth, options.scenario === 'cleanup' ? 4 : 256);
-  assert.equal(view.canvas.documentHeight, options.scenario === 'cleanup' ? 3 : 128);
+  assert.equal(view.canvas.documentWidth, options.scenario.startsWith('cleanup') ? 4 : 256);
+  assert.equal(view.canvas.documentHeight, options.scenario.startsWith('cleanup') ? 3 : 128);
   if (options.scenario === 'baseline') {
     report.phase = 'menu-and-draft';
     await click('menu:window');
@@ -640,6 +650,25 @@ try {
       point,
       selection,
       report,
+      document: a,
+    });
+    await screenshot('final-state.png');
+  } else if (options.scenario.startsWith('cleanup-')) {
+    await exerciseCleanupBoundaries({
+      scenario: options.scenario,
+      state,
+      core,
+      wait,
+      waitCore,
+      click,
+      key,
+      selection,
+      workspace,
+      tool,
+      args,
+      sessionId: info.sessionId,
+      report,
+      screenshot,
       document: a,
     });
     await screenshot('final-state.png');

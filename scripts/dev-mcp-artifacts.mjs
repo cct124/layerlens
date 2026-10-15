@@ -13,6 +13,7 @@ const runFiles = [
   'runner.log',
   'fixed-task.png',
   'cleanup-confirmation.png',
+  'cleanup-sync-failure.png',
   'final-state.png',
   'failure.png',
 ];

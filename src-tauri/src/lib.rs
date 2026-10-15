@@ -58,12 +58,24 @@ pub fn run() -> tauri::Result<()> {
     let app = configure(tauri::Builder::default())
         .setup(move |app| {
             let events = app.handle().clone();
+            #[cfg(feature = "dev-mcp")]
+            let testing_notifications = development.is_some();
+            #[cfg(feature = "dev-mcp")]
+            let (notifications, mut notification_receiver) = tokio::sync::watch::channel(None);
+            #[cfg(feature = "dev-mcp")]
+            let delayed_events = events.clone();
             let exit = app.handle().clone();
             #[cfg(feature = "dev-mcp")]
             let (core_done, core_stopped) = tokio::sync::oneshot::channel();
             let host = workspace::WorkspaceHost::start(
                 Default::default(),
                 move |snapshot| {
+                    #[cfg(feature = "dev-mcp")]
+                    if testing_notifications {
+                        // 暂停交付时只保留最新待发送投影；核心工作线程和观测不被阻塞。
+                        notifications.send_replace(Some(snapshot.clone()));
+                        return;
+                    }
                     if let Err(error) = events.emit_to("main", workspace::EVENT, snapshot) {
                         eprintln!(
                             "operation=workspace_notify sequence={} error={error}",
@@ -88,6 +100,25 @@ pub fn run() -> tauri::Result<()> {
             )
             .map_err(|error| std::io::Error::other(error.message))?;
             let host = Arc::new(host);
+            #[cfg(feature = "dev-mcp")]
+            if testing_notifications {
+                let controls = host.operations.testing.clone();
+                tauri::async_runtime::spawn(async move {
+                    while notification_receiver.changed().await.is_ok() {
+                        let snapshot = notification_receiver.borrow_and_update().clone();
+                        if let Some(snapshot) = snapshot {
+                            if let Err(error) = controls.hit(workspace::testing::Checkpoint::DesktopNotification).await {
+                                eprintln!("operation=dev_notification_delivery code={:?}", error.code);
+                                if error.code == layerlens_core::workspace_contract::WorkspaceErrorCode::ShuttingDown { break; }
+                                continue;
+                            }
+                            if let Err(error) = delayed_events.emit_to("main", workspace::EVENT, &snapshot) {
+                                eprintln!("operation=workspace_notify sequence={} error={error}", snapshot.sequence);
+                            }
+                        }
+                    }
+                });
+            }
             app.manage(host.clone());
             #[cfg(feature = "dev-mcp")]
             if let Some(instance) = development {
@@ -103,7 +134,8 @@ pub fn run() -> tauri::Result<()> {
                     .data_directory(instance.directory.join("webview"))
                     .visible(instance.visible)
                     .title("LayerLens · 开发测试实例");
-                if instance.web_driver_enabled() {
+                {
+                    // 业务测试也必须能等待真实前端读完预览；驱动输入工具仍由 WebDriver 配置控制。
                     app.add_capability(include_str!("dev_mcp/observation-capability.json"))?;
                     let boot = serde_json::json!({"instanceId":instance.instance_id()});
                     let observation = instance.observations.clone();

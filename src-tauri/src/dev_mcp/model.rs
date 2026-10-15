@@ -93,9 +93,15 @@ pub(super) enum WaitCondition {
         revision: String,
     },
     Idle {},
+    ResourcesReleased {},
     PreviewReady {
         document_id: String,
         revision: String,
+    },
+    FrontendImageReady {
+        document_id: String,
+        revision: String,
+        at_least: String,
     },
     Cleanup {
         at_least: String,

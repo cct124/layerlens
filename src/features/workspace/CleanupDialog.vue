@@ -66,7 +66,12 @@ onBeforeUnmount(() => {
       </ul>
       <details v-if="model.plan.tasks.length" open>
         <summary>全部受影响任务（{{ model.plan.tasks.length }}）</summary>
-        <ul class="cleanup-tasks">
+        <ul
+          class="cleanup-tasks"
+          data-dev-target="cleanup:tasks"
+          tabindex="0"
+          aria-label="受影响任务列表"
+        >
           <li v-for="task in model.plan.tasks" :key="task.id">
             {{ task.name }} · #{{ task.id }} · 修订 {{ task.documentRevision }}
           </li>
