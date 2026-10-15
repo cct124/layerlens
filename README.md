@@ -88,6 +88,7 @@ npm run tauri -- build --no-bundle -- --locked # 普通 release，验证开发�
 npm run build:dev-mcp
 npm run test:dev-mcp:stability -- --repeat 5
 npm run test:dev-mcp:m2     # 独立实例验证基线、三种缩放几何及当前文档清理
+npm run test:dev-mcp:m2-input # 中键、组合手势和吸附边界各重复 5 次
 npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
 npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
 ```
@@ -100,7 +101,7 @@ npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；�
 
 单次调试仍可用 `test:dev-mcp:webview -- --driver 驱动路径`，`--app` 默认同上，`--visible` 可显示独立测试窗口。该入口要求调用者保证运行时与驱动匹配；套件入口自动核验准备报告。场景经 MCP 操作菜单、草稿／吸附／Alt、任务和清理弹窗，验证刷新恢复和退出码 0；失败保留阶段、最后观测和可用截图。截图证明本次 WebView 捕获结果，物理首帧、系统窗口与其他 DPI 仍另行验收。
 
-M2 套件使用 `--webview-suite m2`，至少 5 轮，依次执行 `baseline`、`geometry-25`、`geometry-100`、`geometry-200`、`cleanup`；单场景调试可给 `test:dev-mcp:webview` 追加 `--scenario`。每场景使用新实例，保持 128 条变更回执上限；滚轮整数步长使 25%／200% 有不超过 0.2 个百分点的偏差，报告保留实际比例，断言按 CSS 像素取整误差核对文档坐标。这些是画布缩放测试，不代表系统 DPI 验收。
+M2 套件使用 `--webview-suite m2`，至少 5 轮，依次执行 `baseline`、`geometry-25`、`geometry-100`、`geometry-200`、`cleanup`；`--webview-suite m2-input` 依次执行 `input-pan`、`input-chord`、`input-snapping`，对应 npm 入口运行 15 轮，每场景 5 次。轮数须为场景数的整数倍，JSON 和 Markdown 分别记录各场景预期、完成及通过次数。单场景调试可给 `test:dev-mcp:webview` 追加 `--scenario`。每场景使用新实例，保持 128 条变更回执上限；滚轮整数步长使 25%／200% 有不超过 0.2 个百分点的偏差，报告保留实际比例，断言按 CSS 像素取整误差核对文档坐标。这些是画布缩放测试，不代表系统 DPI 验收。
 
 手工连接时，在仓库根目录生成本机配置（UTF-8 无 BOM，不提交仓库）：
 

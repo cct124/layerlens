@@ -30,9 +30,22 @@ pub(crate) struct UiCanvas {
     pub paint_prepared: bool,
     pub image_error: Option<String>,
     pub zoom: f64,
+    pub pan_x: f64,
+    pub pan_y: f64,
+    pub panning: bool,
+    pub pointer_captured: bool,
     pub draft: Option<UiRect>,
     pub alt: bool,
     pub snap_guides: u32,
+    pub snap_x: Option<UiSnapTarget>,
+    pub snap_y: Option<UiSnapTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiSnapTarget {
+    pub position: f64,
+    pub layer_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -131,6 +144,12 @@ pub(crate) enum UiAction {
         end_y: i32,
         hold: bool,
     },
+    /// 一次 W3C Actions 完成至多 32 步画布手势，支持左键／中键组合与 Esc。
+    /// hold 必须与末态是否保留按键一致；保留后只允许取消和释放。
+    CanvasGesture {
+        steps: Vec<GestureStep>,
+        hold: bool,
+    },
     /// 真实 W3C 滚轮输入；位置限定已显示画布，单次 deltaY 为非零且绝对值不超过 200。
     Scroll {
         x: i32,
@@ -142,6 +161,20 @@ pub(crate) enum UiAction {
         phase: KeyPhase,
     },
     ReleaseInputs {},
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum PointerButton {
+    Left,
+    Middle,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) enum GestureStep {
+    Move { x: i32, y: i32 },
+    Down { button: PointerButton },
+    Up { button: PointerButton },
+    Escape,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -206,6 +239,10 @@ pub(crate) enum UiCondition {
     },
     Draft {
         active: bool,
+    },
+    /// 等待真实指针事件到达且草稿、平移、捕获均结束。
+    CanvasIdle {
+        pointer_events_at_least: String,
     },
     Cleanup {
         phase: Option<String>,

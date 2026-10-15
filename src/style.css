@@ -595,6 +595,7 @@ dd {
   overflow: hidden;
   cursor: grab;
   touch-action: none;
+  user-select: none;
   background: #202124;
 }
 .preview-viewport:active {

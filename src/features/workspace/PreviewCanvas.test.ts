@@ -92,6 +92,39 @@ async function pointer(
   await nextTick();
 }
 
+it('有效画布框选阻止浏览器默认拖放，越界输入不接管且不会提交', async () => {
+  const viewport = setup();
+  const outside = new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    buttons: 1,
+    pointerId: 1,
+    clientX: -20,
+    clientY: 120,
+  });
+  viewport.element.dispatchEvent(outside);
+  expect(outside.defaultPrevented).toBe(false);
+  await pointer(viewport, 'pointerup', 180, 170);
+  expect(wrapper.emitted('region')).toBeUndefined();
+  const inside = new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    buttons: 1,
+    pointerId: 1,
+    clientX: 100,
+    clientY: 120,
+  });
+  viewport.element.dispatchEvent(inside);
+  expect(inside.defaultPrevented).toBe(true);
+  await pointer(viewport, 'pointermove', 180, 170);
+  await pointer(viewport, 'pointerup', 190, 180);
+  expect(wrapper.emitted('region')).toEqual([
+    [{ x: 100, y: 120, width: 90, height: 60 }, 'session/doc/revision/selection'],
+  ]);
+});
+
 it('新建草稿随拖动显示，松开只提交一次且等待权威选区确认', async () => {
   const viewport = setup();
   await pointer(viewport, 'pointerdown', 100, 120);

@@ -4,7 +4,9 @@ export type UiRect = { x: number, y: number, width: number, height: number, };
 
 export type UiDocument = { id: string, revision: string, };
 
-export type UiCanvas = { viewport: UiRect, image: UiRect | null, documentWidth: number, documentHeight: number, imageDecoded: boolean, paintPrepared: boolean, imageError: string | null, zoom: number, draft: UiRect | null, alt: boolean, snapGuides: number, };
+export type UiSnapTarget = { position: number, layerId: number | null, };
+
+export type UiCanvas = { viewport: UiRect, image: UiRect | null, documentWidth: number, documentHeight: number, imageDecoded: boolean, paintPrepared: boolean, imageError: string | null, zoom: number, panX: number, panY: number, panning: boolean, pointerCaptured: boolean, draft: UiRect | null, alt: boolean, snapGuides: number, snapX: UiSnapTarget | null, snapY: UiSnapTarget | null, };
 
 export type UiTask = { id: string, status: string, snapshotId: string, };
 

@@ -89,6 +89,9 @@ jobs:
       - name: Verify M2 geometry reload and cleanup scenarios
         timeout-minutes: 15
         run: npm run test:dev-mcp:m2
+      - name: Repeat M2 pan chord and snapping scenarios five times each
+        timeout-minutes: 15
+        run: npm run test:dev-mcp:m2-input
       - name: Collect bounded diagnostic artifacts
         if: always() && steps.driver.outcome != 'skipped'
         run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts

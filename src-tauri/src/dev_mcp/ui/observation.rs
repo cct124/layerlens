@@ -75,6 +75,14 @@ impl Observations {
                     || !c.zoom.is_finite()
                     || c.zoom <= 0.0
                     || c.snap_guides > 2
+                    || [c.pan_x, c.pan_y]
+                        .iter()
+                        .any(|n| !n.is_finite() || n.abs() > 10_000_000.0)
+                    || [&c.snap_x, &c.snap_y].into_iter().flatten().any(|s| {
+                        !s.position.is_finite() || s.position < 0.0 || s.position > 10_000_000.0
+                    })
+                    || c.snap_guides
+                        != u32::from(c.snap_x.is_some()) + u32::from(c.snap_y.is_some())
             })
         {
             return Err(error(Code::InvalidInput, "前端报告超出有效范围。"));
@@ -203,6 +211,12 @@ impl UiCondition {
                 number(snapshot_id)?;
                 true
             }
+            Self::CanvasIdle {
+                pointer_events_at_least,
+            } => {
+                number(pointer_events_at_least)?;
+                true
+            }
             Self::Selection { after, .. } => {
                 number(after)?;
                 true
@@ -240,6 +254,15 @@ impl UiCondition {
             Self::Menu { menu } => &value.menu == menu,
             Self::Draft { active } => {
                 value.canvas.as_ref().is_some_and(|c| c.draft.is_some()) == *active
+            }
+            Self::CanvasIdle {
+                pointer_events_at_least,
+            } => {
+                number(&value.input.pointer_events).ok() >= number(pointer_events_at_least).ok()
+                    && value
+                        .canvas
+                        .as_ref()
+                        .is_some_and(|c| !c.panning && !c.pointer_captured && c.draft.is_none())
             }
             Self::Cleanup { phase } => {
                 &value.cleanup.phase == phase && value.cleanup.opened == phase.is_some()

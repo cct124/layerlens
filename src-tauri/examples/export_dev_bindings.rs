@@ -17,6 +17,7 @@ fn main() -> io::Result<()> {
     for declaration in [
         UiRect::decl(&config),
         UiDocument::decl(&config),
+        UiSnapTarget::decl(&config),
         UiCanvas::decl(&config),
         UiTask::decl(&config),
         UiCleanup::decl(&config),

@@ -118,10 +118,8 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
         .is_err()
     );
 }
-#[test]
-fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
+fn canvas_observation() -> UiObservation {
     let mut view = observation(100, 1);
-    assert!(super::driver::validate_scroll(&view, 10, 20, 1).is_err());
     view.canvas = Some(UiCanvas {
         viewport: UiRect {
             x: 10.0,
@@ -136,10 +134,22 @@ fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
         paint_prepared: true,
         image_error: None,
         zoom: 1.0,
+        pan_x: 0.0,
+        pan_y: 0.0,
+        panning: false,
+        pointer_captured: false,
         draft: None,
         alt: false,
         snap_guides: 0,
+        snap_x: None,
+        snap_y: None,
     });
+    view
+}
+#[test]
+fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
+    assert!(super::driver::validate_scroll(&observation(100, 1), 10, 20, 1).is_err());
+    let mut view = canvas_observation();
     for delta in [-200, -1, 1, 200] {
         assert!(super::driver::validate_scroll(&view, 10, 20, delta).is_ok());
     }
@@ -163,6 +173,102 @@ fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
     view.cleanup.opened = false;
     view.canvas.as_mut().unwrap().image_decoded = false;
     assert!(super::driver::validate_scroll(&view, 10, 20, 1).is_err());
+}
+
+#[test]
+fn bounded_gesture_validates_every_step_before_dispatch_and_keeps_button_order() {
+    use GestureStep::*;
+    use PointerButton::{Left, Middle};
+    let view = canvas_observation();
+    let start = Move { x: 20, y: 30 };
+    let chord = vec![
+        start.clone(),
+        Down { button: Left },
+        Move { x: 40, y: 40 },
+        Down { button: Middle },
+        Move { x: 60, y: 50 },
+        Up { button: Middle },
+        Move { x: 70, y: 50 },
+        Up { button: Left },
+    ];
+    let actions = super::gesture::actions(&view, &chord, false).unwrap();
+    let pointer = actions["actions"][0]["actions"].as_array().unwrap();
+    assert_eq!(pointer.len(), chord.len());
+    assert_eq!(
+        pointer[3],
+        serde_json::json!({"type":"pointerDown","button":1})
+    );
+    assert_eq!(
+        pointer[5],
+        serde_json::json!({"type":"pointerUp","button":1})
+    );
+    for invalid in [
+        vec![],
+        vec![Down { button: Left }],
+        vec![start.clone()],
+        vec![start.clone(), Up { button: Left }],
+        vec![start.clone(), Down { button: Left }, Down { button: Left }],
+        vec![start.clone(), Down { button: Middle }, Up { button: Left }],
+        vec![
+            start.clone(),
+            Down { button: Left },
+            Move { x: 110, y: 30 },
+            Up { button: Left },
+        ],
+        vec![start.clone(); 33],
+        vec![start.clone(), Escape],
+    ] {
+        assert_eq!(
+            super::gesture::actions(&view, &invalid, false)
+                .unwrap_err()
+                .code,
+            Code::InvalidInput
+        );
+    }
+    let held = [
+        start.clone(),
+        Down { button: Middle },
+        Move { x: 50, y: 40 },
+    ];
+    assert!(super::gesture::actions(&view, &held, true).is_ok());
+    assert!(super::gesture::actions(&view, &held, false).is_err());
+    assert!(super::gesture::actions(&view, &chord, true).is_err());
+    let mut modal = view.clone();
+    modal.cleanup.opened = true;
+    assert!(super::gesture::actions(&modal, &chord, false).is_err());
+    let cancelled = [start, Down { button: Left }, Escape, Up { button: Left }];
+    let actions = super::gesture::actions(&view, &cancelled, false).unwrap();
+    assert_eq!(
+        actions["actions"][0]["actions"].as_array().unwrap().len(),
+        5
+    );
+    assert_eq!(actions["actions"][1]["actions"][2]["type"], "keyDown");
+    assert_eq!(actions["actions"][1]["actions"][3]["type"], "keyUp");
+    assert!(
+        serde_json::from_value::<UiAction>(serde_json::json!({
+            "kind":"canvasGesture","hold":false,"steps":[{"kind":"down","button":"right"}]
+        }))
+        .is_err()
+    );
+}
+
+#[test]
+fn canvas_observation_rejects_invalid_pan_and_inconsistent_snap_evidence() {
+    let state = Observations::default();
+    let mut view = canvas_observation();
+    view.canvas.as_mut().unwrap().pan_x = f64::INFINITY;
+    assert!(state.publish("instance", view).is_err());
+    let mut view = canvas_observation();
+    view.canvas.as_mut().unwrap().snap_guides = 1;
+    assert!(state.publish("instance", view).is_err());
+    let mut view = canvas_observation();
+    let canvas = view.canvas.as_mut().unwrap();
+    canvas.snap_guides = 1;
+    canvas.snap_x = Some(UiSnapTarget {
+        position: 0.0,
+        layer_id: None,
+    });
+    state.publish("instance", view).unwrap();
 }
 
 #[tokio::test]

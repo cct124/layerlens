@@ -23,12 +23,17 @@ const { values } = parseArgs({
 assert.equal(process.platform, 'win32', '稳定性测试当前只支持 Windows。');
 assert.match(values.repeat, /^(?:[2-9]|1[0-9]|20)$/, '重复次数为 2–20。');
 const repeats = Number(values.repeat);
-assert(['baseline', 'm2'].includes(values['webview-suite']));
+assert(['baseline', 'm2', 'm2-input'].includes(values['webview-suite']));
 const scenarios =
   values['webview-suite'] === 'm2'
     ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
-    : ['baseline'];
-assert(repeats >= scenarios.length, 'M2 套件至少 5 轮，不能遗漏场景。');
+    : values['webview-suite'] === 'm2-input'
+      ? ['input-pan', 'input-chord', 'input-snapping']
+      : ['baseline'];
+assert(
+  repeats >= scenarios.length && repeats % scenarios.length === 0,
+  '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',
+);
 const base = path.join(root, '.local/dev-mcp');
 await mkdir(base, { recursive: true });
 const directory = await mkdtemp(path.join(base, 'stability-'));
@@ -62,6 +67,19 @@ async function hash(file) {
 }
 async function checkpoint() {
   report.summary = summarize(report.results, expected);
+  report.scenarioSummary = Object.fromEntries(
+    scenarios.map((scenario) => {
+      const runs = report.results.filter((result) => result.scenario === scenario);
+      return [
+        scenario,
+        {
+          expected: repeats / scenarios.length,
+          completed: runs.length,
+          passed: runs.filter((result) => result.passed).length,
+        },
+      ];
+    }),
+  );
   if (report.status !== 'passed') report.summary.passed = false;
   report.durationMs = Math.round(performance.now() - started);
   const temporary = path.join(directory, 'summary.tmp');
@@ -235,6 +253,9 @@ try {
         ].join(' | ') +
         ' |',
     );
+  lines.push('', '| WebView 场景 | 预期次数 | 完成 | 通过 |', '| --- | --- | --- | --- |');
+  for (const [scenario, data] of Object.entries(report.scenarioSummary))
+    lines.push('| ' + [scenario, data.expected, data.completed, data.passed].join(' | ') + ' |');
   lines.push(
     '',
     '每轮业务与 WebView 各一个独立实例并行，轮次之间重新启动。耗时包含启动与测试，不是产品性能或提速结论。',

@@ -332,6 +332,8 @@ function startRegion(event: PointerEvent, action: RegionAction) {
   const start = point(event);
   // 控制点可能伸出画布几像素；只有新建必须从文档内部开始。
   if (action === 'create' && !insideDocument(start, props.width, props.height)) return;
+  // 框选接管有效左键手势，避免浏览器选中文字后发起原生拖放并取消指针捕获。
+  event.preventDefault();
   viewport.value.focus({ preventScroll: true });
   viewport.value.setPointerCapture(event.pointerId);
   regionDrag.value = {
@@ -395,6 +397,7 @@ function observation(): UiCanvas | null {
   const element = viewport.value;
   if (!element) return null;
   const image = element.querySelector<HTMLImageElement>('.preview-image');
+  const pointerId = regionDrag.value?.id ?? drag.value?.id;
   const rect = (r: DOMRect): UiRect => ({ x: r.x, y: r.y, width: r.width, height: r.height });
   return {
     viewport: rect(element.getBoundingClientRect()),
@@ -409,9 +412,25 @@ function observation(): UiCanvas | null {
     paintPrepared: paintPrepared.value,
     imageError: decodeError.value,
     zoom: effective.value.zoom,
+    panX: effective.value.x,
+    panY: effective.value.y,
+    panning: !!drag.value,
+    pointerCaptured: pointerId !== undefined && element.hasPointerCapture(pointerId),
     draft: regionDrag.value ? { ...regionDrag.value.draft.bounds } : null,
     alt: regionDrag.value?.alt ?? false,
     snapGuides: guides.value.length,
+    snapX: regionDrag.value?.guides.x
+      ? {
+          position: regionDrag.value.guides.x.target.value,
+          layerId: regionDrag.value.guides.x.target.layerId,
+        }
+      : null,
+    snapY: regionDrag.value?.guides.y
+      ? {
+          position: regionDrag.value.guides.y.target.value,
+          layerId: regionDrag.value.guides.y.target.layerId,
+        }
+      : null,
   };
 }
 defineExpose({ locate, cancel, fit, actualSize, observation });

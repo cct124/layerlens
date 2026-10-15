@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
-fn validate_canvas_input(
+pub(super) fn validate_canvas_input(
     before: &UiObservation,
     points: &[(i32, i32)],
 ) -> Result<(), WorkspaceError> {
@@ -315,6 +315,14 @@ impl Driver {
                 // 网络失败可能发生在按下之后，先保留输入状态，要求显式恢复。
                 self.held.store(true, Ordering::Release);
                 self.session_command(Method::POST,"actions",Some(json!({"actions":[{"type":"pointer","id":"layerlens-pointer","parameters":{"pointerType":"mouse"},"actions":actions}]}))).await?;
+                self.held.store(hold, Ordering::Release);
+            }
+            UiAction::CanvasGesture { steps, hold } => {
+                let actions = super::gesture::actions(&before, &steps, hold)?;
+                // 失败可能发生在某个按键已按下之后；显式释放前禁止其他手势。
+                self.held.store(true, Ordering::Release);
+                self.session_command(Method::POST, "actions", Some(actions))
+                    .await?;
                 self.held.store(hold, Ordering::Release);
             }
             UiAction::Scroll { x, y, delta_y } => {

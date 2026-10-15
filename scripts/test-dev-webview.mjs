@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { redact } from './dev-mcp-artifacts.mjs';
 import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
 import { exerciseOpenCleanup, exerciseRegionControls } from './dev-mcp-m2-webview.mjs';
+import { exerciseCanvasInput } from './dev-mcp-input-webview.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -24,7 +25,16 @@ const { values: options } = parseArgs({
 });
 assert.equal(process.platform, 'win32', '当前真实 WebView 回归仅验证 Windows。');
 assert(
-  ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup'].includes(options.scenario),
+  [
+    'baseline',
+    'geometry-25',
+    'geometry-100',
+    'geometry-200',
+    'cleanup',
+    'input-pan',
+    'input-chord',
+    'input-snapping',
+  ].includes(options.scenario),
 );
 assert(
   options.driver,
@@ -280,13 +290,14 @@ async function waitCore(condition) {
   assert.equal(r.satisfied, true, JSON.stringify(r));
   return r.lastState;
 }
-async function action(input) {
+async function action(input, expectedError = false) {
   const result = await tool(
     'dev_ui_action',
     args({ frontendId: frontend, expectedViewRevision: null, action: input }, true),
+    expectedError,
   );
   report.inputs ??= [];
-  report.inputs.push({ input, before: result.value.before });
+  report.inputs.push({ input, before: result.value?.before, error: result.error });
   return result;
 }
 const click = (target) => action({ kind: 'click', target });
@@ -369,7 +380,7 @@ try {
   await wd('/session/' + session + '/execute/sync', {
     script: `
     const trace=[];
-    for(const type of ['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture','gotpointercapture','blur']) {
+    for(const type of ['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture','gotpointercapture','blur','dragstart','dragend']) {
       window.addEventListener(type,event=>{ trace.push({type:event.type,buttons:event.buttons,pointerId:event.pointerId,trusted:event.isTrusted,target:event.target?.dataset?.devTarget??event.target?.tagName}); if(trace.length>32)trace.shift(); },true);
     }
     Object.defineProperty(window,'__LAYERLENS_INPUT_TRACE__',{value:()=>trace.slice()});
@@ -615,6 +626,21 @@ try {
       report,
       document: a,
       zoom,
+    });
+    await screenshot('final-state.png');
+  } else if (options.scenario.startsWith('input-')) {
+    await exerciseCanvasInput({
+      scenario: options.scenario,
+      state,
+      core,
+      wait,
+      action,
+      click,
+      key,
+      point,
+      selection,
+      report,
+      document: a,
     });
     await screenshot('final-state.png');
   } else {

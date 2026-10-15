@@ -1,5 +1,6 @@
 //! 开发界面适配：前端只上报观测，真实输入与截图委托受控 WebDriver 会话。
 mod driver;
+mod gesture;
 pub(crate) mod model;
 mod observation;
 mod targets;
