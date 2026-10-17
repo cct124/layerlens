@@ -185,6 +185,55 @@ impl DocumentLease {
     pub fn source_sha256(&self) -> &str {
         self.0.parsed.source_sha256()
     }
+    /// 开发渲染实验使用同一固定修订，计算前后检查清理失效。
+    ///
+    /// # Errors
+    /// 清理失效、实验预算或解析／解码失败时返回错误；调用方须在有界后台执行。
+    #[cfg(feature = "render-lab")]
+    pub fn render_scene(&self) -> Result<crate::psd::RenderScene, DocumentError> {
+        self.render_scene_with_profile(crate::psd::RenderProfile::Simple)
+    }
+
+    /// 固定修订的显式规模实验，普通解析及预览预算保持不变。
+    #[cfg(feature = "render-lab")]
+    pub fn render_scene_with_profile(
+        &self,
+        profile: crate::psd::RenderProfile,
+    ) -> Result<crate::psd::RenderScene, DocumentError> {
+        self.ensure_valid()?;
+        let scene = self
+            .0
+            .parsed
+            .render_scene_with_profile(profile)
+            .map_err(|source| DocumentError::Preview {
+                document: self.document_id(),
+                revision: self.revision_id(),
+                source,
+            })?;
+        self.ensure_valid()?;
+        Ok(scene)
+    }
+
+    /// 开发大稿资源逐项读取；计算前后复检清理状态，调用方限制并发及发布。
+    #[cfg(feature = "render-lab")]
+    pub fn render_resource(
+        &self,
+        id: Option<LayerId>,
+        profile: crate::psd::RenderProfile,
+    ) -> Result<Vec<u8>, DocumentError> {
+        self.ensure_valid()?;
+        let bytes = self
+            .0
+            .parsed
+            .render_resource(id, profile)
+            .map_err(|source| DocumentError::Preview {
+                document: self.document_id(),
+                revision: self.revision_id(),
+                source,
+            })?;
+        self.ensure_valid()?;
+        Ok(bytes)
+    }
 }
 
 /// 已完成作业只保留小型结果，不隐式持有解析文档。

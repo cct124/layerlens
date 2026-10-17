@@ -6,7 +6,10 @@ mod control;
 mod fixtures;
 mod model;
 mod operations;
+mod process_metrics;
 mod receipts;
+#[cfg(feature = "render-lab")]
+pub(crate) mod render_lab;
 mod server;
 mod tools;
 pub(crate) mod ui;

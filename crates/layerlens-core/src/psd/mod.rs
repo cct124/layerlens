@@ -17,6 +17,10 @@ mod text;
 mod text_model;
 
 pub use adapter::PsdDocument;
+#[cfg(feature = "render-lab")]
+pub use adapter::render_scene::{
+    RenderContent, RenderLayer, RenderPath, RenderProfile, RenderScene, RenderTextBox,
+};
 pub use capability::{Capability, Support};
 pub use error::{PsdError, PsdErrorCode};
 pub use measurement::{OpenTimings, PngTimings};
@@ -31,4 +35,4 @@ pub use text_model::{
 };
 
 /// 当前原型使用的候选及仓库补丁标识；补丁来源见 vendor/ag-psd 的维护记录。
-pub const PARSER_BUILD: &str = "ag-psd 0.3.0 + LayerLens patch 3";
+pub const PARSER_BUILD: &str = "ag-psd 0.3.0 + LayerLens patch 4";

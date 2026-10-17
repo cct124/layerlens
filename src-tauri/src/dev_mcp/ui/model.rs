@@ -2,6 +2,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+#[path = "render_model.rs"]
+mod render_model;
+pub(crate) use render_model::{UiRenderLab, UiRenderSample};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -113,6 +116,8 @@ pub(crate) struct UiWindow {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiObservation {
+    #[serde(default)]
+    pub render_lab: Option<UiRenderLab>,
     pub instance_id: String,
     pub frontend_id: String,
     /// 前端挂载时 timeOrigin + now 的微秒整数，用于丢弃旧挂载或旧页面迟到报告。
@@ -207,11 +212,29 @@ pub(crate) enum PointerButton {
     Middle,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub(crate) enum GestureStep {
-    Move { x: i32, y: i32 },
-    Down { button: PointerButton },
-    Up { button: PointerButton },
+    Move {
+        x: i32,
+        y: i32,
+    },
+    /// 连续绘制测量使用；单步 1–100 ms，仍受总步骤与坐标边界限制。
+    MoveTimed {
+        x: i32,
+        y: i32,
+        duration_ms: u32,
+    },
+    Down {
+        button: PointerButton,
+    },
+    Up {
+        button: PointerButton,
+    },
     Escape,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
@@ -263,6 +286,16 @@ pub(crate) struct InputResult {
     deny_unknown_fields
 )]
 pub(crate) enum UiCondition {
+    Renderer {
+        engine: String,
+        phase: String,
+        generation_at_least: String,
+    },
+    RenderInteraction {
+        selected_layer_id: Option<u32>,
+        auto_select: bool,
+        ctrl: bool,
+    },
     Ready {},
     Applied {
         at_least: String,

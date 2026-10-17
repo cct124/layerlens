@@ -1,4 +1,5 @@
 //! 开发界面适配：前端只上报观测，真实输入与截图委托受控 WebDriver 会话。
+pub(crate) mod capture;
 mod driver;
 mod gesture;
 pub(crate) mod model;
@@ -19,7 +20,7 @@ pub(crate) fn dev_view_report<R: tauri::Runtime>(
     instance: tauri::State<'_, Arc<Instance>>,
     observation: model::UiObservation,
 ) -> Result<(), WorkspaceError> {
-    if window.label() != "main" {
+    if window.label() != "main" || (observation.render_lab.is_some() && !instance.render_lab) {
         return Err(crate::workspace::error(
             WorkspaceErrorCode::InvalidInput,
             "此窗口未启用开发观测。",

@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 fn observation(epoch: u64, revision: u64) -> UiObservation {
     UiObservation {
+        render_lab: None,
         instance_id: "instance".into(),
         frontend_id: "11111111-1111-4111-8111-111111111111".into(),
         document_epoch: epoch.to_string(),
@@ -148,6 +149,13 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
         "document:2",
         "layer:0:check",
         "handle:se",
+        "render:rebuild",
+        "render:large",
+        "render:compact",
+        "render:strict",
+        "render:source-layers",
+        "render:fit",
+        "render:focus",
     ] {
         assert!(targets::selector(valid).is_ok());
     }
@@ -158,6 +166,12 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
         "task:1:view,body",
         "handle:script",
         "command:open",
+        "render:script",
+        "render:leafer",
+        "render:konva",
+        "render:canvaskit",
+        "render:capture",
+        "render:20000x20000",
     ] {
         assert!(targets::selector(invalid).is_err());
     }
@@ -166,6 +180,107 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
             serde_json::json!({"kind":"click","target":"canvas","script":"bad"})
         )
         .is_err()
+    );
+}
+
+#[tokio::test]
+async fn renderer_wait_rejects_old_generation_and_keeps_failure_evidence() {
+    let state = Observations::default();
+    let mut view = observation(100, 1);
+    view.render_lab = Some(UiRenderLab {
+        engine: "konva".into(),
+        phase: "ready".into(),
+        generation: "2".into(),
+        source_sha256: Some("a".repeat(64)),
+        font_sha256: Some("b".repeat(64)),
+        font_ready: true,
+        node_count: 10,
+        resource_count: 20,
+        selected_layer_id: Some(7),
+        candidate_ids: vec![7, 9],
+        hover_layer_id: None,
+        auto_select: true,
+        ctrl: false,
+        init_ms: 1.0,
+        render_ms: 0.5,
+        scene_read_ms: 0.0,
+        assets_ms: 0.0,
+        first_ready_ms: 0.0,
+        text_mode: "shared".into(),
+        native_text_layers: 0,
+        shared_text_layers: 0,
+        unsupported_layers: 0,
+        profile: "bounded".into(),
+        source_layers: 10,
+        drawn_layer_ids: vec![],
+        raster_layer_ids: vec![],
+        degraded_layer_ids: vec![],
+        unsupported_layer_ids: vec![],
+        text_raster_layer_ids: vec![],
+        encoded_bytes: 0,
+        alpha_bytes: 0,
+        selection_ms: None,
+        hit_ms: None,
+        samples: vec![],
+        backend: "canvas2d".into(),
+        error: None,
+        limitations: vec![],
+    });
+    state.publish("instance", view.clone()).unwrap();
+    let request = UiWaitRequest {
+        frontend_id: Some(view.frontend_id.clone()),
+        timeout_ms: 1,
+        condition: UiCondition::Renderer {
+            engine: "konva".into(),
+            phase: "ready".into(),
+            generation_at_least: "3".into(),
+        },
+    };
+    for engine in ["leafer", "canvaskit"] {
+        let mut obsolete = view.clone();
+        obsolete.render_lab.as_mut().unwrap().engine = engine.into();
+        assert_eq!(
+            state.publish("instance", obsolete).unwrap_err().code,
+            Code::InvalidInput
+        );
+        let mut obsolete = request.clone();
+        if let UiCondition::Renderer { engine: name, .. } = &mut obsolete.condition {
+            *name = engine.into();
+        }
+        assert_eq!(
+            state
+                .wait(obsolete, &CancellationToken::new())
+                .await
+                .unwrap_err()
+                .code,
+            Code::InvalidInput
+        );
+    }
+    let timed = state
+        .wait(request.clone(), &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(timed.timed_out && !timed.satisfied);
+    assert_eq!(
+        timed.last_state.unwrap().render_lab.unwrap().engine,
+        "konva"
+    );
+    view.view_revision = "2".into();
+    let r = view.render_lab.as_mut().unwrap();
+    r.generation = "3".into();
+    state.publish("instance", view.clone()).unwrap();
+    assert!(
+        state
+            .wait(request, &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    view.view_revision = "3".into();
+    view.render_lab.as_mut().unwrap().render_ms = f64::INFINITY;
+    assert_eq!(
+        state.publish("instance", view).unwrap_err().code,
+        Code::InvalidInput
     );
 }
 
@@ -333,6 +448,33 @@ fn bounded_gesture_validates_every_step_before_dispatch_and_keeps_button_order()
         }))
         .is_err()
     );
+}
+
+#[test]
+fn timed_gesture_uses_requested_cadence_and_rejects_invalid_duration_before_dispatch() {
+    let view = canvas_observation();
+    let mut steps: Vec<GestureStep> = serde_json::from_value(serde_json::json!([
+        {"kind":"move","x":20,"y":30},
+        {"kind":"down","button":"middle"},
+        {"kind":"moveTimed","x":40,"y":40,"durationMs":16},
+        {"kind":"up","button":"middle"}
+    ]))
+    .unwrap();
+    let result = super::gesture::actions(&view, &steps, false).unwrap();
+    assert_eq!(result["actions"][0]["actions"][2]["duration"], 16);
+    for duration_ms in [0, 101, u32::MAX] {
+        steps[2] = GestureStep::MoveTimed {
+            x: 40,
+            y: 40,
+            duration_ms,
+        };
+        assert_eq!(
+            super::gesture::actions(&view, &steps, false)
+                .unwrap_err()
+                .code,
+            Code::InvalidInput
+        );
+    }
 }
 
 #[test]

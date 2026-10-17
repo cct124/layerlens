@@ -59,6 +59,7 @@ pub(crate) struct Driver {
     session: Mutex<Option<DriverInfo>>,
     operations: Arc<AsyncMutex<()>>,
     held: AtomicBool,
+    captures: Arc<super::capture::CaptureStore>,
 }
 impl Driver {
     pub(crate) fn new(instance: Arc<Instance>, endpoint: Url) -> std::io::Result<Self> {
@@ -76,6 +77,7 @@ impl Driver {
             session: Mutex::new(None),
             operations: Arc::new(AsyncMutex::new(())),
             held: AtomicBool::new(false),
+            captures: Arc::default(),
         })
     }
     pub(crate) fn acquire(&self) -> Result<OwnedMutexGuard<()>, WorkspaceError> {
@@ -120,13 +122,22 @@ impl Driver {
             .map_err(|e| error(Code::Internal, format!("WebDriver 请求失败：{e}")))?;
         let status = response.status();
         let mut bytes = Vec::new();
+        // 仅截图允许较大驱动输入；MCP 单张图像仍为 512 KiB，大图必须通过分块入口读取。
+        let response_limit = if route.ends_with("/screenshot") {
+            12 * 1024 * 1024
+        } else {
+            2 * 1024 * 1024
+        };
         while let Some(chunk) = response
             .chunk()
             .await
             .map_err(|e| error(Code::Internal, format!("WebDriver 响应中断：{e}")))?
         {
-            if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
-                return Err(error(Code::ResourceLimit, "WebDriver 响应超过 2 MiB。"));
+            if bytes.len() + chunk.len() > response_limit {
+                return Err(error(
+                    Code::ResourceLimit,
+                    "WebDriver 响应超过当前入口的字节额度。",
+                ));
             }
             bytes.extend_from_slice(&chunk);
         }
@@ -406,6 +417,67 @@ impl Driver {
             input_completed: true,
         })
     }
+    pub(crate) async fn capture(
+        &self,
+        request: super::capture::CaptureRequest,
+    ) -> Result<(super::capture::CaptureResult, Option<String>), WorkspaceError> {
+        use super::capture::{CaptureOperation, Pixels};
+        match request.operation {
+            CaptureOperation::Create {} => {
+                let session = self.session()?;
+                let before = self.probe_session(&session).await?;
+                if before.frontend_id != request.frontend_id {
+                    return Err(error(Code::StaleRevision, "前端代次已变化，未截图"));
+                }
+                let image = self
+                    .session_command(Method::GET, "screenshot", None)
+                    .await?;
+                let image = image
+                    .as_str()
+                    .ok_or_else(|| error(Code::Internal, "截图不是 base64"))?
+                    .to_owned();
+                let after = self.probe_session(&session).await?;
+                let store = self.captures.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let pixels = Pixels::decode(&image)?;
+                    let screenshot = ScreenshotResult {
+                        unchanged: before.frontend_id == after.frontend_id
+                            && before.view_revision == after.view_revision,
+                        before,
+                        after,
+                        width: pixels.width,
+                        height: pixels.height,
+                        source: "webdriverWebview".into(),
+                    };
+                    let capture = store.put(pixels, screenshot.before.frontend_id.clone());
+                    Ok((
+                        super::capture::CaptureResult::Created {
+                            capture,
+                            screenshot: Box::new(screenshot),
+                        },
+                        None,
+                    ))
+                })
+                .await
+                .map_err(|e| error(Code::Internal, format!("截图准备失败：{e}")))?
+            }
+            CaptureOperation::Tile { capture_id, index } => {
+                let store = self.captures.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    store
+                        .tile(&capture_id, &request.frontend_id, index)
+                        .map(|(data, png)| (data, Some(png)))
+                })
+                .await
+                .map_err(|e| error(Code::Internal, format!("截图分块读取失败：{e}")))?
+            }
+            CaptureOperation::Release { capture_id } => self
+                .captures
+                .release(&capture_id, &request.frontend_id)
+                .map(|data| (data, None)),
+        }
+    }
+
     pub(crate) async fn screenshot(
         &self,
         request: ScreenshotRequest,

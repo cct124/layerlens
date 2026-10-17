@@ -1,4 +1,8 @@
-# ag-psd 0.3.0 局部兼容补丁（patch 3）
+# ag-psd 0.3.0 局部兼容补丁（patch 4）
+
+2026-10-15 patch 4：`additional_info/mod.rs::group_for_key` 优先采用直接注册的 handler，再解析别名。原实现把已注册的 `vmsk` 反向映射至未注册 `vsms`，使合法路径作为未知区段跳过；`vsms` 仍通过 `vmsk` 处理。独立生成的 `render-simple.psd` 及核心 `render_scene` 回归验证路径存在与几何。该修正不声明完整形状／蒙版渲染支持。
+
+锁定上游 `vector_keys.rs::doc_size` 返回 1×1，读出的 8.24 路径点仍是归一化坐标；实验核心在适配边界乘文档宽高，由整数几何样本验证，不修改上游坐标约定。以下 patch 1–3 内容保留其原验证时间与范围。
 
 来源为 crates.io 的 [`ag-psd 0.3.0` 发行归档](https://static.crates.io/crates/ag-psd/ag-psd-0.3.0.crate)，SHA-256：
 `6470c6a2f96a00a8d4154504020b34807c2282438c98f90f5069ef3f8cb0e7bf`。

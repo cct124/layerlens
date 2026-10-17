@@ -15,12 +15,14 @@ use tokio_util::sync::CancellationToken;
 pub(super) enum WindowSize {
     Minimum,
     Default,
+    RenderLab,
 }
 impl WindowSize {
     fn dimensions(self) -> (u32, u32) {
         match self {
             Self::Minimum => (900, 600),
             Self::Default => (1280, 800),
+            Self::RenderLab => (1280, 900),
         }
     }
 }

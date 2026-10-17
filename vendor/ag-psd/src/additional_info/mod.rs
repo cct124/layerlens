@@ -221,7 +221,11 @@ pub fn alias_target(key: &str) -> &str {
 /// неизвестен.
 pub fn group_for_key(key: &str) -> Option<Group> {
     let target = alias_target(key);
-    HANDLERS.iter().find(|h| h.key == target).map(|h| h.group)
+    // LayerLens patch 4: registered handlers take precedence over aliases.
+    // vmsk is registered; its reverse alias vsms has no registry entry.
+    HANDLERS.iter().find(|h| h.key == key)
+        .or_else(|| HANDLERS.iter().find(|h| h.key == target))
+        .map(|h| h.group)
 }
 
 /// Использует ли ключ "большой" (8-байтовый) размер секции. Зеркало

@@ -23,6 +23,10 @@ fn main() {
             "choose_psd_files",
             #[cfg(feature = "dev-mcp")]
             "dev_view_report",
+            #[cfg(feature = "render-lab")]
+            "read_render_scene",
+            #[cfg(feature = "render-lab")]
+            "read_render_resource",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         eprintln!("Tauri 构建配置失败：{error:#}");

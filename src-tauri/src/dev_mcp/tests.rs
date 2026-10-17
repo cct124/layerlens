@@ -83,6 +83,8 @@ impl App {
                 visible: false,
                 web_driver_url: None,
                 native_windows: false,
+                render_lab: false,
+                large_render: false,
             }
             .prepare()
             .unwrap(),
@@ -238,12 +240,55 @@ async fn wait(client: &Client, info: &Value, condition: Value) -> Value {
 }
 
 #[tokio::test]
+async fn generic_metrics_rejects_external_pid_and_capture_requires_driver() {
+    let app = App::start().await;
+    let client = app.client().await;
+    let info = ok(call(&client, "dev_instance", json!({})).await)["data"]["value"].clone();
+    for (name, request) in [
+        ("dev_process_metrics", json!({"pid":1})),
+        (
+            "dev_ui_capture",
+            json!({"frontendId":"page", "operation":{"kind":"create"}}),
+        ),
+    ] {
+        let result = client
+            .call_tool(
+                CallToolRequestParams::new(name)
+                    .with_arguments(args(&info, request, None).as_object().unwrap().clone()),
+            )
+            .await;
+        assert!(result.is_err(), "无效请求不得绕过隔离边界：{result:?}");
+    }
+    #[cfg(windows)]
+    {
+        let metrics = ok(call(&client, "dev_process_metrics", args(&info, json!({}), None)).await);
+        assert_eq!(
+            metrics["data"]["value"]["rootProcessId"],
+            std::process::id()
+        );
+        assert_eq!(metrics["data"]["value"]["errors"], json!([]));
+        assert!(
+            metrics["data"]["value"]["processes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["processId"] == std::process::id()
+                    && p["privateBytes"].as_u64().unwrap() > 0)
+        );
+    }
+    client.cancel().await.unwrap();
+    app.finish().await;
+}
+
+#[tokio::test]
 async fn sdk_round_trip_preserves_snapshots_replays_cleanup_and_isolates_reopened_documents() {
     let app = App::start().await;
     let before = fs::read(app.instance.sample_root.join("bitmap-raw.psd")).unwrap();
     let client = app.client().await;
     let tools = client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 10);
+    assert_eq!(tools.len(), 11);
+    assert!(tools.iter().any(|t| t.name == "dev_process_metrics"));
+    assert!(!tools.iter().any(|t| t.name == "dev_ui_capture"));
     assert!(
         tools
             .iter()
@@ -851,7 +896,9 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
                 port: 0,
                 visible,
                 web_driver_url: driver,
-                native_windows: true
+                native_windows: true,
+                render_lab: false,
+                large_render: false,
             }
             .prepare()
             .is_err()
@@ -865,12 +912,40 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
             visible: false,
             web_driver_url: None,
             native_windows: false,
+            render_lab: false,
+            large_render: false,
         }
         .prepare()
         .unwrap()
     };
     let a = make();
     let b = make();
+    let large_only: Config =
+        serde_json::from_value(json!({"sampleRoot":samples,"runRoot":runs,"largeRender":true}))
+            .unwrap();
+    assert!(
+        large_only.prepare().is_err(),
+        "普通开发实例不能扩大生产预算"
+    );
+    assert_eq!(
+        a.document_config().parse_limits.max_file_bytes,
+        64 * 1024 * 1024
+    );
+    #[cfg(feature = "render-lab")]
+    {
+        let config: Config = serde_json::from_value(
+            json!({"sampleRoot":samples,"runRoot":runs,"renderLab":true,"largeRender":true}),
+        )
+        .unwrap();
+        let instance = config.prepare().unwrap();
+        let limits = instance.document_config();
+        assert_eq!(limits.parse_limits.max_file_bytes, 512 * 1024 * 1024);
+        assert_eq!(
+            limits.parse_limits.max_decoded_bytes,
+            a.document_config().parse_limits.max_decoded_bytes
+        );
+        assert_eq!(limits.max_live_revisions, 2);
+    }
     assert_ne!(a.id, b.id);
     assert_ne!(a.token, b.token);
     assert_ne!(a.directory, b.directory);
@@ -898,6 +973,8 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
             visible: false,
             web_driver_url: None,
             native_windows: false,
+            render_lab: false,
+            large_render: false,
         }
         .prepare()
         .is_err()

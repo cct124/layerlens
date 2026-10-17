@@ -10,7 +10,7 @@ use tauri::{Emitter, Manager};
 
 fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     let builder = builder.plugin(tauri_plugin_dialog::init());
-    #[cfg(feature = "dev-mcp")]
+    #[cfg(all(feature = "dev-mcp", not(feature = "render-lab")))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         commands::get_app_info,
         commands::workspace_action,
@@ -20,6 +20,19 @@ fn configure<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R>
         commands::cleanup_request,
         commands::choose_psd_files,
         dev_mcp::ui::dev_view_report
+    ]);
+    #[cfg(feature = "render-lab")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        commands::get_app_info,
+        commands::workspace_action,
+        commands::read_preview,
+        commands::read_layers,
+        commands::selection_request,
+        commands::cleanup_request,
+        commands::choose_psd_files,
+        dev_mcp::ui::dev_view_report,
+        dev_mcp::render_lab::read_render_scene,
+        dev_mcp::render_lab::read_render_resource
     ]);
     #[cfg(not(feature = "dev-mcp"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -67,8 +80,11 @@ pub fn run() -> tauri::Result<()> {
             let exit = app.handle().clone();
             #[cfg(feature = "dev-mcp")]
             let (core_done, core_stopped) = tokio::sync::oneshot::channel();
+            let document_config = Default::default();
+            #[cfg(feature = "dev-mcp")]
+            let document_config = development.as_ref().map_or(document_config, |i| i.document_config());
             let host = workspace::WorkspaceHost::start(
-                Default::default(),
+                document_config,
                 move |snapshot| {
                     #[cfg(feature = "dev-mcp")]
                     if testing_notifications {
@@ -129,15 +145,27 @@ pub fn run() -> tauri::Result<()> {
                     .windows
                     .iter()
                     .find(|window| window.label == "main")
+                    .cloned()
                     .ok_or_else(|| std::io::Error::other("开发实例缺少 main 窗口配置"))?;
-                let mut builder = tauri::WebviewWindowBuilder::from_config(app, window)?
+                #[cfg(feature = "render-lab")]
+                let window = if instance.render_lab {
+                    let mut config = window;
+                    config.url = tauri::WebviewUrl::App("render-lab.html".into());
+                    config
+                } else { window };
+                let mut builder = tauri::WebviewWindowBuilder::from_config(app, &window)?
                     .data_directory(instance.directory.join("webview"))
                     .visible(instance.visible)
                     .title("LayerLens · 开发测试实例");
+                #[cfg(feature = "render-lab")]
+                if instance.render_lab {
+                    app.add_capability(include_str!("dev_mcp/render-capability.json"))?;
+                    builder = builder.decorations(true).title("LayerLens · Konva 渲染验证");
+                }
                 {
                     // 业务测试也必须能等待真实前端读完预览；驱动输入工具仍由 WebDriver 配置控制。
                     app.add_capability(include_str!("dev_mcp/observation-capability.json"))?;
-                    let boot = serde_json::json!({"instanceId":instance.instance_id()});
+                    let boot = serde_json::json!({"instanceId":instance.instance_id(), "renderLab":instance.render_lab, "largeRender":instance.large_render});
                     let observation = instance.observations.clone();
                     builder = builder.initialization_script(format!("Object.defineProperty(window, '__LAYERLENS_DEV_BOOT__', {{value:Object.freeze({boot}), configurable:false}});"))
                         .on_page_load(move |_, payload| {
@@ -276,6 +304,21 @@ mod tests {
                     .as_str()
                     .is_some_and(|message| message.contains("not allowed"))
             );
+        }
+    }
+
+    #[cfg(feature = "render-lab")]
+    #[test]
+    fn render_feature_does_not_grant_scene_access_to_ordinary_windows() {
+        for label in ["main", "untrusted"] {
+            for command in ["read_render_scene", "read_render_resource"] {
+                let error = invoke_raw(label, command, json!({"request":{}})).unwrap_err();
+                assert!(
+                    error
+                        .as_str()
+                        .is_some_and(|message| message.contains("not allowed"))
+                );
+            }
         }
     }
 

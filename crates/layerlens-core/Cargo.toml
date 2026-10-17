@@ -8,6 +8,15 @@ description = "LayerLens 的共享应用核心与边界类型"
 
 [features]
 schema = ["dep:schemars"]
+render-lab = []
+
+[[example]]
+name = "export_render_bindings"
+required-features = ["render-lab"]
+
+[[example]]
+name = "inspect_render_source"
+required-features = ["render-lab"]
 
 [dependencies]
 ag-psd.workspace = true

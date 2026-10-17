@@ -62,6 +62,72 @@ impl Observations {
         }
         if uuid::Uuid::parse_str(&value.frontend_id).is_err()
             || value.tasks.len() > 128
+            || value.render_lab.as_ref().is_some_and(|r| {
+                r.engine != "konva"
+                    || !["idle", "loading", "ready", "error", "released"]
+                        .contains(&r.phase.as_str())
+                    || number(&r.generation).is_err()
+                    || r.node_count > 65536
+                    || r.resource_count > 131072
+                    || !["shared", "native"].contains(&r.text_mode.as_str())
+                    || r.native_text_layers > 2048
+                    || r.shared_text_layers > 2048
+                    || r.unsupported_layers > 2048
+                    || !["bounded", "large", "largeLayers"].contains(&r.profile.as_str())
+                    || r.source_layers > 2048
+                    || r.encoded_bytes > 128 * 1024 * 1024
+                    || r.alpha_bytes > 96 * 1024 * 1024
+                    || [
+                        &r.drawn_layer_ids,
+                        &r.raster_layer_ids,
+                        &r.text_raster_layer_ids,
+                        &r.degraded_layer_ids,
+                        &r.unsupported_layer_ids,
+                    ]
+                    .iter()
+                    .any(|ids| {
+                        ids.len() > 2048
+                            || ids.iter().collect::<std::collections::HashSet<_>>().len()
+                                != ids.len()
+                    })
+                    || r.samples.len() > 60
+                    || r.samples.iter().any(|s| {
+                        number(&s.generation).is_err()
+                            || !["rebuild", "zoom", "reset", "pan", "resize", "fit", "focus"]
+                                .contains(&s.operation.as_str())
+                            || [
+                                Some(s.submit_ms),
+                                Some(s.ready_ms),
+                                Some(s.readback_ms),
+                                s.frame_interval_ms,
+                                s.input_to_ready_ms,
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .any(|n| !n.is_finite() || n < 0.0)
+                    })
+                    || r.candidate_ids.len() > 64
+                    || r.limitations.len() > 64
+                    || r.limitations.iter().any(|s| s.len() > 512)
+                    || r.backend.len() > 64
+                    || r.error.as_ref().is_some_and(|s| s.len() > 2048)
+                    || [&r.source_sha256, &r.font_sha256]
+                        .into_iter()
+                        .flatten()
+                        .any(|s| s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()))
+                    || [
+                        Some(r.init_ms),
+                        Some(r.render_ms),
+                        Some(r.scene_read_ms),
+                        Some(r.assets_ms),
+                        Some(r.first_ready_ms),
+                        r.selection_ms,
+                        r.hit_ms,
+                    ]
+                    .iter()
+                    .flatten()
+                    .any(|n| !n.is_finite() || *n < 0.0)
+            })
             || value.cleanup.task_ids.len() > 128
             || value.cleanup.rendered_tasks > 128
             || !["pan", "region"].contains(&value.tool.as_str())
@@ -192,6 +258,15 @@ impl Observations {
 impl UiCondition {
     fn validate(&self) -> Result<(), WorkspaceError> {
         let valid = match self {
+            Self::Renderer {
+                engine,
+                phase,
+                generation_at_least,
+            } => {
+                number(generation_at_least)?;
+                engine == "konva"
+                    && ["idle", "loading", "ready", "error", "released"].contains(&phase.as_str())
+            }
             Self::Applied { at_least } | Self::ViewRevision { at_least } => {
                 number(at_least)?;
                 true
@@ -266,6 +341,25 @@ impl UiCondition {
     }
     fn matches(&self, value: &UiObservation) -> bool {
         match self {
+            Self::RenderInteraction {
+                selected_layer_id,
+                auto_select,
+                ctrl,
+            } => value.render_lab.as_ref().is_some_and(|r| {
+                r.selected_layer_id == *selected_layer_id
+                    && r.auto_select == *auto_select
+                    && r.ctrl == *ctrl
+                    && !value.selection_running
+            }),
+            Self::Renderer {
+                engine,
+                phase,
+                generation_at_least,
+            } => value.render_lab.as_ref().is_some_and(|r| {
+                &r.engine == engine
+                    && &r.phase == phase
+                    && number(&r.generation).ok() >= number(generation_at_least).ok()
+            }),
             Self::WindowFocus {
                 focused,
                 events_after,

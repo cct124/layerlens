@@ -241,7 +241,7 @@ async function exerciseInstance() {
   assert.equal(initialization.protocolVersion, '2025-11-25');
   await rpc('notifications/initialized', {}, true);
   const listed = await rpc('tools/list', {});
-  assert.equal(listed.tools.length, 10);
+  assert.equal(listed.tools.length, 11);
   assert(listed.tools.every((entry) => entry.inputSchema && entry.outputSchema));
   info = (await tool('dev_instance', {})).data.value;
   report.instanceId = info.instanceId;
@@ -249,6 +249,12 @@ async function exerciseInstance() {
   report.appVersion = info.appVersion;
   report.limits = info.limits;
   assert.equal(info.instanceId, connection.instanceId);
+  const metrics = (await tool('dev_process_metrics', argumentsFor({}))).data.value;
+  assert.equal(metrics.rootProcessId, connection.processId);
+  assert.equal(metrics.errors.length, 0, JSON.stringify(metrics));
+  assert(metrics.processes.some((p) => p.processId === connection.processId && p.privateBytes > 0));
+  report.processMetrics = metrics;
+  report.checks.push('通用开发 MCP 采集当前隔离实例的实际进程内存');
   report.checks.push('initialize、工具 Schema 与实例身份');
   for (const [index, name] of sourceFiles.entries()) {
     await workspace({ kind: 'open', path: name });

@@ -15,6 +15,7 @@ const runFiles = [
   'cleanup-confirmation.png',
   'cleanup-sync-failure.png',
   'final-state.png',
+  'generic-capture.png',
   'failure.png',
   'window-minimum.png',
   'window-default.png',
@@ -24,6 +25,21 @@ const runFiles = [
   'window-blur.png',
   'window-menu.png',
   'window-exit.png',
+  'render-comparison.png', // 只读收集历史证据；当前运行器不再生成多引擎对比。
+  'visual-reference.json',
+  'render-reference.png',
+  'report-progress.json',
+  'project-visual.json',
+  ...['leafer', 'konva'].flatMap((engine) => [
+    'project-' + engine + '-strict.png',
+    'project-' + engine + '-fit.png',
+    ...[0, 1, 2].flatMap((index) =>
+      [100, 200, 400].map((zoom) => 'project-' + engine + '-detail' + index + '-' + zoom + '.png'),
+    ),
+  ]),
+  ...['leafer', 'konva', 'canvaskit'].flatMap((engine) =>
+    [100, 200, 400].map((zoom) => 'render-' + engine + '-' + zoom + '.png'),
+  ),
 ];
 
 /** 保留诊断与指纹，删除显式凭据字段、Bearer 值及已知实例令牌。 */
@@ -69,10 +85,27 @@ export function summarize(results, expected) {
 }
 
 /** 新建产物目录；拒绝目录联接／符号链接和超预算文件，清单记录复制后 SHA-256。 */
-export async function collectArtifacts(source, destination) {
+export async function collectArtifacts(source, destination, { runs } = {}) {
+  if (
+    runs !== undefined &&
+    (!Array.isArray(runs) ||
+      !runs.length ||
+      runs.length > 128 ||
+      runs.some((n) => typeof n !== 'string' || !runName.test(n)) ||
+      new Set(runs).size !== runs.length)
+  )
+    throw new Error('产物运行名单无效');
+  const selected = runs ? new Set(runs) : null;
+  const found = new Set();
   const root = await realpath(source);
   await mkdir(destination, { recursive: false });
-  const manifest = { formatVersion: 1, files: [], errors: [], bytes: 0 };
+  const manifest = {
+    formatVersion: 1,
+    files: [],
+    errors: [],
+    bytes: 0,
+    selectedRuns: runs ?? null,
+  };
   async function safeDirectory(directory) {
     const info = await lstat(directory);
     if (!info.isDirectory() || info.isSymbolicLink())
@@ -112,6 +145,8 @@ export async function collectArtifacts(source, destination) {
     await safeDirectory(parent);
     for (const entry of await readdir(parent, { withFileTypes: true })) {
       if (!runName.test(entry.name)) continue;
+      if (selected && !selected.has(entry.name)) continue;
+      found.add(entry.name);
       const directory = path.join(parent, entry.name);
       try {
         await safeDirectory(directory);
@@ -126,7 +161,8 @@ export async function collectArtifacts(source, destination) {
     await copy(root, 'driver-preparation.json');
     await visitRuns(root);
     if (suiteName.test(path.basename(root))) {
-      for (const name of ['summary.json', 'summary.md', 'environment.json']) await copy(root, name);
+      for (const name of ['summary.json', 'summary.md', 'environment.json', 'project-visual.json'])
+        await copy(root, name);
       await visitRuns(path.join(root, 'runs'));
     }
     for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -134,7 +170,12 @@ export async function collectArtifacts(source, destination) {
       const suite = path.join(root, entry.name);
       try {
         await safeDirectory(suite);
-        for (const name of ['summary.json', 'summary.md', 'environment.json'])
+        for (const name of [
+          'summary.json',
+          'summary.md',
+          'environment.json',
+          'project-visual.json',
+        ])
           await copy(suite, name);
         await visitRuns(path.join(suite, 'runs'));
       } catch (error) {
@@ -144,6 +185,9 @@ export async function collectArtifacts(source, destination) {
   } catch (error) {
     manifest.errors.push(String(error));
   }
+  if (selected)
+    for (const name of selected)
+      if (!found.has(name)) manifest.errors.push('未找到指定运行：' + name);
   if (!manifest.files.length) manifest.errors.push('没有可保留的报告；检查是否已执行准备或回归。');
   await writeFile(path.join(destination, 'manifest.json'), JSON.stringify(manifest, null, 2), {
     flag: 'wx',

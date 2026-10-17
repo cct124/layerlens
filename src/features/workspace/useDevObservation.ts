@@ -13,7 +13,9 @@ type Projection = Omit<
   | 'input'
   | 'cleanup'
   | 'window'
+  | 'renderLab'
 > & {
+  renderLab?: UiObservation['renderLab'];
   cleanup: Omit<
     UiObservation['cleanup'],
     'renderedTasks' | 'scrollable' | 'scrolledToEnd' | 'focusInside'
@@ -94,6 +96,7 @@ export function useDevObservation(project: () => Projection) {
       const titlebar = document.querySelector('.app-header');
       const value = {
         ...projection,
+        renderLab: projection.renderLab ?? null,
         cleanup: {
           ...projection.cleanup,
           renderedTasks: list?.children.length ?? 0,

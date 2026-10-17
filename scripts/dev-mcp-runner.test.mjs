@@ -92,6 +92,7 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   await writeFile(path.join(run, 'driver.log'), 'Authorization: Bearer credential');
   await writeFile(path.join(run, 'failure.png'), Buffer.from([137, 80, 78, 71]));
   await writeFile(path.join(run, 'window-minimum.png'), Buffer.from([137, 80, 78, 71]));
+  await writeFile(path.join(run, 'generic-capture.png'), Buffer.from([137, 80, 78, 71]));
   await writeFile(
     path.join(source, 'stability-abc', 'summary.json'),
     JSON.stringify({ status: 'failed' }),
@@ -99,7 +100,8 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   const output = path.join(directory, 'output');
   const manifest = await collectArtifacts(source, output);
   assert.deepEqual(manifest.errors, []);
-  assert.equal(manifest.files.length, 5);
+  assert.equal(manifest.files.length, 6);
+  assert(manifest.files.some((entry) => entry.path.endsWith('/generic-capture.png')));
   assert(manifest.files.some((entry) => entry.path.endsWith('/window-minimum.png')));
   assert(manifest.files.every((entry) => !/instances|config|exe/.test(entry.path)));
   const copy = JSON.parse(
@@ -117,7 +119,7 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
     path.join(directory, 'single'),
   );
   assert.deepEqual(single.errors, []);
-  assert.equal(single.files.length, 5);
+  assert.equal(single.files.length, 6);
 });
 
 test('来源目录联接不能导出外部文件，空产物明确报错', async (t) => {
@@ -138,6 +140,32 @@ test('来源目录联接不能导出外部文件，空产物明确报错', async
   assert(manifest.errors.length > 0);
   assert.equal(manifest.files.length, 0);
   assert.deepEqual(await readdir(output), ['manifest.json']);
+});
+
+test('按运行名单分卷保留，不放宽白名单或预算，缺失名单明确失败', async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'layerlens-artifact-parts-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = path.join(directory, 'source');
+  for (const name of ['webview-first', 'webview-second']) {
+    await mkdir(path.join(source, name), { recursive: true });
+    await writeFile(path.join(source, name, 'report.json'), JSON.stringify({ passed: true }));
+    await writeFile(path.join(source, name, 'config.json'), 'private');
+  }
+  const result = await collectArtifacts(source, path.join(directory, 'part'), {
+    runs: ['webview-first'],
+  });
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(
+    result.files.map((f) => f.path),
+    ['webview-first/report.json'],
+  );
+  const missing = await collectArtifacts(source, path.join(directory, 'missing'), {
+    runs: ['webview-absent'],
+  });
+  assert(missing.errors.some((e) => e.includes('webview-absent')));
+  await assert.rejects(
+    collectArtifacts(source, path.join(directory, 'invalid'), { runs: ['../outside'] }),
+  );
 });
 
 test('子进程失败和启动失败保留非零结果及诊断', async () => {

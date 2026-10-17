@@ -25,6 +25,8 @@ fn main() -> io::Result<()> {
         UiInputEvidence::decl(&config),
         UiWindowControl::decl(&config),
         UiWindow::decl(&config),
+        UiRenderLab::decl(&config),
+        UiRenderSample::decl(&config),
         UiObservation::decl(&config),
     ] {
         output.push_str("export ");

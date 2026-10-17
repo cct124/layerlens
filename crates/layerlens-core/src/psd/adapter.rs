@@ -14,6 +14,10 @@ use ag_psd::psd::{Psd, ReadOptions};
 use sha2::{Digest, Sha256};
 use std::{path::Path, time::Instant};
 
+#[cfg(feature = "render-lab")]
+#[path = "render_scene.rs"]
+pub(super) mod render_scene;
+
 /// 固定源版本的解析结果；压缩数据由候选拥有，后续解码不再访问源路径。
 ///
 /// 不包含文档注册、任务和缓存语义。应用通过 documents 的有界后台调用。
@@ -24,6 +28,8 @@ pub struct PsdDocument {
     source_sha256: String,
     source_size_bytes: usize,
     max_decoded_bytes: u64,
+    #[cfg(feature = "render-lab")]
+    render_records: Vec<preflight::LayerRecord>,
 }
 
 impl PsdDocument {
@@ -118,6 +124,8 @@ impl PsdDocument {
                 source_sha256,
                 source_size_bytes: bytes.len(),
                 max_decoded_bytes: limits.max_decoded_bytes,
+                #[cfg(feature = "render-lab")]
+                render_records: header.layers,
             },
             timings,
         ))

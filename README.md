@@ -122,11 +122,11 @@ $devMcpConfig = @{
 
 `sampleRoot`、`runRoot` 必须是已存在且互不包含的绝对目录。`port=0` 分配回环端口，`visible` 默认 `false`。客户端在 `runRoot/<instanceId>/ready` 出现后读取同目录 `connection.json`，以其中的 `endpoint` 和 Bearer `token` 初始化 MCP，再调用 `dev_instance` 获取实例／会话身份。连接文件含凭据，不能复制进日志或提交仓库；正常停止监听后回收连接文件，保留 `stopped` 标记与隔离的 WebView profile。
 
-以上手工配置开启 8 个业务工具及 `dev_prepare_tasks`／`dev_test_control` 两个测试工具，并安装只读前端观测桥，供业务测试等待图像实际就绪。真实界面测试另配置回环 `webDriverUrl`、由驱动启动应用，再用 `dev_ui_attach` 绑定经过身份核验的会话，共启用 15 个工具。支持 `--dev-mcp-config=<路径>` 形式供驱动传参。
+以上手工配置开启 8 个业务工具、`dev_prepare_tasks`／`dev_test_control` 及 `dev_process_metrics`，共 11 个工具，并安装只读前端观测桥，供业务测试等待图像实际就绪。真实界面测试另配置回环 `webDriverUrl`、由驱动启动应用，再用 `dev_ui_attach` 绑定经过身份核验的会话，共启用 17 个工具，包含单图截图和有界分块截图 `dev_ui_capture`。内存采样和分块截图均无需渲染实验特性。支持 `--dev-mcp-config=<路径>` 形式供驱动传参。
 
 清理边界套件使用 `--webview-suite m2-cleanup`，20 轮覆盖 `cleanup-max`／`cleanup-expiry`／`cleanup-recovery`／`cleanup-late` 各 5 次。任务准备复用真实服务且保留部分失败与幂等回执；计划时钟只控制清理 TTL，命名检查点最多 4 个活跃、32 个会话记录，最长 30 秒并随退出终止。具体协议见[清理测试扩展](docs/08-开发测试MCP.md#清理测试扩展)。业务脚本的 `frontendImageReady` 等待同时校验文档修订、核心序号、解码和绘制准备，避免核心就绪时与前端争用单次 PNG 复制额度。
 
-窗口套件 `--webview-suite m2-window` 运行 `window-controls`／`window-blur`／`window-menu`／`window-exit`，必须使用可交互的 Windows 桌面会话。它显式设置 `visible: true` 与 `nativeWindows: true`，额外注册 `dev_window_state`／`dev_window_action`／`dev_window_wait`，共 18 个工具。系统焦点只在本实例主窗口与无 WebView 的辅助窗口间转移；窗口会显示并实际取得焦点，不应同时操作测试窗口。完整契约见[窗口与真实失焦扩展](docs/08-开发测试MCP.md#窗口与真实失焦扩展)。没有相应桌面能力时场景失败，不降级为合成事件或静默跳过。原生位置／尺寸／DPI、前端可信 focus／blur 计数和截图进入报告；正常退出由外部进程句柄、连接回收、源文件哈希及残留扫描确认。系统文件选择器、跨屏 DPI、贴靠和 Alt+F4 仍属独立验收。
+窗口套件 `--webview-suite m2-window` 运行 `window-controls`／`window-blur`／`window-menu`／`window-exit`，必须使用可交互的 Windows 桌面会话。它显式设置 `visible: true` 与 `nativeWindows: true`，额外注册 `dev_window_state`／`dev_window_action`／`dev_window_wait`，共 20 个工具。系统焦点只在本实例主窗口与无 WebView 的辅助窗口间转移；窗口会显示并实际取得焦点，不应同时操作测试窗口。完整契约见[窗口与真实失焦扩展](docs/08-开发测试MCP.md#窗口与真实失焦扩展)。没有相应桌面能力时场景失败，不降级为合成事件或静默跳过。原生位置／尺寸／DPI、前端可信 focus／blur 计数和截图进入报告；正常退出由外部进程句柄、连接回收、源文件哈希及残留扫描确认。系统文件选择器、跨屏 DPI、贴靠和 Alt+F4 仍属独立验收。
 
 业务操作结果与附带 `userSelection` 观测分别校验。附带观测因有界后台忙碌返回 `unavailable: { code: "BUSY", ... }` 时写入报告，后续明确状态断言继续执行；不能据此重做已接受变更，也不能容忍未知错误或缺失观测。
 
@@ -136,6 +136,76 @@ $devMcpConfig = @{
 npm run tauri -- build --no-bundle -- --locked
 npm run test:dev-mcp:desktop -- --app target/release/layerlens.exe --expect-disabled
 ```
+
+## Konva 渲染验证
+
+2026-10-17 用户已选定 **Konva** 作为正式工作区的 Canvas 渲染框架，依据与接入边界见[当前渲染决策](docs/09-渲染器对比实验.md#当前选型决定2026-10-17)。实验代码和关键证据已在本机备份；当前只保留 Konva 验证窗口、Rust 场景／资源、开发测试 MCP 及有效回归，Leafer／CanvasKit 源码与依赖、多引擎选择和对比调度已移除。清理与验证记录见 [RENDER-03](devlog/_fin/261017/RENDER-03-选型实验清理与Konva验证收敛.md)。固定清理回归 6／7 项通过；tab-1 的诊断流程完成，但热绘制 P95 50.5 ms 超过原定 50 ms 门槛，失败报告保留，未重试。
+
+历史实验见 [RENDER-01](devlog/_fin/261016/RENDER-01-渲染器对比实验.md) 和 [RENDER-02](devlog/_fin/261016/RENDER-02-tab-1真实大稿对比.md)：大稿诊断交互通过，完整视觉与资源验收未通过，原结论和失败记录保留。正式接入待实施，普通工作区仍使用合成图预览。Konva 验证窗口提供实色路径、固定中英文字体、透明位图、简单蒙版、共享／原生排版及检查选择；真实字体、复杂效果与完整 Photoshop 保真按样本验收。
+
+```powershell
+npm run bindings:render:generate
+npm run test:render-lab:core
+npm run desktop:render-lab
+npm run prepare:dev-mcp
+npm run test:render-lab
+```
+
+稳定性入口复用已有普通 release 作为开发入口关闭检查，每轮串行业务和 Konva 场景，共 3 轮；首次执行先按上文构建普通 release。单轮可用 `npm run test:dev-mcp:webview -- --scenario render-lab --driver <msedgedriver.exe>`，附加 `--visible` 显示验证窗口。所有输入经测试 MCP；测试结束自动正常退出。报告和 100%／200%／400% 截图保留在 `.local/dev-mcp/`，使用产物收集器保留白名单副本。
+
+验证构建沿用 `render-lab` Rust feature 和单独的 `tauri.render-lab.conf.json`／Vite mode，产物为 `dist-render-lab/`。仅显式 `renderLab: true` 的开发配置加载专属页面并授予场景读取权限；普通构建检查不含验证入口、引擎或字体，验证构建也检查无 Leafer／CanvasKit／WASM，CSP 已移除 WASM 执行许可。`bindings:render:check` 检查契约，`test:render-lab:core` 检查真实 PSD 数据和预算；本地功能报告不等同于远端 CI。
+
+规模及排版回归入口：
+
+```powershell
+npm run fixtures:render-lab
+# 可选：核验并复用已下载的公开样本及其 .source.json，源文件不改动
+node scripts/prepare-render-public.mjs <psd-tools-upstream目录>
+npm run desktop:render-lab:release
+npm run test:konva -- --app target/release/layerlens.exe
+npm run test:konva -- --app target/release/layerlens.exe --cases typography,text-2000 --mode native
+```
+
+默认生成 13 份样本到忽略目录 `.local/render-corpus/`，包含三类 100／500／2000 层、长页、大位图、中文排版和混合长页。`test:konva` 默认以 `benchmark` 工作负载串行运行三轮，每个样本／轮次使用独立进程；可用 `--cases` 逗号列表指定样本，`--repeat 1` 做单轮诊断。每次通过真实 MCP 输入、等待、截图和 OS 内存采样；失败后停止本批，不自动重试。报告为 `kind: konva-regression`，位于 `.local/dev-mcp/stability-*/summary.json` 和 `runs/`，统计保留样本数／中位数／P95。旧 `test:render-comparison`、`--engines` 和 `--render-order` 已删除；历史命令只在恢复备份后重现，不由当前入口兼容执行。
+
+回归测试显示独立窗口并启用原生窗口 MCP，需可交互的 Windows 桌面；测试期间不要切换焦点或操作测试窗口。每次连续手势前确认本实例焦点，真实失焦导致手势取消时记录失败，不以合成事件替代。大规模报告超过单包预算时按轮收集，例如 `npm run artifacts:dev-mcp -- --source .local/dev-mcp/stability-<本次目录> --round 0 --output .local/dev-mcp/render-evidence-<本次标识>-0`；三轮分别使用 `0`／`1`／`2` 及不同输出目录，每卷仍限 64 MiB／768 文件。收集器保留历史报告的只读白名单兼容。
+
+注意两个 release 构建共用 `target/release/layerlens.exe`：执行普通开发入口关闭检查前须重新构建普通版本，或显式指定已核验的独立普通 `--release-app` 路径。测试报告记录实际构建模式与二进制指纹；不能把实验 release 传给正式入口关闭测试。
+
+文字度量仍按实验解释：共享模式提供分段／逐字换行基线；原生模式中 Konva 单样式段落走 Text，混合样式保留共享分段并单独计数。源文字框来自 EngineData，缺字体或样式映射明确记为未绘制层。命中共用路径／像素规则，文字为源边界候选。初始化、API 提交、公共读回屏障、输入处理与 OS 内存分开解释，均不等于物理屏幕呈现；显式对象归零不能证明进程内存归零。
+
+独立参考、资源与工作区交互回归复用上述 release 与驱动准备入口；参考工具只安装在 `.local`，不进入应用依赖：
+
+```powershell
+node scripts/fetch-render-acceptance.mjs
+python -m pip install --target .local/render-reference-tools --no-deps psd-tools==1.10.9 attrs==25.3.0 Pillow==11.3.0
+python scripts/prepare-render-acceptance.py
+# FontTools 4.60.1 复用 .local/render-fonttools，校验实际 PostScript 名称
+python scripts/prepare-render-local-font.py --font <ArialMT字体文件>
+npm run desktop:render-lab:release
+npm run test:konva -- --app target/release/layerlens.exe --workload visual --cases public-2layers,public-semi-transparent-layers,public-text,public-mask --mode native
+npm run test:konva -- --app target/release/layerlens.exe --workload memory --cases bitmap-2000 --repeat 3 --keep-going
+npm run test:konva -- --app target/release/layerlens.exe --workload workspace --cases mixed-long-page --mode native --repeat 3 --keep-going
+python scripts/test-render-reference.py
+```
+
+资源与交互套件三轮产生三个独立 Konva 实例。`--keep-going` 完成预定试验并保留失败，不自动重试，存在失败时整个批次仍失败。GUI 套件需要电脑空闲与真实焦点。位图像素对照统一采用 nearest 采样，文字仍原生重绘；当前只验证固定样本与本机 DPR。字体指纹、门槛与历史报告见 [RENDER-01](devlog/_fin/261016/RENDER-01-渲染器对比实验.md)。
+
+真实大稿的本机补测入口如下（需先具备上述独立参考依赖与匹配驱动）。私有源、字体与派生图保持在 `.local/`；字体下载使用固定官方提交并校验，不安装到系统。GUI 批次运行前须安排电脑空闲时段。
+
+```powershell
+cargo run --locked -p layerlens-core --features render-lab --example inspect_render_source -- --large .local/psd-samples/tab-1.psd > .local/render-tab1-inventory.json
+python scripts/prepare-render-tab1.py --source .local/psd-samples/tab-1.psd --download-fonts
+npm run desktop:render-lab:release
+npm run test:konva -- --app target/release/layerlens.exe --project-source .local/psd-samples/tab-1.psd --workload project --mode native --repeat 3 --keep-going
+python scripts/check-konva-project.py --suite .local/dev-mcp/stability-本次目录
+npm run test:konva -- --app target/release/layerlens.exe --project-source .local/psd-samples/tab-1.psd --workload project-memory --mode native --repeat 3 --keep-going
+python scripts/test-dev-capture.py
+```
+
+`project` 分别记录严格场景和源图层诊断，`project-memory` 每实例固定 20 轮及 60 秒自然空闲观察。大截图通过 `dev_ui_capture` 的同一捕获分块传输并验证 RGBA 指纹，不提高单张 MCP 图像的 512 KiB 限制。`completedWithLimitations` 仅表示诊断套件完成，`fullSceneAccepted=false` 时不能宣称完整 PSD 保真；额度及证据要求见[大稿边界](docs/09-渲染器对比实验.md#真实大稿补测边界)。当前内存脚本尚未逐轮断言 DPR／视口／焦点；RENDER-02 已发现显示环境变化，补齐这项观测与回归前不能将该入口作为产品资源稳定性验收。清理不重跑已结束的选型矩阵，也不改变原门槛与失败结论。
+
+`check-konva-project.py` 分别报告 `capturesComplete` 与 `functionalPassed`；截图齐全不会覆盖功能／性能失败，`fullSceneAccepted` 始终保持诊断限制。对已有报告复核可加 `--output <尚不存在的JSON路径>`，只读取原报告和截图并另存结果，保留原始失败证据。
 
 ## 核心文档服务
 
@@ -185,7 +255,7 @@ cargo run --release --locked -p layerlens-core --example document_preview -- --l
 
 ## PSD 解析实验
 
-首版支持子集采用 `ag-psd 0.3.0 + LayerLens patch 3`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，支持范围、已知限制与后续条件见[解析器决策](docs/07-PSD首版支持与解析器决策.md)。
+首版支持子集采用 `ag-psd 0.3.0 + LayerLens patch 4`，通过 Cargo 本地补丁固定在 `vendor/ag-psd/`；来源、许可证和修改范围见[补丁记录](vendor/ag-psd/LAYERLENS-PATCHES.md)。第三方类型隔离在核心适配器内，支持范围、已知限制与后续条件见[解析器决策](docs/07-PSD首版支持与解析器决策.md)。
 
 实验接纳预检覆盖的 PSD v1、RGB／8 位、3／4 个合成通道及 RAW／RLE 像素。未知资源和附加块在已校验的边界内跳读，并记录诊断；明确未实现的渐变等能力可局部降级，结构损坏、越界和预算错误仍使读取失败。图层区分组、文字、位图、形状、智能对象、调整层和未知类型。
 

@@ -4,7 +4,7 @@ use crate::workspace::error;
 use layerlens_core::workspace_contract::{WorkspaceError, WorkspaceErrorCode};
 use serde_json::{Value, json};
 
-/// 所有位置及按钮状态在派发前验证；移步固定 100 ms，整个请求至多 32 步。
+/// 所有位置及按钮状态在派发前验证；普通移步 100 ms，显式定时移步 1–100 ms，至多 32 步。
 pub(super) fn actions(
     before: &UiObservation,
     steps: &[GestureStep],
@@ -28,6 +28,13 @@ pub(super) fn actions(
             GestureStep::Move { x, y } => {
                 validate_canvas_input(before, &[(x, y)])?;
                 json!({"type":"pointerMove","origin":"viewport","x":x,"y":y,"duration":if index == 0 { 0 } else { 100 }})
+            }
+            GestureStep::MoveTimed { x, y, duration_ms } => {
+                if !(1..=100).contains(&duration_ms) {
+                    return Err(invalid());
+                }
+                validate_canvas_input(before, &[(x, y)])?;
+                json!({"type":"pointerMove","origin":"viewport","x":x,"y":y,"duration":duration_ms})
             }
             GestureStep::Down { button } | GestureStep::Up { button } => {
                 let number = match button {

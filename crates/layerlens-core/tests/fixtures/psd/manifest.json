@@ -3346,6 +3346,57 @@
       "note": "长文字、300 段样式、单段合法但合计超 256 KiB 的样式；合成图为纯白，不是文字渲染参考。",
       "sizeBytes": 159046,
       "sha256": "87896e9fb91763210b650966d30ac30dcda265122d792260eab13a3d56bf0e58"
+    },
+    {
+      "file": "render-simple.psd",
+      "compression": "raw",
+      "document": {
+        "width": 480,
+        "height": 320,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "renderLab": {
+        "layerCount": 11,
+        "font": "NotoSans-Regular",
+        "fontSizeUnit": "unverifiedEngine: fixture uses pixel-valued metrics at 72 DPI",
+        "recordNames": [
+          "background",
+          "blue-card",
+          "overlap-card",
+          "alpha-window",
+          "curve",
+          "title",
+          "mixed",
+          "multiline",
+          "</Layer group>",
+          "hidden-child",
+          "hidden-group",
+          "hidden-leaf"
+        ],
+        "opaqueHit": [
+          55,
+          200
+        ],
+        "transparentHit": [
+          85,
+          220
+        ],
+        "overlapHit": [
+          140,
+          230
+        ],
+        "referenceIncludes": [
+          "background",
+          "blue-card",
+          "overlap-card",
+          "alpha-window"
+        ]
+      },
+      "note": "工程生成样本，无 Photoshop 独立参考；合成图只包含矩形与 alpha 位图，不包含文字和曲线。中文字体、旋转、复杂蒙版和真实 DPI 待补独立样本。",
+      "sizeBytes": 487672,
+      "sha256": "6eb2b7cc6ffb01a5377f280685e9b34c4925ac37b4118e73907854ce2ef999a0"
     }
   ]
 }

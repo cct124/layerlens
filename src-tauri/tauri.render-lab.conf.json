@@ -1,0 +1,11 @@
+{
+  "build": {
+    "beforeBuildCommand": "npm run build:render-lab",
+    "frontendDist": "../dist-render-lab"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' blob:; font-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    }
+  }
+}

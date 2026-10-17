@@ -46,6 +46,8 @@ flowchart TB
 
 ## 能力覆盖清单
 
+Konva 验证的专属实例、语义输入、真实绘制观测及证据要求见[渲染器设计](09-渲染器对比实验.md#mcp-与证据)。工具扩展应先于对应功能回归；历史证据见 RENDER-01／02，选型后的能力保留、清理与真实回归结果见 [RENDER-03](../devlog/_fin/261017/RENDER-03-选型实验清理与Konva验证收敛.md)。
+
 以下为能力分组，不是已经发布的工具名称；实现时由单一类型来源生成 Schema，并维护功能、入口、场景和验证层级的对应关系。
 
 | 分组       | 操作与观测                                             | 对应验收                               |
@@ -87,7 +89,7 @@ Schema 从 Rust DTO 与 `schemars` 生成，核心只增加可选 `schema` 派�
 
 ## 当前实现：DEV-01 第二批
 
-测试配置增加可选 `webDriverUrl`，仅接受带明确非零端口的 `http://127.0.0.1:<port>/` 根地址，不接受认证信息、查询或片段。配置该项才注册以下 5 个驱动工具；加上第一批及清理测试扩展共 15 个。所有显式开发实例均注入身份、授予 `main` 窗口 `dev_view_report` 权限并安装只读观测桥，使无驱动的业务测试也能等待前端图像就绪；未配置驱动时保留 10 个工具。普通构建不注册开发命令或权限，启用 feature 但未以测试配置启动也不安装观测桥或启用测试控制。
+测试配置增加可选 `webDriverUrl`，仅接受带明确非零端口的 `http://127.0.0.1:<port>/` 根地址，不接受认证信息、查询或片段。配置该项才注册以下 6 个驱动工具；加上业务、清理测试和进程采样，共 17 个。所有显式开发实例均注入身份、授予 `main` 窗口 `dev_view_report` 权限并安装只读观测桥，使无驱动的业务测试也能等待前端图像就绪；未配置驱动时保留 11 个工具。普通构建不注册开发命令或权限，启用 feature 但未以测试配置启动也不安装观测桥或启用测试控制。
 
 | 工具                | 已接入能力                                                               | 契约与边界                                                                        |
 | ------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
@@ -96,6 +98,9 @@ Schema 从 Rust DTO 与 `schemars` 生成，核心只增加可选 `schema` 派�
 | `dev_ui_action`     | 语义点击、任务名称键入、左键／中键组合手势、画布滚轮、控制键、释放输入   | 需请求 ID 与 `frontendId`；可用 `expectedViewRevision` 拒绝旧布局输入；回执可重放 |
 | `dev_ui_wait`       | 等待状态应用、图像准备、面板／菜单、草稿、任务／内容、清理阶段或视图版本 | 1–30000 ms，事件唤醒；超时返回条件及最后状态，指定旧代次时终止等待                |
 | `dev_ui_screenshot` | W3C WebDriver WebView PNG 截图                                           | 需 `frontendId`；返回标准 MCP 图像块、尺寸、来源及捕获前后观测                    |
+| `dev_ui_capture`    | 固定一次真实截图，按 256×256 物理像素分块读取及释放                      | 需 `frontendId`；同一快照 ID、完整 RGBA 指纹，单块仍受 512 KiB 限制               |
+
+2026-10-17 将分块截图和 `dev_process_metrics` 从渲染实验提升为通用开发测试能力，仍只在隔离开发实例提供。采样仅接受空 `request`，不接受外部 PID，读取本实例与经创建时间／父子关系核验的 WebView 后代；无 Windows 支持时明确失败。分块截图无需 `largeRender`：输入 PNG 最多 8 MiB，RGBA 最多 64 MiB，每驱动只持有一份快照，60 秒失效，替换／释放／退出回收。驱动截图响应最多 12 MiB，其他驱动响应仍为 2 MiB；`dev_ui_screenshot` 及 MCP 图像块的原限额不变。业务回归采样真实进程，普通 WebView 基线回归验证分块读取、指纹拼接和释放。
 
 输入仍使用第一批的实例／会话封装。`inputCompleted` 只表示驱动输入请求完成，随后必须等待对应业务或前端条件。语义目标涵盖菜单命令、工具、面板、文档标签、图层检查／勾选、任务、清理按钮和画布；白名单由 [targets.rs](../src-tauri/src/dev_mcp/ui/targets.rs)维护。不存在的当前界面元素返回驱动错误；工具不接受任意 CSS、XPath、JavaScript 或 IPC。打开文件走受控业务入口，系统文件选择器仍按原生专项验证。
 
@@ -129,19 +134,47 @@ Windows PowerShell 5.1 子进程统一移除继承的 `PSModulePath`，由该版
 
 `artifacts:dev-mcp` 创建独立产物目录，默认扫描本机已知回归目录，`--source` 可限定一套运行；`--output` 指定的目标必须尚不存在。收集器只复制准备报告、汇总、各场景 JSON、指定日志和关键 PNG，拒绝目录联接／符号链接和超量文件；限单文件 8 MiB、768 文件／64 MiB，生成逐文件 SHA-256 清单。文件数上限覆盖新增窗口套件后的五套 CI 场景，字节预算与核心预算不变。凭据字段、Bearer 值与已知实例令牌被遮盖；不收集 `connection.json`、`config.json`、WebView profile、PSD、ZIP 或驱动程序。超限／空产物返回非零并保留诊断清单，不静默丢弃为成功。
 
+渲染回归报告另支持 `--round 0` 按零起始轮次分卷，限定读取 `konva-regression` 汇总所列的运行目录；保留历史 `render-comparison` 报告的只读收集兼容。保留完整汇总与本卷原始报告，允许轮次 0–5，与最多六轮的配置上限一致。每卷继续执行原文件数、单文件和总字节限额。独立参考诊断 `visual-reference.json` 和通用分块截图 `generic-capture.png` 纳入白名单，缺失指定运行或非法路径明确失败。
+
 CI 的收集与上传步骤使用 `always()`，测试准备或运行失败后仍尝试保留产物；只上传收集器输出的 `ci-artifacts/`，按[上传工具约定](https://github.com/actions/upload-artifact/blob/v4.6.2/README.md)显式允许 `.local` 内的白名单产物，缺失产物报错，保留 14 天，名称带运行尝试编号。套件摘要进入 Job Summary。CI 作业期限 45 分钟、稳定性步骤 15 分钟；runner 被强制回收等情况可能只能保留最后一次已落盘检查点，不把不完整报告算作通过。
 
 ## 协议、状态与等待
+
+### Konva 验证扩展
+
+真实大稿补测新增受限 `largeRender` 配置、同修订二进制资源与实际覆盖投影；语义目标增加 `render:strict`／`render:source-layers`／`render:fit`／`render:focus`。额度、完整性与诊断结果的区别见[真实大稿补测边界](09-渲染器对比实验.md#真实大稿补测边界)，验证结果及逐轮 DPR／视口／焦点观测缺口以 [RENDER-02 归档](../devlog/_fin/261016/RENDER-02-tab-1真实大稿对比.md)为准。新能力不授予普通窗口实验资源访问权限。
+
+显式 `renderLab: true` 配置要求 `render-lab` 构建特性；沿用隔离目录、实例身份和固定 `main` 权限，加载独立 Konva 页面。普通实例不能调用 `read_render_scene` 或提交渲染验证观测。验证复用业务、UI、采样及截图工具，带驱动共 17 个；benchmark 显式启用 `nativeWindows` 后共 20 个。手势前通过窗口 MCP 确认焦点，手势后核对真实失焦计数未改变。
+
+- `dev_ui_action` 白名单保留 `render:rebuild`、`render:auto`／`render:next`、`render:100`／`render:200`／`render:400`、`render:reset`／`render:release`。原三引擎选择及 `render:capture` 已移除，截图统一经开发 MCP。画布点击、中键、滚轮和 Control 复用真实输入契约。
+- `dev_ui_state.renderLab` 为可空的真实投影，包含引擎、阶段、绘制代次、源／字体指纹、字体就绪、图元／显式引擎对象数、核心检查选层、候选、Ctrl／自动选择、初始化／绘制耗时及限制。普通页面为 null，禁止将绘制提交耗时或对象计数解释为物理首帧／RSS。
+- `dev_ui_wait` 的 `renderer { engine, phase, generationAtLeast }` 仅接受 `engine: konva`，旧引擎观测和等待明确拒绝；`renderInteraction { selectedLayerId, autoSelect, ctrl }` 约束核心确认后的选择与按键状态。沿用超时末态、旧页面拒绝和有界观测。
+- `render-lab` WebView 场景从 Rust 打开生成样本；Konva 覆盖 100%／200%／400%、alpha 与重叠命中、Ctrl、平移、释放及关闭重开。快照复制为普通数据，避免 Vue 响应式代理破坏只读观测桥。截图列入产物白名单。
+
+第二轮扩展：
+
+- `dev_instance.buildProfile` 由 Rust 的 `debug_assertions` 给出 `debug`／`release`，报告不能从文件名推断构建模式。
+- `dev_process_metrics` 接受身份封装内的空 `request`，不接受 PID、路径或脚本；通过固定 `sysinfo 0.35.1` 的安全 API 读取本实例与 WebView 后代，返回 PID／父 PID／秒级创建时间、工作集及私有提交量。只启用 Windows 的可选 `system` 功能，MIT 许可证；正式构建无此直接依赖，保留全仓库 `unsafe_code = "forbid"`。跨进程工作集包含重复共享页；私有提交量不是私有 RSS，离散快照不是峰值或 GPU 显存。
+- `canvasGesture.steps` 增加 `moveTimed { x, y, durationMs }`，单步时长 1–100 ms；首步仍须为普通 `move`，全部坐标／步骤在派发前校验，最多 32 步。普通 `move` 的 100 ms 行为不变。W3C 时长是请求值，实际调度必须用前端观测核对。
+- 语义目标保留 `render:shared`／`render:native`、`render:clear-metrics`。PNG 只在 MCP 显式采集时编码，不进入连续平移。
+- `renderLab` 保留读取、字体／图片准备、首次就绪、排版模式、原生／共享文字层数、未绘制层数、命中／核心选层耗时与最近 60 项绘制样本；移除仅 CanvasKit 填充的 `textLines`。沿用 32 KiB 观测限额。同步绘制采用公共 Canvas 读回屏障；平移样本明确标记 `synchronized=false`，不将其 API 提交耗时冒充 GPU／屏幕完成。
+- 场景读取明确传入 `simple` 或 `bounded` 档位；后者由原 `comparison` 更名，仅在验证入口允许 2048 层、16 Mi 文档像素、32 Mi 累计声明像素及 16 MiB JSON，单层文字／路径限额不变。该开发契约同步 Rust、生成 DTO 与前端，不兼容旧实验二进制；普通解析与文档服务预算不变。
+
+运行入口与当前覆盖见 [README](../README.md#konva-渲染验证)；独立视觉参考和样本限制见[实验设计](09-渲染器对比实验.md)。
+
+第三轮补充 `render:large`／`render:compact` 两个真实按钮，分别重建为 960×600／640×420 视口，绘制操作新增 `resize`。实验页没有正式标题栏按钮，不能套用依赖最大化按钮标签的 `windowLayout` 条件：先等原生尺寸，再等新绘制代次并核对前端尺寸。焦点已有原生与前端双层确认时不重复设置；需要切换时等待新的前端 focus 事件，禁止把旧的 `focused=true` 当作操作完成。
+
+`test:konva` 提供 `benchmark`／`visual`／`memory`／`workspace`／`project`／`project-memory` 工作负载。资源测试在独立进程固定打开／关闭 20 轮，以 `dev_process_metrics` 采样并保存白名单 `report-progress.json`。`--keep-going` 只继续其他预定独立试验，不重试当前失败；全部结果进入汇总，存在失败时最终状态和退出码仍失败。原阈值和历史结果保持不变。
 
 ### 窗口与真实失焦扩展
 
 `nativeWindows` 默认为 `false`；只有显式 `true`、`visible: true` 且配置有效 `webDriverUrl` 的隔离实例启用。启动时持有 `main` 和一个固定标签、无 WebView 的焦点辅助窗口；不接收窗口句柄、任意标签、外部进程或屏幕输入。锁定的 Tauri 2.11.5 将无 WebView `WindowBuilder` 放在 `unstable` feature 下，因此仅 `dev-mcp` 构建启用该 feature，没有新增依赖或生产 IPC 权限。辅助窗口不授予业务能力，主窗口销毁后通过正常 close 关闭辅助窗口，随后沿用既有服务／核心退出流程。
 
-| 工具                | 契约                                                                                                                                                                                                                                                               |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `dev_window_state`  | 读取原生焦点、辅助窗口焦点、可见／最小化／最大化、物理位置和客户区尺寸、逻辑尺寸及当前 scaleFactor；附事件序号与 main 的 focus／blur／resize／move 计数                                                                                                            |
-| `dev_window_action` | 带请求 ID，接受 `focusMain`、`focusAuxiliary`、`minimize`、`maximize`、`restore`、`resize { size: minimum 或 default }`、`close`。尺寸预设为 900×600／1280×800 逻辑像素；restore 同时解除最小化与最大化。返回操作前状态和 dispatched，不宣称事件已到达或应用已退出 |
-| `dev_window_wait`   | `condition` 为 `focus { main, auxiliary }`、`state { minimized, maximized }` 或 `size { size }`；可带 `afterSequence` 要求新原生事件，`timeoutMs` 为 1–30000。事件唤醒并每至多 50 ms 补查未必触发 resize 的最小化状态，超时保留实际末态，退出立即终止等待          |
+| 工具                | 契约                                                                                                                                                                                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev_window_state`  | 读取原生焦点、辅助窗口焦点、可见／最小化／最大化、物理位置和客户区尺寸、逻辑尺寸及当前 scaleFactor；附事件序号与 main 的 focus／blur／resize／move 计数                                                                                                                                 |
+| `dev_window_action` | 带请求 ID，接受 `focusMain`、`focusAuxiliary`、`minimize`、`maximize`、`restore`、`resize { size: minimum、default 或 renderLab }`、`close`。尺寸预设为 900×600／1280×800／1280×900 逻辑像素；restore 同时解除最小化与最大化。返回操作前状态和 dispatched，不宣称事件已到达或应用已退出 |
+| `dev_window_wait`   | `condition` 为 `focus { main, auxiliary }`、`state { minimized, maximized }` 或 `size { size }`；可带 `afterSequence` 要求新原生事件，`timeoutMs` 为 1–30000。事件唤醒并每至多 50 ms 补查未必触发 resize 的最小化状态，超时保留实际末态，退出立即终止等待                               |
 
 窗口变更与 WebDriver 输入／截图共用一个执行锁，等待复用既有四个等待名额。外层实例／会话校验、变更回执、未知字段拒绝和有界响应沿用原协议；未启用时不注册这三个工具。`dev_ui_action` 新增 `titlebarDoubleClick`（仅窗口测试实例，通过 W3C 双击真实空白标题栏）及 `movePointer { x, y }`（仅已解码画布内，无按键）。窗口按钮使用固定语义目标 `window:minimize`／`window:maximize`／`window:close`。
 

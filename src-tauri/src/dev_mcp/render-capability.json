@@ -1,0 +1,6 @@
+{
+  "identifier": "render-lab",
+  "description": "仅显式渲染实验实例读取同一核心修订的有界场景。",
+  "windows": ["main"],
+  "permissions": ["allow-read-render-scene", "allow-read-render-resource"]
+}

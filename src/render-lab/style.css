@@ -1,0 +1,133 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #e2e7ef;
+  background: #171c24;
+  font-size: 13px;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button {
+  font: inherit;
+  color: inherit;
+  border: 1px solid #475165;
+  background: #252e3b;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+button[aria-pressed='true'],
+button.selected {
+  background: #294b70;
+  border-color: #81b9ef;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+small {
+  opacity: 0.65;
+  margin-left: 5px;
+}
+.render-lab {
+  padding: 20px;
+  min-width: 880px;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header strong {
+  font-size: 20px;
+}
+p {
+  color: #aebaca;
+  font-size: 12px;
+  line-height: 1.6;
+}
+nav,
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.phase {
+  margin-left: auto;
+}
+.workspace {
+  display: flex;
+  gap: 20px;
+}
+.viewport {
+  position: relative;
+  overflow: hidden;
+  background: #323b49;
+  touch-action: none;
+  outline: none;
+}
+.viewport:focus {
+  box-shadow: 0 0 0 1px #75a7dc;
+}
+.engine-host {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.outline {
+  position: absolute;
+  border: 1px solid #ffb549;
+  pointer-events: none;
+}
+.empty {
+  padding: 30px;
+  color: #b5c7dd;
+}
+.hover-outline {
+  border: 1px dashed #62c5ff;
+}
+.metrics {
+  max-width: 640px;
+}
+.workspace aside {
+  width: 260px;
+  max-height: 470px;
+  overflow: auto;
+  flex: 1;
+  min-width: 180px;
+}
+.workspace aside > img {
+  width: 100%;
+  max-width: 260px;
+  background: white;
+}
+.workspace aside > button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 4px 0;
+}
+.hidden {
+  opacity: 0.5;
+}
+h2 {
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+.error {
+  color: #ffcabd;
+  background: #512e2d;
+  padding: 10px;
+  margin: 10px 0;
+}
+details {
+  margin-top: 10px;
+}
+details p {
+  overflow-wrap: anywhere;
+}

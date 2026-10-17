@@ -3,6 +3,23 @@ use crate::workspace::error;
 use layerlens_core::workspace_contract::{WorkspaceError, WorkspaceErrorCode};
 pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
     let fixed = [
+        "render:rebuild",
+        "render:auto",
+        "render:next",
+        "render:100",
+        "render:200",
+        "render:400",
+        "render:reset",
+        "render:release",
+        "render:shared",
+        "render:native",
+        "render:clear-metrics",
+        "render:large",
+        "render:compact",
+        "render:strict",
+        "render:source-layers",
+        "render:fit",
+        "render:focus",
         "window:minimize",
         "window:maximize",
         "window:close",

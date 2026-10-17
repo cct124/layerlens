@@ -21,6 +21,10 @@ pub(super) struct Config {
     pub web_driver_url: Option<String>,
     #[serde(default)]
     pub native_windows: bool,
+    #[serde(default)]
+    pub render_lab: bool,
+    #[serde(default)]
+    pub large_render: bool,
 }
 
 pub(crate) struct Instance {
@@ -33,6 +37,8 @@ pub(crate) struct Instance {
     pub(super) web_driver_url: Option<reqwest::Url>,
     pub(crate) observations: std::sync::Arc<super::ui::Observations>,
     pub(crate) native_windows: bool,
+    pub(crate) render_lab: bool,
+    pub(crate) large_render: bool,
     pub(crate) windows: std::sync::OnceLock<std::sync::Arc<super::windows::Windows>>,
 }
 
@@ -62,6 +68,12 @@ impl Config {
     }
 
     pub(super) fn prepare(self) -> io::Result<Instance> {
+        if self.render_lab && !cfg!(feature = "render-lab") {
+            return Err(invalid("当前构建未启用 render-lab 特性"));
+        }
+        if self.large_render && !self.render_lab {
+            return Err(invalid("largeRender 仅允许在显式 renderLab 实例启用"));
+        }
         if self.native_windows && (!self.visible || self.web_driver_url.is_none()) {
             return Err(invalid("nativeWindows 需显式可见窗口及 WebDriver 配置"));
         }
@@ -111,12 +123,27 @@ impl Config {
             web_driver_url,
             observations: std::sync::Arc::new(super::ui::Observations::default()),
             native_windows: self.native_windows,
+            render_lab: self.render_lab,
+            large_render: self.large_render,
             windows: std::sync::OnceLock::new(),
         })
     }
 }
 
 impl Instance {
+    /// 大稿额度只在已验证的隔离实验实例启用；正常桌面继续使用默认配置。
+    pub(crate) fn document_config(&self) -> layerlens_core::documents::DocumentServiceConfig {
+        let mut config = layerlens_core::documents::DocumentServiceConfig::default();
+        if self.large_render {
+            config.parse_limits.max_file_bytes = 512 * 1024 * 1024;
+            config.parse_limits.max_total_pixels = 128 * 1024 * 1024;
+            config.max_live_revisions = 2;
+            config.max_source_bytes = 1024 * 1024 * 1024;
+            config.max_declared_pixels = 256 * 1024 * 1024;
+        }
+        config
+    }
+
     pub(crate) fn instance_id(&self) -> &str {
         &self.id
     }

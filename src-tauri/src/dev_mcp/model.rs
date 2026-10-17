@@ -47,6 +47,7 @@ pub(super) struct InstanceInfo {
     pub instance_id: String,
     pub session_id: String,
     pub app_version: String,
+    pub build_profile: String,
     pub protocol_version: u32,
     pub tools: Vec<String>,
     pub active_waits: usize,

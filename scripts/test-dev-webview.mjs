@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, mkdtemp, readdir, readFile, writeFile, watch } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, writeFile, watch, open } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,11 @@ import { exerciseOpenCleanup, exerciseRegionControls } from './dev-mcp-m2-webvie
 import { exerciseCanvasInput } from './dev-mcp-input-webview.mjs';
 import { exerciseCleanupBoundaries } from './dev-mcp-cleanup-webview.mjs';
 import { exerciseWindows } from './dev-mcp-window-webview.mjs';
+import { exerciseRenderLab } from './dev-mcp-render-webview.mjs';
+import { exerciseRenderBenchmark } from './dev-mcp-render-benchmark.mjs';
+import { exerciseRenderAcceptance } from './dev-mcp-render-acceptance.mjs';
+import { exerciseRenderProject } from './dev-mcp-render-project.mjs';
+import { captureTiled } from './dev-mcp-capture.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -23,12 +28,19 @@ const { values: options } = parseArgs({
     visible: { type: 'boolean', default: false },
     'output-root': { type: 'string' },
     scenario: { type: 'string', default: 'baseline' },
+    'sample-root': { type: 'string' },
+    sample: { type: 'string' },
+    'render-mode': { type: 'string', default: 'shared' },
+    'render-workload': { type: 'string', default: 'benchmark' },
+    'render-large': { type: 'boolean', default: false },
   },
 });
 assert.equal(process.platform, 'win32', '当前真实 WebView 回归仅验证 Windows。');
 assert(
   [
     'baseline',
+    'render-lab',
+    'render-benchmark',
     'geometry-25',
     'geometry-100',
     'geometry-200',
@@ -58,8 +70,37 @@ await mkdir(base, { recursive: true });
 const run = await mkdtemp(path.join(base, 'webview-'));
 const runs = path.join(run, 'instances');
 await mkdir(runs);
-const sampleRoot = path.join(root, 'crates/layerlens-core/tests/fixtures/psd');
-const samples = ['viewer-scale.psd', 'bitmap-rle.psd'];
+const isBenchmark = options.scenario === 'render-benchmark';
+const isRender = options.scenario.startsWith('render-');
+assert(!options['sample-root'] || isBenchmark);
+assert(!options.sample || isBenchmark);
+assert(
+  ['benchmark', 'visual', 'memory', 'workspace', 'project', 'project-memory'].includes(
+    options['render-workload'],
+  ),
+);
+assert(
+  !options['render-large'] || (isBenchmark && options['render-workload'].startsWith('project')),
+);
+assert(['shared', 'native'].includes(options['render-mode']));
+const sampleRoot = path.resolve(
+  root,
+  options['sample-root'] ?? 'crates/layerlens-core/tests/fixtures/psd',
+);
+const samples = isBenchmark
+  ? [options.sample ?? 'render-simple.psd']
+  : [
+      options.scenario === 'render-lab' ? 'render-simple.psd' : 'viewer-scale.psd',
+      'bitmap-rle.psd',
+    ];
+assert(samples.every((name) => path.basename(name) === name && name.endsWith('.psd')));
+const sourceFile = await open(path.join(sampleRoot, samples[0]), 'r');
+const sourceHeader = Buffer.alloc(26);
+try {
+  assert.equal((await sourceFile.read(sourceHeader, 0, 26, 0)).bytesRead, 26);
+} finally {
+  await sourceFile.close();
+}
 async function hash(file) {
   const h = createHash('sha256');
   for await (const c of createReadStream(file)) h.update(c);
@@ -290,7 +331,14 @@ const selection = (operation, mutation = true) =>
   );
 async function wait(condition) {
   const r = (
-    await tool('dev_ui_wait', args({ frontendId: frontend ?? null, condition, timeoutMs: 10000 }))
+    await tool(
+      'dev_ui_wait',
+      args({
+        frontendId: frontend ?? null,
+        condition,
+        timeoutMs: options['render-large'] ? 30000 : 10000,
+      }),
+    )
   ).value;
   assert.equal(r.satisfied, true, JSON.stringify(r));
   return r.lastState;
@@ -324,7 +372,25 @@ function point(view, x, y) {
   const r = view.canvas.image;
   return { x: Math.round(r.x + x * view.canvas.zoom), y: Math.round(r.y + y * view.canvas.zoom) };
 }
-async function screenshot(name) {
+async function screenshot(name, tiled = options['render-large']) {
+  if (tiled) {
+    const { data, capture } = await captureTiled({ rpc, args, frontend, run, root, name });
+    report.images.push({
+      name,
+      before: data.before.viewRevision,
+      after: data.after.viewRevision,
+      unchanged: data.unchanged,
+      canvas: data.before.canvas,
+      dpr: data.before.window.devicePixelRatio,
+      engine: data.before.renderLab?.engine,
+      generation: data.before.renderLab?.generation,
+      sourceSha256: data.before.renderLab?.sourceSha256,
+      profile: data.before.renderLab?.profile,
+      rgbaSha256: capture.rgbaSha256,
+      tiles: capture.tileCount,
+    });
+    return;
+  }
   const result = await rpc('tools/call', {
     name: 'dev_ui_screenshot',
     arguments: args({ frontendId: frontend }),
@@ -333,6 +399,7 @@ async function screenshot(name) {
   const data = result.structuredContent.data.value;
   assert.equal(data.source, 'webdriverWebview');
   assert.equal(data.before.frontendId, frontend);
+  if (isRender) assert.equal(data.unchanged, true, '截图期间实验观测已变化');
   const png = Buffer.from(result.content.find((c) => c.type === 'image').data, 'base64');
   assert.equal(png.readUInt32BE(16), data.width);
   assert.equal(png.readUInt32BE(20), data.height);
@@ -343,6 +410,16 @@ async function screenshot(name) {
     before: data.before.viewRevision,
     after: data.after.viewRevision,
     unchanged: data.unchanged,
+    ...(isRender
+      ? {
+          canvas: data.before.canvas,
+          dpr: data.before.window.devicePixelRatio,
+          engine: data.before.renderLab?.engine,
+          generation: data.before.renderLab?.generation,
+          sourceSha256: data.before.renderLab?.sourceSha256,
+          profile: data.before.renderLab?.profile,
+        }
+      : {}),
   });
 }
 try {
@@ -353,9 +430,11 @@ try {
     JSON.stringify({
       sampleRoot,
       runRoot: runs,
-      visible: options.visible || options.scenario.startsWith('window-'),
+      visible: options.visible || isBenchmark || options.scenario.startsWith('window-'),
       webDriverUrl: endpoint,
-      nativeWindows: options.scenario.startsWith('window-'),
+      nativeWindows: isBenchmark || options.scenario.startsWith('window-'),
+      renderLab: isRender,
+      largeRender: options['render-large'],
     }),
     { flag: 'wx' },
   );
@@ -387,7 +466,8 @@ try {
   info = (await tool('dev_instance', {})).value;
   assert.equal(info.instanceId, connection.instanceId);
   report.instanceId = info.instanceId;
-  const expectedTools = options.scenario.startsWith('window-') ? 18 : 15;
+  report.buildProfile = info.buildProfile;
+  const expectedTools = isBenchmark || options.scenario.startsWith('window-') ? 20 : 17;
   assert.equal((await rpc('tools/list', {})).tools.length, expectedTools);
   let view = await wait({ kind: 'ready' });
   frontend = view.frontendId;
@@ -408,6 +488,11 @@ try {
   });
   report.checks.push(`匹配驱动、WebView 身份、前端握手及 ${expectedTools} 个真实工具`);
   report.phase = 'document-sync';
+  if (isBenchmark) {
+    if (options['render-mode'] === 'native') await click('render:native');
+    report.beforeOpenMemory = (await tool('dev_process_metrics', args({}))).value;
+  }
+  const openStarted = performance.now();
   await workspace({
     kind: 'open',
     path: options.scenario.startsWith('cleanup') ? samples[1] : samples[0],
@@ -416,10 +501,80 @@ try {
   const a = workspaceState.documents[0];
   await wait({ kind: 'applied', atLeast: workspaceState.sequence });
   view = await wait({ kind: 'imageReady', documentId: a.id, revision: a.revision });
+  if (isBenchmark) report.openToObservedMs = performance.now() - openStarted;
   assert.equal(view.sessionId, info.sessionId);
-  assert.equal(view.canvas.documentWidth, options.scenario.startsWith('cleanup') ? 4 : 256);
-  assert.equal(view.canvas.documentHeight, options.scenario.startsWith('cleanup') ? 3 : 128);
-  if (options.scenario === 'baseline') {
+  assert.equal(
+    view.canvas.documentWidth,
+    isBenchmark
+      ? sourceHeader.readUInt32BE(18)
+      : options.scenario === 'render-lab'
+        ? 480
+        : options.scenario.startsWith('cleanup')
+          ? 4
+          : 256,
+  );
+  assert.equal(
+    view.canvas.documentHeight,
+    isBenchmark
+      ? sourceHeader.readUInt32BE(14)
+      : options.scenario === 'render-lab'
+        ? 320
+        : options.scenario.startsWith('cleanup')
+          ? 3
+          : 128,
+  );
+  if (isBenchmark) {
+    await (
+      options['render-workload'].startsWith('project')
+        ? exerciseRenderProject
+        : options['render-workload'] === 'benchmark'
+          ? exerciseRenderBenchmark
+          : exerciseRenderAcceptance
+    )({
+      state,
+      core,
+      wait,
+      waitCore,
+      action,
+      click,
+      key,
+      point,
+      tool,
+      args,
+      workspace,
+      report,
+      screenshot,
+      document: a,
+      sample: samples[0],
+      textMode: options['render-mode'],
+      workload: options['render-workload'],
+      projectSpec: options['render-large']
+        ? JSON.parse(await readFile(path.join(root, '.local/render-tab1/manifest.json'), 'utf8'))
+        : null,
+      checkpoint: async () =>
+        writeFile(
+          path.join(run, 'report-progress.json'),
+          redact(JSON.stringify(report, null, 2), [connection?.token]),
+        ),
+    });
+  } else if (options.scenario === 'render-lab') {
+    await exerciseRenderLab({
+      state,
+      core,
+      wait,
+      waitCore,
+      action,
+      click,
+      key,
+      point,
+      tool,
+      args,
+      workspace,
+      report,
+      screenshot,
+      document: a,
+    });
+  } else if (options.scenario === 'baseline') {
     report.phase = 'menu-and-draft';
     await click('menu:window');
     await wait({ kind: 'menu', menu: 'window' });
@@ -628,6 +783,8 @@ try {
     ).value;
     assert.equal(timeout.timedOut, true);
     assert.equal(timeout.lastState.tasks[0].status, 'invalidated');
+    await screenshot('generic-capture.png', true);
+    report.checks.push('普通开发实例通过 MCP 固定捕获、分块读回、RGBA 指纹核验和显式释放');
     await screenshot('final-state.png');
     assert.deepEqual(
       await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s)))),

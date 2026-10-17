@@ -155,6 +155,14 @@ impl Shared {
             ]);
         }
         host.operations.testing.enable();
+        tools.push(definition::<Request<Empty>, super::process_metrics::ProcessMetrics>(
+            "dev_process_metrics", "只读采集本测试实例及 WebView 子进程的 Windows 内存；不接受外部 PID，离散工作集／私有提交量不等于 GPU 或物理呈现测量。", true,
+        )?);
+        if ui.is_some() {
+            tools.push(definition::<Request<super::ui::capture::CaptureRequest>,super::ui::capture::CaptureResult>(
+                "dev_ui_capture", "有界分块截图：create 固定一次 WebView 捕获，tile 读取同一快照的 256 像素 PNG 分块，release 回收；每实例一个快照，60 秒过期，不改变 512 KiB 图像额度。", true,
+            )?);
+        }
         Ok(Arc::new(Self {
             host,
             instance,
@@ -287,6 +295,16 @@ impl ServerHandler for Handler {
             .map_err(|_| McpError::internal_error("开发请求名额已满；未接受新操作。", None))?;
         let work = async {
             match request.name.as_ref() {
+                "dev_process_metrics" => {
+                    let _: Request<Empty> = shared.parse(arguments)?;
+                    shared
+                        .reply(
+                            super::process_metrics::read().await.and_then(value),
+                            None,
+                            None,
+                        )
+                        .await
+                }
                 "dev_window_state" | "dev_window_action" | "dev_window_wait" => {
                     let windows = shared.instance.windows.get().cloned().ok_or_else(|| {
                         McpError::invalid_params("此实例未启用 nativeWindows。", None)
@@ -384,6 +402,22 @@ impl ServerHandler for Handler {
                     };
                     shared.reply(result, None, None).await
                 }
+                "dev_ui_capture" => {
+                    let ui = shared.ui.clone().ok_or_else(|| {
+                        McpError::invalid_params("此实例未配置 WebDriver。", None)
+                    })?;
+                    let args: Request<super::ui::capture::CaptureRequest> =
+                        shared.parse(arguments)?;
+                    let result = async {
+                        let _guard = ui.acquire()?;
+                        ui.capture(args.request).await
+                    }
+                    .await;
+                    match result {
+                        Ok((data, png)) => shared.reply(value(data), None, png).await,
+                        Err(error) => shared.reply(Err(error), None, None).await,
+                    }
+                }
                 "dev_ui_attach" | "dev_ui_state" | "dev_ui_action" | "dev_ui_wait"
                 | "dev_ui_screenshot" => {
                     let ui = shared.ui.clone().ok_or_else(|| {
@@ -457,6 +491,12 @@ impl ServerHandler for Handler {
                     let _: Empty = serde_json::from_value(arguments)
                         .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
                     let info = InstanceInfo {
+                        build_profile: if cfg!(debug_assertions) {
+                            "debug"
+                        } else {
+                            "release"
+                        }
+                        .into(),
                         instance_id: shared.instance.id.clone(),
                         session_id: shared.session.clone(),
                         app_version: env!("CARGO_PKG_VERSION").into(),

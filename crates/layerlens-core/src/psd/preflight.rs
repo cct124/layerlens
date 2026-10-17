@@ -45,6 +45,8 @@ pub(super) struct LayerRecord {
     pub flags: u8,
     pub has_rgb: bool,
     pub has_mask: bool,
+    #[cfg(feature = "render-lab")]
+    pub mask_flags: Option<u8>,
     pub has_nondefault_blending_ranges: bool,
     pub section_kind: Option<u32>,
 }
@@ -390,7 +392,10 @@ fn layer_record(
     let flags = input.u8()?;
     input.padding(1)?;
     let mut extra = input.section()?;
-    let (mask_bounds, real_mask_bounds) = mask_data(extra.section()?, pixels, limits)?;
+    let mask_section = extra.section()?;
+    #[cfg(feature = "render-lab")]
+    let mask_flags = mask_section.remaining.get(17).copied();
+    let (mask_bounds, real_mask_bounds) = mask_data(mask_section, pixels, limits)?;
     let ranges = extra.section()?;
     // 每个范围包含源、目标各四字节；非默认范围阻止普通素材导出，由适配器报告。
     if ranges.remaining.len() % 8 != 0 || ranges.remaining.len() > 8 * MAX_BLENDING_RANGES {
@@ -431,6 +436,8 @@ fn layer_record(
             flags,
             has_rgb: seen & 0b111000 == 0b111000,
             has_mask: mask_bounds.is_some(),
+            #[cfg(feature = "render-lab")]
+            mask_flags,
             has_nondefault_blending_ranges,
             section_kind: tags.section_kind,
         },

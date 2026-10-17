@@ -4,7 +4,7 @@
 
 - LayerLens 是基于 Rust + Tauri 的开源 PSD 解析与 AI 协作工具，通过交互式选区、样式提取、素材导出和 MCP，辅助 Agent 分块还原 H5 页面。
 - 从 [README.md](README.md) 了解项目；`docs/` 维护设计与验收标准，`devlog/` 记录工程进展，按需建立目录。规划不代表已实现。
-- Rust + Tauri 与 Vue + TypeScript 为已定工程方向；解析库、复杂画布方案及 Agent 专属集成须经验证后确定。
+- Rust + Tauri 与 Vue + TypeScript 为已定工程方向；2026-10-17 已选定 Konva 作为正式工作区 Canvas 渲染框架，接入与能力边界见[渲染决策](docs/09-渲染器对比实验.md#当前选型决定2026-10-17)。解析扩展、复杂绘制能力及 Agent 专属集成仍须验证，选型不等于功能验收通过。
 
 ## 接手与定位
 

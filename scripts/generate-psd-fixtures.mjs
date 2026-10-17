@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { encodeEngineData, textFixtures } from './psd-text-fixtures.mjs';
 import { viewerGrid, viewerTextFixtures } from './psd-viewer-fixtures.mjs';
+import { renderFixture } from './psd-render-fixture.mjs';
 
 // 只编码人工声明的最小／查看器规模样本；不调用待验证的 PSD 解析器或写入器。
 // 字段布局依据 Adobe Photoshop File Formats Specification 的 PSD v1 章节。
@@ -12,7 +13,8 @@ const output = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../crates/layerlens-core/tests/fixtures/psd',
 );
-const args = process.argv.slice(2);
+const standalone = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const args = standalone ? process.argv.slice(2) : [];
 assert(args.length === 0 || (args.length === 1 && args[0] === '--check'), '仅支持 --check');
 const check = args[0] === '--check';
 
@@ -179,7 +181,7 @@ function layerRecord(layer, compression) {
     ),
     ascii('8BIM'),
     ascii('norm'),
-    Buffer.from([255, 0, layer.visible ? 0 : 2, 0]),
+    Buffer.from([layer.opacity ?? 255, 0, layer.visible ? 0 : 2, 0]),
     section(extra),
   ]);
   return { record, channels };
@@ -328,13 +330,13 @@ function groupsAlphaPsd(compression) {
 
 const rawText = ' 中😀e\u0301\r\n尾  \r';
 const textTransform = [1.5, 0.25, -0.5, 2, -3, 7];
-function typeToolData(text = rawText, engineData) {
+function typeToolData(text = rawText, engineData, transform = textTransform) {
   const entries = text === null ? [] : [['Txt ', 'TEXT', unicode(text)]];
   if (engineData !== undefined)
     entries.push(['EngineData', 'tdta', section(encodeEngineData(engineData))]);
   return Buffer.concat([
     signed16(1),
-    ...textTransform.map(float64),
+    ...transform.map(float64),
     signed16(50),
     versionedDescriptor('TxLr', entries),
     signed16(1),
@@ -556,6 +558,24 @@ cases.push({
   note: '长文字、300 段样式、单段合法但合计超 256 KiB 的样式；合成图为纯白，不是文字渲染参考。',
 });
 
+export const renderCodec = {
+  unsigned16,
+  unsigned32,
+  signed16,
+  signed32,
+  float64,
+  additionalInfo,
+  descriptor,
+  versionedDescriptor,
+  typeToolData,
+  header,
+  section,
+  resolutionResource,
+  layerSection,
+  compositeData,
+};
+cases.push(renderFixture(renderCodec));
+
 const manifest = {
   schemaVersion: 1,
   source: 'LayerLens 人工定义并按 Adobe PSD v1 规范编码的合成样本',
@@ -573,13 +593,18 @@ const files = [
   ...cases.map(({ file, bytes }) => [file, bytes]),
   ['manifest.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`)],
 ];
-if (!check) mkdirSync(output, { recursive: true });
-for (const [file, bytes] of files) {
-  const path = resolve(output, file);
-  if (check) {
-    assert(readFileSync(path).equals(bytes), `${file} 与生成规则不一致；请检查 diff 后重新生成。`);
-  } else {
-    writeFileSync(path, bytes);
+if (standalone) {
+  if (!check) mkdirSync(output, { recursive: true });
+  for (const [file, bytes] of files) {
+    const path = resolve(output, file);
+    if (check) {
+      assert(
+        readFileSync(path).equals(bytes),
+        `${file} 与生成规则不一致；请检查 diff 后重新生成。`,
+      );
+    } else {
+      writeFileSync(path, bytes);
+    }
   }
+  console.log(`${check ? '已核对' : '已生成'} ${cases.length} 个 PSD 样本及 manifest.json。`);
 }
-console.log(`${check ? '已核对' : '已生成'} ${cases.length} 个 PSD 样本及 manifest.json。`);
