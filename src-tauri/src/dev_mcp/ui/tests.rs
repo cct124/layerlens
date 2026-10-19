@@ -43,6 +43,9 @@ fn observation(epoch: u64, revision: u64) -> UiObservation {
             last_key: None,
         },
         window: UiWindow {
+            display_revision: "1".into(),
+            visible: true,
+            canvas_viewport: None,
             focused: false,
             focus_events: "0".into(),
             blur_events: "0".into(),
@@ -184,10 +187,72 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
 }
 
 #[tokio::test]
+async fn display_wait_requires_actual_dimensions_dpr_and_new_display_revision() {
+    let state = Observations::default();
+    let mut view = observation(100, 1);
+    state.publish("instance", view.clone()).unwrap();
+    let request = UiWaitRequest {
+        frontend_id: Some(view.frontend_id.clone()),
+        timeout_ms: 1,
+        condition: UiCondition::Display {
+            width: 1280,
+            height: 800,
+            device_pixel_ratio: 1.5,
+            after_revision: Some("1".into()),
+        },
+    };
+    let old = state
+        .wait(request.clone(), &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(old.timed_out);
+    assert_eq!(old.last_state.unwrap().window.display_revision, "1");
+    view.view_revision = "2".into();
+    view.window.display_revision = "2".into();
+    state.publish("instance", view.clone()).unwrap();
+    assert!(
+        !state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    view.view_revision = "3".into();
+    view.window.device_pixel_ratio = 1.5;
+    state.publish("instance", view).unwrap();
+    assert!(
+        state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    let mut invalid = request;
+    if let UiCondition::Display { after_revision, .. } = &mut invalid.condition {
+        *after_revision = Some("01".into());
+    }
+    assert_eq!(
+        state
+            .wait(invalid, &CancellationToken::new())
+            .await
+            .unwrap_err()
+            .code,
+        Code::InvalidInput
+    );
+    let mut invalid = observation(100, 4);
+    invalid.window.display_revision = "0".into();
+    assert_eq!(
+        state.publish("instance", invalid).unwrap_err().code,
+        Code::InvalidInput
+    );
+}
+
+#[tokio::test]
 async fn renderer_wait_rejects_old_generation_and_keeps_failure_evidence() {
     let state = Observations::default();
     let mut view = observation(100, 1);
     view.render_lab = Some(UiRenderLab {
+        surface: None,
         engine: "konva".into(),
         phase: "ready".into(),
         generation: "2".into(),
@@ -277,6 +342,20 @@ async fn renderer_wait_rejects_old_generation_and_keeps_failure_evidence() {
             .satisfied
     );
     view.view_revision = "3".into();
+    for invalid_dpr in [0.0, f64::INFINITY] {
+        let mut invalid = view.clone();
+        invalid.render_lab.as_mut().unwrap().surface = Some(UiRenderSurface {
+            width: 960,
+            height: 630,
+            css_width: 640.0,
+            css_height: 420.0,
+            configured_dpr: invalid_dpr,
+        });
+        assert_eq!(
+            state.publish("instance", invalid).unwrap_err().code,
+            Code::InvalidInput
+        );
+    }
     view.render_lab.as_mut().unwrap().render_ms = f64::INFINITY;
     assert_eq!(
         state.publish("instance", view).unwrap_err().code,

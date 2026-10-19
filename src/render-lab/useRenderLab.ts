@@ -30,6 +30,7 @@ export function useRenderLab() {
     textMode: 'shared',
   });
   const status = reactive<UiRenderLab>({
+    surface: null,
     engine: 'konva',
     phase: 'idle',
     generation: '0',
@@ -481,6 +482,8 @@ export function useRenderLab() {
   useDevObservation(() => {
     const b = viewport.value?.getBoundingClientRect();
     const region = b ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
+    const canvas = renderer?.canvas();
+    const canvasBounds = canvas?.getBoundingClientRect();
     return {
       coreSequence: snapshot.value?.sequence ?? null,
       sessionId: snapshot.value?.selection.sessionId ?? null,
@@ -533,6 +536,16 @@ export function useRenderLab() {
           : null,
       renderLab: {
         ...status,
+        surface:
+          canvas && canvasBounds
+            ? {
+                width: canvas.width,
+                height: canvas.height,
+                cssWidth: canvasBounds.width,
+                cssHeight: canvasBounds.height,
+                configuredDpr: view.dpr,
+              }
+            : null,
         candidateIds: [...status.candidateIds],
         limitations: [...status.limitations],
         samples: status.samples.map((s) => ({ ...s })),

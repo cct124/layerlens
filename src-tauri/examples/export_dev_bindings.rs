@@ -25,6 +25,7 @@ fn main() -> io::Result<()> {
         UiInputEvidence::decl(&config),
         UiWindowControl::decl(&config),
         UiWindow::decl(&config),
+        UiRenderSurface::decl(&config),
         UiRenderLab::decl(&config),
         UiRenderSample::decl(&config),
         UiObservation::decl(&config),

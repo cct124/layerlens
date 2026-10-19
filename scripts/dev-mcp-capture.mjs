@@ -1,7 +1,7 @@
 // 大截图只经开发 MCP 读取固定捕获的 PNG 分块；本地拼接校验完整 RGBA 指纹。
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
+import { runDevPython } from './dev-python.mjs';
 import path from 'node:path';
 
 export async function captureTiled({ rpc, args, frontend, run, root, name }) {
@@ -39,8 +39,7 @@ export async function captureTiled({ rpc, args, frontend, run, root, name }) {
     }
     const manifest = path.join(directory, 'manifest.json');
     await writeFile(manifest, JSON.stringify({ ...capture, tiles }), { flag: 'wx' });
-    execFileSync(
-      'python',
+    runDevPython(
       [
         path.join(root, 'scripts/assemble-dev-capture.py'),
         '--manifest',

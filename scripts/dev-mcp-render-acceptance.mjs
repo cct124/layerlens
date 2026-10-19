@@ -24,6 +24,7 @@ export async function exerciseRenderAcceptance(context) {
     textMode,
     workload,
     checkpoint,
+    display,
   } = context;
   const engine = 'konva';
   const a = (report.acceptance = {
@@ -56,9 +57,12 @@ export async function exerciseRenderAcceptance(context) {
     assert(view.renderLab.nodeCount > 0);
   };
   if (workload === 'memory') {
+    await ensureRenderFocus({ state, tool, args, wait });
+    await display.sample('memory-start');
     const ready = [],
       released = [];
     for (let cycle = 0; cycle < 20; cycle++) {
+      await display.sample('cycle-start', cycle);
       if (cycle) {
         await workspace({ kind: 'open', path: sample });
         await waitCore({ kind: 'documentCount', count: 1 });
@@ -67,6 +71,7 @@ export async function exerciseRenderAcceptance(context) {
       await wait({ kind: 'imageReady', documentId: doc.id, revision: doc.revision });
       const view = await renderer(engine);
       completeScene(view);
+      await display.sample('ready', cycle);
       assert.equal(view.renderLab.nodeCount, 2000);
       ready.push(await memory('ready', engine, cycle));
       await workspace({ kind: 'close', documentId: doc.id });
@@ -75,6 +80,7 @@ export async function exerciseRenderAcceptance(context) {
       assert.equal(empty.renderLab.resourceCount, 0);
       assert.equal(empty.renderLab.fontReady, false);
       released.push(await memory('released', engine, cycle));
+      await display.sample('released', cycle);
       await checkpoint();
     }
     a.gates.push({ engine, ...memoryCycleGate(ready, released) });
@@ -98,14 +104,18 @@ export async function exerciseRenderAcceptance(context) {
     assert.equal(view.window.height, 900);
     assert.equal(view.canvas.viewport.width, 960);
     assert.equal(view.canvas.viewport.height, 600);
+    await ensureRenderFocus({ state, tool, args, wait });
+    await display.sample('measurement-start');
     if (workload === 'visual') {
       view = await renderer(engine);
       completeScene(view);
       a.stages.push({ engine, render: view.renderLab });
       for (const zoom of [100, 200, 400]) {
+        await display.sample('zoom-before', zoom);
         view = await mutate('render:' + zoom, engine);
         completeScene(view);
         await screenshot('render-' + engine + '-' + zoom + '.png');
+        await display.sample('zoom-after', zoom);
       }
       await mutate('render:reset', engine);
     } else {

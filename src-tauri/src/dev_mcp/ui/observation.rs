@@ -42,6 +42,15 @@ fn rect(value: &UiRect) -> bool {
         && value.width >= 0.0
         && value.height >= 0.0
 }
+fn surface(value: &UiRenderSurface) -> bool {
+    (1..=100_000).contains(&value.width)
+        && (1..=100_000).contains(&value.height)
+        && [value.css_width, value.css_height]
+            .iter()
+            .all(|v| v.is_finite() && *v > 0.0 && *v <= 100_000.0)
+        && value.configured_dpr.is_finite()
+        && (0.1..=16.0).contains(&value.configured_dpr)
+}
 impl Observations {
     pub(crate) fn subscribe(&self) -> tokio::sync::watch::Receiver<Option<Arc<UiObservation>>> {
         self.latest.subscribe()
@@ -64,6 +73,7 @@ impl Observations {
             || value.tasks.len() > 128
             || value.render_lab.as_ref().is_some_and(|r| {
                 r.engine != "konva"
+                    || r.surface.as_ref().is_some_and(|s| !surface(s))
                     || !["idle", "loading", "ready", "error", "released"]
                         .contains(&r.phase.as_str())
                     || number(&r.generation).is_err()
@@ -142,6 +152,11 @@ impl Observations {
             || value.window.width > 100_000
             || value.window.height > 100_000
             || value.window.titlebar.as_ref().is_some_and(|r| !rect(r))
+            || value
+                .window
+                .canvas_viewport
+                .as_ref()
+                .is_some_and(|r| !rect(r))
             || value.window.controls.len() > 3
             || value.window.controls.iter().any(|c| {
                 !rect(&c.rect)
@@ -188,6 +203,9 @@ impl Observations {
         number(&value.input.key_events)?;
         number(&value.window.focus_events)?;
         number(&value.window.blur_events)?;
+        if number(&value.window.display_revision)? == 0 {
+            return Err(error(Code::InvalidInput, "显示环境代次必须为正数。"));
+        }
         let mut current = self.version.lock().unwrap_or_else(|p| p.into_inner());
         if epoch < current.epoch
             || (epoch == current.epoch
@@ -331,6 +349,20 @@ impl UiCondition {
             Self::WindowLayout { width, height, .. } => {
                 (1..=100_000).contains(width) && (1..=100_000).contains(height)
             }
+            Self::Display {
+                width,
+                height,
+                device_pixel_ratio,
+                after_revision,
+            } => {
+                if let Some(revision) = after_revision {
+                    number(revision)?;
+                }
+                (1..=100_000).contains(width)
+                    && (1..=100_000).contains(height)
+                    && device_pixel_ratio.is_finite()
+                    && (0.1..=16.0).contains(device_pixel_ratio)
+            }
             _ => true,
         };
         if valid {
@@ -341,6 +373,19 @@ impl UiCondition {
     }
     fn matches(&self, value: &UiObservation) -> bool {
         match self {
+            Self::Display {
+                width,
+                height,
+                device_pixel_ratio,
+                after_revision,
+            } => {
+                value.window.width == *width
+                    && value.window.height == *height
+                    && (value.window.device_pixel_ratio - device_pixel_ratio).abs() < 0.000001
+                    && after_revision.as_ref().is_none_or(|after| {
+                        number(&value.window.display_revision).ok() > number(after).ok()
+                    })
+            }
             Self::RenderInteraction {
                 selected_layer_id,
                 auto_select,

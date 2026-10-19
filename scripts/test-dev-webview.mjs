@@ -20,6 +20,9 @@ import { exerciseRenderBenchmark } from './dev-mcp-render-benchmark.mjs';
 import { exerciseRenderAcceptance } from './dev-mcp-render-acceptance.mjs';
 import { exerciseRenderProject } from './dev-mcp-render-project.mjs';
 import { captureTiled } from './dev-mcp-capture.mjs';
+import { checkDevPython } from './dev-python.mjs';
+import { createDisplayGuard } from './dev-mcp-render-environment.mjs';
+import { exerciseDisplayEnvironment } from './dev-mcp-display-webview.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -63,6 +66,7 @@ assert(
   '用法：npm run test:dev-mcp:webview -- --driver <msedgedriver.exe> [--app <layerlens.exe>]',
 );
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const python = checkDevPython();
 const app = path.resolve(root, options.app ?? 'target/debug/layerlens.exe');
 const driverPath = path.resolve(root, options.driver);
 const base = path.resolve(root, options['output-root'] ?? '.local/dev-mcp');
@@ -75,9 +79,15 @@ const isRender = options.scenario.startsWith('render-');
 assert(!options['sample-root'] || isBenchmark);
 assert(!options.sample || isBenchmark);
 assert(
-  ['benchmark', 'visual', 'memory', 'workspace', 'project', 'project-memory'].includes(
-    options['render-workload'],
-  ),
+  [
+    'benchmark',
+    'visual',
+    'memory',
+    'workspace',
+    'project',
+    'project-memory',
+    'environment',
+  ].includes(options['render-workload']),
 );
 assert(
   !options['render-large'] || (isBenchmark && options['render-workload'].startsWith('project')),
@@ -108,6 +118,7 @@ async function hash(file) {
 }
 const sourceHashes = await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s))));
 const report = {
+  python,
   evidence: 'webview-webdriver-mcp',
   scenario: options.scenario,
   passed: false,
@@ -131,6 +142,20 @@ const report = {
   appSha256: await hash(app),
   driverSha256: await hash(driverPath),
   cargoLockSha256: await hash(path.join(root, 'Cargo.lock')),
+  runnerSha256: Object.fromEntries(
+    await Promise.all(
+      [
+        'test-dev-webview.mjs',
+        'dev-mcp-display-webview.mjs',
+        'dev-mcp-render-environment.mjs',
+        'dev-mcp-render-acceptance.mjs',
+        'dev-mcp-render-benchmark.mjs',
+        'dev-mcp-render-project.mjs',
+        'dev-mcp-capture.mjs',
+        'dev-python.mjs',
+      ].map(async (name) => [name, await hash(path.join(root, 'scripts', name))]),
+    ),
+  ),
   system: {
     platform: process.platform,
     release: os.release(),
@@ -154,6 +179,7 @@ let driverLog = '',
   session,
   connection,
   info,
+  display,
   frontend,
   monitor;
 let rpcId = 0,
@@ -473,6 +499,7 @@ try {
   frontend = view.frontendId;
   report.frontendId = frontend;
   report.driver = (await tool('dev_ui_attach', args({ driverSessionId: session }, true))).value;
+  if (isBenchmark) display = createDisplayGuard({ state, tool, args }, report);
   assert.equal(report.driver.browserVersion, launched.capabilities.browserVersion);
   assert.equal(report.driver.driverVersion.split(' ')[0], launched.capabilities.browserVersion);
   // 固定的只读事件诊断，不生成输入、不更改组件或核心状态。
@@ -525,11 +552,13 @@ try {
   );
   if (isBenchmark) {
     await (
-      options['render-workload'].startsWith('project')
-        ? exerciseRenderProject
-        : options['render-workload'] === 'benchmark'
-          ? exerciseRenderBenchmark
-          : exerciseRenderAcceptance
+      options['render-workload'] === 'environment'
+        ? exerciseDisplayEnvironment
+        : options['render-workload'].startsWith('project')
+          ? exerciseRenderProject
+          : options['render-workload'] === 'benchmark'
+            ? exerciseRenderBenchmark
+            : exerciseRenderAcceptance
     )({
       state,
       core,
@@ -545,6 +574,7 @@ try {
       report,
       screenshot,
       document: a,
+      display,
       sample: samples[0],
       textMode: options['render-mode'],
       workload: options['render-workload'],
@@ -878,6 +908,7 @@ try {
   }
   report.finalView = await state();
   report.finalCore = await core();
+  if (display) await display.finish('success');
   assert.deepEqual(
     await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s)))),
     sourceHashes,
@@ -905,6 +936,13 @@ try {
   report.phase = 'complete';
 } catch (error) {
   report.error = error.stack ?? String(error);
+  if (display) {
+    try {
+      await display.finish('failure');
+    } catch (cause) {
+      report.displayTerminalError = String(cause);
+    }
+  }
   if (session) {
     try {
       report.inputTrace = await wd('/session/' + session + '/execute/sync', {

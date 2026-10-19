@@ -1,4 +1,5 @@
 // 保留采样数；缺测与失败不会转成零或悄悄并入性能优胜结论。
+import { displaySignature } from './dev-mcp-render-environment.mjs';
 export function distribution(values) {
   if (!values.length) return null;
   if (values.some((v) => !Number.isFinite(v) || v < 0)) throw new Error('无效性能读数');
@@ -35,18 +36,29 @@ export function memoryCycleGate(ready, released, { maxPeakBytes = 1280 * 1024 **
 }
 export function summarizeRenderReports(reports) {
   const groups = new Map();
+  const accepted = (report) =>
+    report.passed &&
+    (!report.displayEnvironment ||
+      (report.displayEnvironment.valid &&
+        report.displayEnvironment.baseline &&
+        report.displayEnvironment.terminal?.valid));
   for (const report of reports) {
-    if (!report.passed || !report.benchmark) continue;
+    if (!accepted(report) || !report.benchmark) continue;
     const b = report.benchmark;
     const engine = b.engine;
     if (engine !== 'konva') throw new Error('只汇总当前 Konva 回归报告');
-    const key = b.sample + '/' + b.textMode + '/' + engine;
+    const displayConditions = report.displayEnvironment?.baseline
+      ? displaySignature(report.displayEnvironment.baseline)
+      : null;
+    const key =
+      b.sample + '/' + b.textMode + '/' + engine + '/' + JSON.stringify(displayConditions);
     let g = groups.get(key);
     if (!g) {
       g = {
         sample: b.sample,
         textMode: b.textMode,
         engine,
+        displayConditions,
         runs: 0,
         cold: [],
         warmInit: [],
@@ -93,8 +105,8 @@ export function summarizeRenderReports(reports) {
     }
   }
   return {
-    successfulReports: reports.filter((r) => r.passed).length,
-    failedReports: reports.filter((r) => !r.passed).length,
+    successfulReports: reports.filter(accepted).length,
+    failedReports: reports.filter((r) => !accepted(r)).length,
     rows: [...groups.values()].map((g) =>
       Object.fromEntries(
         Object.entries(g).map(([k, v]) => [k, Array.isArray(v) ? distribution(v) : v]),

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 #[path = "render_model.rs"]
 mod render_model;
-pub(crate) use render_model::{UiRenderLab, UiRenderSample};
+pub(crate) use render_model::{UiRenderLab, UiRenderSample, UiRenderSurface};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -103,6 +103,11 @@ pub(crate) struct UiWindowControl {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiWindow {
+    /// 当前挂载内实际 DPR、窗口／画布视口或可见性发生变化的代次；恢复原尺寸也递增。
+    pub display_revision: String,
+    pub visible: bool,
+    /// 真实画布容器的 CSS 边界，释放场景后仍可观测。
+    pub canvas_viewport: Option<UiRect>,
     pub focused: bool,
     pub focus_events: String,
     pub blur_events: String,
@@ -355,6 +360,13 @@ pub(crate) enum UiCondition {
         width: u32,
         height: u32,
         maximized: bool,
+    },
+    /// 等待实际前端显示尺寸；不依赖正式页面的最大化按钮。
+    Display {
+        width: u32,
+        height: u32,
+        device_pixel_ratio: f64,
+        after_revision: Option<String>,
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

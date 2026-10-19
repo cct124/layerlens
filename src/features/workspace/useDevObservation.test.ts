@@ -58,9 +58,62 @@ afterEach(() => {
   delete window.__LAYERLENS_DEV_BOOT__;
   delete window.__LAYERLENS_DEV_VIEW__;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.mocked(invoke).mockReset();
 });
 describe('开发观测生命周期', () => {
+  it('DPR 独立变化和恢复递增显示代次，卸载释放媒体查询监听', async () => {
+    window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    const queries: EventTarget[] = [];
+    vi.stubGlobal('matchMedia', () => {
+      const query = new EventTarget();
+      queries.push(query);
+      return query;
+    });
+    vi.stubGlobal('devicePixelRatio', 1.5);
+    const { wrapper } = setup();
+    await flushPromises();
+    const before = window.__LAYERLENS_DEV_VIEW__?.read()?.window;
+    expect(before?.devicePixelRatio).toBe(1.5);
+    vi.stubGlobal('devicePixelRatio', 1);
+    queries.at(-1)?.dispatchEvent(new Event('change'));
+    await flushPromises();
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.window).toMatchObject({
+      devicePixelRatio: 1,
+      displayRevision: String(BigInt(before!.displayRevision) + 1n),
+    });
+    vi.stubGlobal('devicePixelRatio', 1.5);
+    queries.at(-1)?.dispatchEvent(new Event('change'));
+    await flushPromises();
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.window.displayRevision).toBe(
+      String(BigInt(before!.displayRevision) + 2n),
+    );
+    wrapper.unmount();
+    const calls = vi.mocked(invoke).mock.calls.length;
+    queries.at(-1)?.dispatchEvent(new Event('change'));
+    await flushPromises();
+    expect(invoke).toHaveBeenCalledTimes(calls);
+  });
+  it('可见性变化上报实际状态，恢复可见也保留新的显示代次', async () => {
+    window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    setup();
+    await flushPromises();
+    const before = window.__LAYERLENS_DEV_VIEW__?.read()?.window.displayRevision;
+    visibility.mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushPromises();
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.window.visible).toBe(false);
+    visibility.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushPromises();
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.window).toMatchObject({
+      visible: true,
+      displayRevision: String(BigInt(before!) + 2n),
+    });
+  });
   it('捕获阶段触发上报时，同一输入造成的 DOM 更新必须先完成', async () => {
     window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };
     const domAtSend: (string | null)[] = [];

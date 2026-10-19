@@ -54,6 +54,7 @@ export function useDevObservation(project: () => Projection) {
       scheduled = false,
       sending = false;
     let revision = 0n,
+      displayRevision = 0n,
       pointers = 0n,
       keys = 0n,
       focuses = 0n,
@@ -61,6 +62,7 @@ export function useDevObservation(project: () => Projection) {
     let lastKey: string | null = null,
       transportError: string | null = null;
     let previous = '',
+      previousDisplay = '',
       latest: UiObservation | null = null,
       pending: UiObservation | null = null;
     async function pump() {
@@ -94,6 +96,19 @@ export function useDevObservation(project: () => Projection) {
         return { x, y, width, height };
       };
       const titlebar = document.querySelector('.app-header');
+      const canvasElement = document.querySelector('[data-dev-target="canvas"]');
+      const canvasViewport = canvasElement ? bounds(canvasElement) : null;
+      const display = JSON.stringify({
+        width: window.innerWidth,
+        height: window.innerHeight,
+        dpr: window.devicePixelRatio,
+        visible: document.visibilityState !== 'hidden',
+        viewport: canvasViewport,
+      });
+      if (display !== previousDisplay) {
+        previousDisplay = display;
+        displayRevision++;
+      }
       const value = {
         ...projection,
         renderLab: projection.renderLab ?? null,
@@ -111,6 +126,9 @@ export function useDevObservation(project: () => Projection) {
             : null,
         input: { pointerEvents: pointers.toString(), keyEvents: keys.toString(), lastKey },
         window: {
+          displayRevision: displayRevision.toString(),
+          visible: document.visibilityState !== 'hidden',
+          canvasViewport,
           focused: document.hasFocus(),
           focusEvents: focuses.toString(),
           blurEvents: blurs.toString(),
@@ -215,6 +233,21 @@ export function useDevObservation(project: () => Projection) {
     window.addEventListener('resize', schedule);
     window.addEventListener('focus', focus);
     window.addEventListener('blur', focus);
+    document.addEventListener('visibilitychange', schedule);
+    // 换屏仅改变 DPR 而没有 resize 时仍上报；每次变化重新监听当前分辨率。
+    let dprQuery: MediaQueryList | undefined;
+    function observeDpr() {
+      dprQuery?.removeEventListener('change', dprChanged);
+      if (typeof window.matchMedia === 'function') {
+        dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+        dprQuery.addEventListener('change', dprChanged);
+      }
+    }
+    function dprChanged() {
+      schedule();
+      observeDpr();
+    }
+    observeDpr();
     stop = () => {
       disposed = true;
       pending = null;
@@ -232,6 +265,8 @@ export function useDevObservation(project: () => Projection) {
       window.removeEventListener('resize', schedule);
       window.removeEventListener('focus', focus);
       window.removeEventListener('blur', focus);
+      document.removeEventListener('visibilitychange', schedule);
+      dprQuery?.removeEventListener('change', dprChanged);
       if (window.__LAYERLENS_DEV_VIEW__ === bridge) delete window.__LAYERLENS_DEV_VIEW__;
     };
     schedule();

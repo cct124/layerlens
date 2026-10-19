@@ -23,6 +23,7 @@ export async function exerciseRenderProject(context) {
     workload,
     checkpoint,
     projectSpec: spec,
+    display,
   } = context;
   const engine = 'konva';
   assert.equal(spec.sourceSha256, report.sourceHashes[0]);
@@ -93,6 +94,7 @@ export async function exerciseRenderProject(context) {
   assert.equal(baseline.degradedLayerIds.length, baseline.drawnLayerIds.length);
   assert(baseline.encodedBytes > 0 && baseline.alphaBytes > 0);
   a.stages.push({ stage: 'source-layers', render: baseline });
+  await display.sample('project-start');
   const sameCoverage = (v) => {
     for (const k of [
       'drawnLayerIds',
@@ -144,11 +146,14 @@ export async function exerciseRenderProject(context) {
     }, 1000);
     try {
       for (cycle = 0; cycle < 20; cycle++) {
+        await display.sample('cycle-start', cycle);
         if (cycle) await reopen();
         if (samplingError) throw samplingError;
         opened.push(await sampleMemory('ready', cycle));
+        await display.sample('ready', cycle);
         await close();
         released.push(await sampleMemory('released', cycle));
+        await display.sample('released', cycle);
         await checkpoint();
       }
     } finally {
@@ -172,6 +177,7 @@ export async function exerciseRenderProject(context) {
       if (seconds > previous)
         await new Promise((resolve) => setTimeout(resolve, (seconds - previous) * 1000));
       await sampleMemory('idle-' + seconds);
+      await display.sample('idle', seconds);
       previous = seconds;
       await checkpoint();
     }
@@ -185,10 +191,12 @@ export async function exerciseRenderProject(context) {
       await click('layer:' + detail.layerId + ':select');
       await wait({ kind: 'selectionIdle' });
       for (const zoom of [100, 200, 400]) {
+        await display.sample('detail-before', index * 3 + [100, 200, 400].indexOf(zoom));
         await mutate('render:' + zoom);
         view = await mutate('render:focus');
         sameCoverage(view);
         await screenshot('project-' + engine + '-detail' + index + '-' + zoom + '.png');
+        await display.sample('detail-after', index * 3 + [100, 200, 400].indexOf(zoom));
         a.stages.push({
           stage: 'detail',
           index,
@@ -202,9 +210,11 @@ export async function exerciseRenderProject(context) {
     const draw = [];
     for (let repeat = 0; repeat < 3; repeat++)
       for (const zoom of [100, 200, 400]) {
+        await display.sample('draw-before', repeat * 3 + [100, 200, 400].indexOf(zoom));
         view = await mutate('render:' + zoom);
         sameCoverage(view);
         draw.push(view.renderLab.samples.at(-1).readyMs);
+        await display.sample('draw-after', repeat * 3 + [100, 200, 400].indexOf(zoom));
       }
     await mutate('render:fit');
     await ensureRenderFocus({ state, tool, args, wait });

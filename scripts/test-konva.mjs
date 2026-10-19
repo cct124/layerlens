@@ -11,7 +11,10 @@ import { isolatedEnvironment, runProcess } from './dev-mcp-runner.mjs';
 import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
 import { summarizeRenderReports } from './render-statistics.mjs';
 import { redact } from './dev-mcp-artifacts.mjs';
+import { checkDevPython, devPythonExecutable } from './dev-python.mjs';
+import { displaySignature } from './dev-mcp-render-environment.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
+const python = checkDevPython();
 const { values } = parseArgs({
   options: {
     environment: { type: 'string', default: '.local/dev-mcp/driver-preparation.json' },
@@ -27,9 +30,15 @@ const { values } = parseArgs({
 assert(['1', '2', '3', '6'].includes(values.repeat));
 assert(['shared', 'native'].includes(values.mode));
 assert(
-  ['benchmark', 'visual', 'memory', 'workspace', 'project', 'project-memory'].includes(
-    values.workload,
-  ),
+  [
+    'benchmark',
+    'visual',
+    'memory',
+    'workspace',
+    'project',
+    'project-memory',
+    'environment',
+  ].includes(values.workload),
 );
 const project = values.workload.startsWith('project');
 assert.equal(project, Boolean(values['project-source']), '真实大稿需要明确 --project-source');
@@ -96,6 +105,9 @@ const directory = await mkdtemp(path.join(base, 'stability-')),
 await mkdir(runs);
 await writeFile(path.join(directory, 'environment.json'), JSON.stringify(env, null, 2));
 const report = {
+  python,
+  runnerSha256: await hash(fileURLToPath(import.meta.url)),
+  displaySignatures: {},
   formatVersion: 1,
   kind: 'konva-regression',
   engine: 'konva',
@@ -173,15 +185,28 @@ try {
         durationMs: outcome.durationMs,
         processChecks: [],
       };
+      let singleReport;
       try {
         assert.equal(created.length, 1);
         const single = JSON.parse(
           await readFile(path.join(runs, created[0], 'report.json'), 'utf8'),
         );
-        data.push(single);
+        singleReport = single;
         result.buildProfile = single.buildProfile;
         result.instanceId = single.instanceId;
         result.acceptance = single.acceptance;
+        result.displayEnvironment = single.displayEnvironment;
+        assert(
+          single.displayEnvironment?.valid && single.displayEnvironment.terminal?.valid,
+          '缺少有效逐轮／终态显示环境',
+        );
+        const display = displaySignature(single.displayEnvironment.baseline);
+        report.displaySignatures[c.file] ??= display;
+        assert.deepEqual(
+          display,
+          report.displaySignatures[c.file],
+          '独立进程显示条件不一致，禁止合并',
+        );
         assert(
           !outcome.timedOut && outcome.code === 0 && single.passed,
           single.error ?? outcome.output,
@@ -216,8 +241,9 @@ try {
             constants.COPYFILE_EXCL,
           );
           const visual = await runProcess(
-            'python',
+            devPythonExecutable,
             [
+              '-I',
               path.join(root, 'scripts/compare-render-reference.py'),
               '--report',
               path.join(runs, created[0], 'report.json'),
@@ -268,6 +294,7 @@ try {
           result.processError = String(error);
         }
       }
+      if (singleReport) data.push({ ...singleReport, passed: result.passed });
       report.results.push(result);
       await checkpoint();
       console.log(

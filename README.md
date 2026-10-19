@@ -53,6 +53,8 @@ npm run desktop:build # 构建 release 桌面程序及 Windows NSIS 安装包
 
 ## 检查与测试
 
+截图与像素回归使用 `.python-version` 固定的 Python 3.13.5、Pillow 11.3.0。先安装对应 Python，再运行 `npm run prepare:dev-python`；它仅准备仓库 `.local/dev-mcp-python/` 独立环境，依赖来自 `scripts/requirements-dev-mcp.txt`，不修改系统包。CI 使用相同入口。`npm run check:dev-python` 只读预检，`npm run test:dev-capture` 验证分块拼接与负向边界；`npm run check` 包含两者。GUI 运行器在启动窗口前预检，缺依赖明确失败，不自动安装。
+
 ```powershell
 npm run check          # 仓库格式、前端与 Rust 检查、DTO 一致性及 hook 测试
 npm run check:frontend # Prettier 格式、严格类型、lint、组件测试及前端构建
@@ -138,6 +140,10 @@ npm run test:dev-mcp:desktop -- --app target/release/layerlens.exe --expect-disa
 ```
 
 ## Konva 渲染验证
+
+正式接入方案见 [Konva 工作区接入](docs/10-Konva工作区接入.md)，本批仅完成设计与测试准备，正式画布仍使用合成预览。`npm run check:render-lab` 统一检查 Rust 渲染特性、场景 DTO 与隔离前端构建，并纳入 Windows CI。
+
+逐轮环境回归：`npm run test:konva -- --workload environment --cases path-100 --repeat 1`，先按下文生成 corpus、准备驱动并构建验证程序。该用例通过原生 MCP 切换焦点／尺寸并恢复，再完成 3 轮加载／释放；报告保留预期负向识别与成功终态，不代表跨屏实测。其他 Konva 工作负载在固定循环和绘制前后记录显示环境，检查实际窗口 DPR 与 Canvas backing store。终态缺失、观察到的中途变化或跨进程条件不一致均失败，不自动重试。
 
 2026-10-17 用户已选定 **Konva** 作为正式工作区的 Canvas 渲染框架，依据与接入边界见[当前渲染决策](docs/09-渲染器对比实验.md#当前选型决定2026-10-17)。实验代码和关键证据已在本机备份；当前只保留 Konva 验证窗口、Rust 场景／资源、开发测试 MCP 及有效回归，Leafer／CanvasKit 源码与依赖、多引擎选择和对比调度已移除。清理与验证记录见 [RENDER-03](devlog/_fin/261017/RENDER-03-选型实验清理与Konva验证收敛.md)。固定清理回归 6／7 项通过；tab-1 的诊断流程完成，但热绘制 P95 50.5 ms 超过原定 50 ms 门槛，失败报告保留，未重试。
 

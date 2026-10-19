@@ -18,6 +18,7 @@ export async function exerciseRenderBenchmark({
   document,
   sample,
   textMode,
+  display,
 }) {
   const engine = 'konva';
   report.phase = 'render-benchmark';
@@ -50,6 +51,8 @@ export async function exerciseRenderBenchmark({
   };
   const fixed = (await core()).selection.selectionRevision;
   let v = await renderer(engine);
+  await focus();
+  await display.sample('benchmark-start');
   assert.equal(v.renderLab.textMode, textMode);
   assert.equal(v.renderLab.sourceSha256, report.sourceHashes[0]);
   assert.equal(v.renderLab.error, null);
@@ -68,13 +71,16 @@ export async function exerciseRenderBenchmark({
     assert.equal(v.renderLab.unsupportedLayers, 0, JSON.stringify(v.renderLab.limitations));
   // 固定三轮重建，保留所有读数；不自动重试挑选最好结果。
   for (let repeat = 0; repeat < 3; repeat++) {
+    await display.sample('rebuild-before', repeat);
     v = await mutate('render:rebuild', engine);
     b.stages.push({ engine, stage: 'warm-rebuild', repeat, render: v.renderLab });
     await memory('warm-rebuild-' + repeat, engine);
+    await display.sample('rebuild-after', repeat);
   }
   await click('render:clear-metrics');
   for (let repeat = 0; repeat < 3; repeat++)
     for (const zoom of [100, 200, 400]) {
+      await display.sample('draw-before', repeat * 3 + [100, 200, 400].indexOf(zoom));
       v = await mutate('render:' + zoom, engine);
       assert.equal(v.canvas.zoom, zoom / 100);
       b.stages.push({
@@ -85,6 +91,7 @@ export async function exerciseRenderBenchmark({
         sample: v.renderLab.samples.at(-1),
       });
       if (repeat === 0) await screenshot('render-' + engine + '-' + zoom + '.png');
+      await display.sample('draw-after', repeat * 3 + [100, 200, 400].indexOf(zoom));
     }
   await mutate('render:reset', engine);
   await click('render:clear-metrics');

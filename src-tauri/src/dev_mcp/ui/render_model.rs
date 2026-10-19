@@ -1,6 +1,17 @@
 //! 实验绘制观测，不包含文字、原始像素或状态写入入口。
 use super::*;
 
+/// 实际 Canvas backing store 与 CSS 尺寸；configuredDpr 是创建时配置，不冒充当前窗口 DPR。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiRenderSurface {
+    pub width: u32,
+    pub height: u32,
+    pub css_width: f64,
+    pub css_height: f64,
+    pub configured_dpr: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiRenderSample {
@@ -17,6 +28,7 @@ pub(crate) struct UiRenderSample {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiRenderLab {
+    pub surface: Option<UiRenderSurface>,
     pub engine: String,
     pub phase: String,
     pub generation: String,

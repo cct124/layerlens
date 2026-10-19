@@ -18,12 +18,15 @@
     "test:dev-mcp:desktop": "node scripts/test-dev-mcp.mjs",
     "test:dev-mcp:webview": "node scripts/test-dev-webview.mjs",
     "prepare:dev-mcp": "node scripts/run-powershell.mjs -ExecutionPolicy Bypass -File scripts/prepare-dev-webdriver.ps1",
+    "prepare:dev-python": "node scripts/dev-python.mjs --prepare",
+    "check:dev-python": "node scripts/dev-python.mjs --check",
+    "test:dev-capture": "node scripts/dev-python.mjs scripts/test-dev-capture.py",
     "test:dev-mcp:stability": "node scripts/test-dev-stability.mjs",
     "test:dev-mcp:m2": "node scripts/test-dev-stability.mjs --repeat 5 --webview-suite m2",
     "test:dev-mcp:m2-input": "node scripts/test-dev-stability.mjs --repeat 15 --webview-suite m2-input",
     "test:dev-mcp:m2-cleanup": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-cleanup",
     "test:dev-mcp:m2-window": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-window",
-    "test:dev-mcp:scripts": "node --test scripts/dev-mcp-runner.test.mjs scripts/windows-powershell.test.mjs scripts/render-statistics.test.mjs scripts/render-focus.test.mjs scripts/dev-mcp-memory.test.mjs",
+    "test:dev-mcp:scripts": "node --test scripts/dev-mcp-runner.test.mjs scripts/windows-powershell.test.mjs scripts/render-statistics.test.mjs scripts/render-focus.test.mjs scripts/dev-mcp-memory.test.mjs scripts/render-environment.test.mjs",
     "artifacts:dev-mcp": "node scripts/collect-dev-mcp-artifacts.mjs",
     "bindings:dev:generate": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings",
     "bindings:dev:check": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings -- --check",
@@ -36,6 +39,7 @@
     "test:konva": "node scripts/test-konva.mjs",
     "bindings:render:generate": "cargo run --locked -p layerlens-core --features render-lab --example export_render_bindings",
     "bindings:render:check": "cargo run --locked -p layerlens-core --features render-lab --example export_render_bindings -- --check",
+    "check:render-lab": "cargo clippy --workspace --all-targets --locked --features layerlens-desktop/render-lab -- -D warnings && cargo test --workspace --locked --features layerlens-desktop/render-lab && npm run bindings:render:check && npm run build:render-lab",
     "test:render-lab:core": "cargo test --locked -p layerlens-core --features render-lab --test render_scene",
     "test:render-lab": "node scripts/test-dev-stability.mjs --repeat 3 --webview-suite render-lab",
     "preview": "vite preview",
@@ -63,7 +67,7 @@
     "bindings:check": "cargo run --locked -p layerlens-core --example export_bindings -- --check",
     "check:frontend": "npm run format:web:check && npm run typecheck && npm run lint && npm run test && vite build && node scripts/check-render-isolation.mjs",
     "check:rust": "npm run fixtures:check && npm run format:rust:check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked && cargo test --locked -p layerlens-core --example inspect_psd && npm run test:parser && npm run bindings:check && npm run test:measurement",
-    "check": "npm run check:frontend && npm run check:rust && npm run test:hooks && npm run test:dev-mcp:scripts"
+    "check": "npm run check:dev-python && npm run check:frontend && npm run check:rust && npm run test:hooks && npm run test:dev-mcp:scripts && npm run test:dev-capture"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

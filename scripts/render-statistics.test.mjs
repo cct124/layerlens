@@ -36,6 +36,46 @@ test('Konva 汇总按样本和排版聚合独立运行，失败不污染读数�
   obsolete.benchmark.engine = 'leafer';
   assert.throws(() => summarizeRenderReports([obsolete]), /Konva/);
 });
+test('不同显示条件分行，终态缺失／环境失败不进入性能统计', () => {
+  const report = (dpr) => ({
+    passed: true,
+    benchmark: {
+      engine: 'konva',
+      sample: 'same.psd',
+      textMode: 'native',
+      stages: [],
+      interactions: [],
+      memory: [],
+    },
+    displayEnvironment: {
+      valid: true,
+      terminal: { valid: true },
+      baseline: {
+        ui: {
+          window: {
+            width: 1280,
+            height: 900,
+            devicePixelRatio: dpr,
+            canvasViewport: { width: 640, height: 420 },
+          },
+        },
+        nativeAfter: { physicalWidth: 1280 * dpr, physicalHeight: 900 * dpr, scaleFactor: dpr },
+      },
+    },
+  });
+  const missing = report(1);
+  missing.displayEnvironment.terminal = null;
+  const drifted = report(1);
+  drifted.displayEnvironment.valid = false;
+  const result = summarizeRenderReports([report(1), report(1.5), missing, drifted]);
+  assert.equal(result.rows.length, 2);
+  assert.deepEqual(
+    result.rows.map((r) => r.displayConditions.dpr),
+    [1, 1.5],
+  );
+  assert.equal(result.successfulReports, 2);
+  assert.equal(result.failedReports, 2);
+});
 test('固定资源门槛拒绝持续增长、过高峰值和缺失循环，保留稳定缓存平台', () => {
   const mib = 1024 ** 2;
   const stable = Array.from({ length: 20 }, (_, i) => (i < 5 ? 300 + i * 10 : 360 + (i % 2)) * mib);

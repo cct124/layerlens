@@ -25,6 +25,13 @@ jobs:
           cache: npm
       - name: Install pinned npm
         run: npm install --global npm@11.17.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: scripts/requirements-dev-mcp.txt
+      - name: Prepare isolated test Python
+        run: npm run prepare:dev-python
       - name: Install Rust toolchain
         run: rustup show
       - name: Install frontend dependencies
@@ -67,6 +74,13 @@ jobs:
           cache: npm
       - name: Install pinned npm
         run: npm install --global npm@11.17.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: scripts/requirements-dev-mcp.txt
+      - name: Prepare isolated test Python
+        run: npm run prepare:dev-python
       - name: Install Rust toolchain
         run: rustup show
       - name: Install frontend dependencies
@@ -74,6 +88,10 @@ jobs:
       - name: Prepare matching WebView2 driver
         id: driver
         run: npm run prepare:dev-mcp
+      - name: Check screenshot assembly before GUI tests
+        run: npm run test:dev-capture
+      - name: Check Konva feature contracts and isolated build
+        run: npm run check:render-lab
       - name: Check development feature and runner
         run: |
           npm run check:dev-mcp
@@ -98,6 +116,14 @@ jobs:
       - name: Repeat M2 native window focus and shutdown scenarios five times each
         timeout-minutes: 15
         run: npm run test:dev-mcp:m2-window
+      - name: Build isolated Konva application with reproducible fixtures
+        run: |
+          npm run fixtures:render-lab
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run desktop:render-lab
+      - name: Verify real display environment observations
+        timeout-minutes: 5
+        run: npm run test:konva -- --workload environment --cases path-100 --repeat 1
       - name: Collect bounded diagnostic artifacts
         if: always() && steps.driver.outcome != 'skipped'
         run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts
