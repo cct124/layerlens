@@ -95,8 +95,10 @@ export async function exerciseRegionControls({
       const center = point(before, 128, 64);
       const input = await action({ kind: 'scroll', ...center, deltaY });
       await wait({
-        kind: 'viewRevision',
-        atLeast: (BigInt(input.value.before.viewRevision) + 1n).toString(),
+        kind: 'canvasPaint',
+        documentId: document.id,
+        revision: document.revision,
+        sceneAtLeast: (BigInt(input.value.before.canvas.sceneRevision) + 1n).toString(),
       });
     }
     const observed = await state();

@@ -246,8 +246,10 @@ export async function exerciseCanvasInput({
         );
         const input = await action({ kind: 'scroll', ...point(beforeZoom, 128, 64), deltaY });
         await wait({
-          kind: 'viewRevision',
-          atLeast: (BigInt(input.value.before.viewRevision) + 1n).toString(),
+          kind: 'canvasPaint',
+          documentId: document.id,
+          revision: document.revision,
+          sceneAtLeast: (BigInt(input.value.before.canvas.sceneRevision) + 1n).toString(),
         });
       }
       const scaled = await state();

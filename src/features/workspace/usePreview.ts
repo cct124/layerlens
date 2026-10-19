@@ -60,9 +60,9 @@ export function usePreview(preview: Readonly<Ref<WorkspacePreview | null>>) {
     release();
     void pump();
   }
-  function imageFailed() {
+  function imageFailed(message = '浏览器无法显示预览图像，请重试。') {
     release();
-    error.value = '浏览器无法显示预览图像，请重试。';
+    error.value = message;
   }
   onScopeDispose(() => {
     disposed = true;

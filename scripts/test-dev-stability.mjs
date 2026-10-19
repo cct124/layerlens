@@ -24,22 +24,33 @@ assert.equal(process.platform, 'win32', '稳定性测试当前只支持 Windows�
 assert.match(values.repeat, /^(?:[2-9]|1[0-9]|20)$/, '重复次数为 2–20。');
 const repeats = Number(values.repeat);
 assert(
-  ['baseline', 'm2', 'm2-input', 'm2-cleanup', 'm2-window', 'render-lab'].includes(
-    values['webview-suite'],
-  ),
+  [
+    'baseline',
+    'm2',
+    'm2-input',
+    'm2-cleanup',
+    'm2-window',
+    'render-lab',
+    'workspace-canvas',
+    'canvas-sync',
+  ].includes(values['webview-suite']),
 );
 const scenarios =
-  values['webview-suite'] === 'm2'
-    ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
-    : values['webview-suite'] === 'm2-input'
-      ? ['input-pan', 'input-chord', 'input-snapping']
-      : values['webview-suite'] === 'm2-cleanup'
-        ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
-        : values['webview-suite'] === 'm2-window'
-          ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
-          : values['webview-suite'] === 'render-lab'
-            ? ['render-lab']
-            : ['baseline'];
+  values['webview-suite'] === 'canvas-sync'
+    ? ['baseline', 'canvas-inspection']
+    : values['webview-suite'] === 'workspace-canvas'
+      ? ['canvas-inspection', 'canvas-display', 'canvas-memory']
+      : values['webview-suite'] === 'm2'
+        ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
+        : values['webview-suite'] === 'm2-input'
+          ? ['input-pan', 'input-chord', 'input-snapping']
+          : values['webview-suite'] === 'm2-cleanup'
+            ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
+            : values['webview-suite'] === 'm2-window'
+              ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
+              : values['webview-suite'] === 'render-lab'
+                ? ['render-lab']
+                : ['baseline'];
 assert(
   repeats >= scenarios.length && repeats % scenarios.length === 0,
   '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',
@@ -55,10 +66,17 @@ const report = {
   status: 'running',
   startedAt: new Date().toISOString(),
   repeats,
-  concurrency: ['m2-window', 'render-lab'].includes(values['webview-suite']) ? 1 : 2,
+  concurrency: ['m2-window', 'render-lab', 'workspace-canvas', 'canvas-sync'].includes(
+    values['webview-suite'],
+  )
+    ? 1
+    : 2,
   automaticRetries: 0,
   webviewScenarios: scenarios,
-  expectedBuildModes: { development: 'debug with dev-mcp', production: 'release without dev-mcp' },
+  expectedBuildModes: {
+    development: 'dev-mcp; actual buildProfile is recorded per run',
+    production: 'release without dev-mcp',
+  },
   ci: {
     runId: process.env.GITHUB_RUN_ID ?? null,
     attempt: process.env.GITHUB_RUN_ATTEMPT ?? null,

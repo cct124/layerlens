@@ -6,6 +6,23 @@ import PreviewCanvas from './PreviewCanvas.vue';
 import { buildSnapIndex } from './regionSnapping';
 import type { CanvasTool } from './regionDraft';
 import type { SelectionBounds } from '../../shared/api/generated';
+import { inspectionLayers } from './canvasInspection';
+
+// 此套件验证真实组件事件；Canvas 绘制和解码生命周期另有独立测试与 MCP 实测。
+vi.mock('./useCompositeCanvas', async () => {
+  const { shallowRef } = await import('vue');
+  return {
+    useCompositeCanvas: () =>
+      shallowRef({
+        decoded: true,
+        ready: true,
+        error: null,
+        generation: 1,
+        paintedGeneration: 1,
+        surface: null,
+      }),
+  };
+});
 
 let wrapper: VueWrapper<InstanceType<typeof PreviewCanvas>>;
 const original = { x: 200, y: 200, width: 300, height: 200 };
@@ -75,6 +92,7 @@ async function pointer(
   button = 0,
   buttons = type === 'pointerup' ? 0 : 1,
   altKey = false,
+  ctrlKey = false,
 ) {
   // jsdom 的 PointerEvent 继承只读 MouseEvent 属性，直接构造事件避免 trigger 的属性回填。
   target.element.dispatchEvent(
@@ -87,6 +105,7 @@ async function pointer(
       clientX: x,
       clientY: y,
       altKey,
+      ctrlKey,
     }),
   );
   await nextTick();
@@ -464,10 +483,10 @@ it('面板改变视口尺寸时保持手动缩放和关注位置，适应窗口�
   await wrapper.setProps({ view: { mode: 'manual', zoom: 1.25, x: 170, y: -30 } });
   resizeViewport(1000, 800);
   await nextTick();
-  const before = wrapper.get('.preview-image').attributes('style');
+  const before = wrapper.get('.composite-background').attributes('style');
   resizeViewport(750, 800);
   await nextTick();
-  expect(wrapper.get('.preview-image').attributes('style')).toBe(before);
+  expect(wrapper.get('.composite-background').attributes('style')).toBe(before);
   expect(wrapper.get('[aria-label="当前缩放"]').text()).toBe('125%');
   expect(wrapper.emitted('update:view')).toBeUndefined();
   expect(wrapper.emitted('clearSelection')).toBeUndefined();
@@ -478,4 +497,84 @@ it('面板改变视口尺寸时保持手动缩放和关注位置，适应窗口�
   await nextTick();
   expect(wrapper.get('[aria-label="当前缩放"]').text()).not.toBe(fitBefore);
   expect(wrapper.find('.region-boundary').exists()).toBe(true);
+});
+
+const pickLayers = inspectionLayers(
+  [1, 2].map((id) => ({
+    id,
+    parentId: null,
+    name: `layer${id}`,
+    nameTruncated: false,
+    kind: 'bitmap' as const,
+    bounds: { x: 200, y: 200, width: 300, height: 200 },
+    visible: true,
+    effectiveVisible: true,
+    opacity: 255,
+  })),
+);
+it('自动检查默认关闭，开启后点击只提交最上层检查，确认后可循环重叠候选', async () => {
+  const viewport = setup(original, 'pan');
+  await wrapper.setProps({ inspectionLayers: pickLayers });
+  await pointer(viewport, 'pointerdown', 250, 250);
+  await pointer(viewport, 'pointerup', 250, 250);
+  expect(wrapper.emitted('inspect')).toBeUndefined();
+  await wrapper.setProps({ autoSelect: true });
+  await pointer(viewport, 'pointerdown', 250, 250);
+  await pointer(viewport, 'pointerup', 250, 250);
+  expect(wrapper.emitted('inspect')).toEqual([[1, 'session/doc/revision/selection']]);
+  expect(wrapper.emitted('region')).toBeUndefined();
+  expect(wrapper.emitted('clearSelection')).toBeUndefined();
+  await wrapper.setProps({ selectedId: 1 });
+  await wrapper.get('[data-dev-target="canvas:next"]').trigger('click');
+  expect(wrapper.emitted('inspect')?.at(-1)?.[0]).toBe(2);
+});
+it('超过阈值后返回起点也不能检查；点击空白清空检查，未完整分页不能提交', async () => {
+  const viewport = setup(null, 'pan');
+  await wrapper.setProps({ inspectionLayers: pickLayers, autoSelect: true });
+  await pointer(viewport, 'pointerdown', 250, 250);
+  await pointer(viewport, 'pointermove', 260, 250);
+  await pointer(viewport, 'pointerup', 250, 250);
+  expect(wrapper.emitted('inspect')).toBeUndefined();
+  await pointer(viewport, 'pointerdown', 700, 700);
+  await pointer(viewport, 'pointerup', 700, 700);
+  expect(wrapper.emitted('inspect')).toEqual([[null, 'session/doc/revision/selection']]);
+  await wrapper.setProps({ inspectionLayers: null });
+  await pointer(viewport, 'pointerdown', 250, 250);
+  await pointer(viewport, 'pointerup', 250, 250);
+  expect(wrapper.emitted('inspect')).toHaveLength(1);
+});
+it('区域内 Ctrl 点击临时检查，不移动选区；拖动或真实失焦取消临时检查', async () => {
+  const viewport = setup();
+  await wrapper.setProps({ inspectionLayers: pickLayers });
+  const region = wrapper.get('.region-boundary');
+  await pointer(region, 'pointerdown', 250, 250, 1, 0, 1, false, true);
+  await pointer(viewport, 'pointerup', 250, 250, 1, 0, 0, false, true);
+  expect(wrapper.emitted('inspect')?.[0]?.[0]).toBe(1);
+  for (const cancel of ['move', 'blur', 'revision']) {
+    await pointer(region, 'pointerdown', 250, 250, 1, 0, 1, false, true);
+    if (cancel === 'move') await pointer(viewport, 'pointermove', 280, 270, 1, 0, 1, false, true);
+    else if (cancel === 'blur') window.dispatchEvent(new Event('blur'));
+    else await wrapper.setProps({ contextKey: 'new-revision' });
+    await pointer(viewport, 'pointerup', 250, 250, 1, 0, 0, false, true);
+    if (cancel === 'move') expect(wrapper.vm.observation()?.inspection.ctrl).toBe(true);
+  }
+  expect(wrapper.emitted('inspect')).toHaveLength(1);
+  expect(wrapper.emitted('region')).toBeUndefined();
+  expect(wrapper.emitted('clearSelection')).toBeUndefined();
+});
+it('Ctrl 检查期间中键优先变为平移，DPR 变化取消检查且保留手动视图', async () => {
+  const viewport = setup();
+  await wrapper.setProps({ inspectionLayers: pickLayers });
+  await pointer(viewport, 'pointerdown', 250, 250, 1, 0, 1, false, true);
+  await pointer(viewport, 'pointermove', 250, 250, 1, 0, 5, false, true);
+  await pointer(viewport, 'pointermove', 290, 275, 1, 0, 5, false, true);
+  await pointer(viewport, 'pointerup', 290, 275);
+  expect(wrapper.emitted('update:view')?.at(-1)?.[0]).toMatchObject({ x: 40, y: 25 });
+  expect(wrapper.emitted('inspect')).toBeUndefined();
+  await pointer(viewport, 'pointerdown', 250, 250, 1, 0, 1, false, true);
+  vi.stubGlobal('devicePixelRatio', 2);
+  window.dispatchEvent(new Event('resize'));
+  await pointer(viewport, 'pointerup', 250, 250, 1, 0, 0, false, true);
+  expect(wrapper.emitted('inspect')).toBeUndefined();
+  expect(wrapper.emitted('region')).toBeUndefined();
 });

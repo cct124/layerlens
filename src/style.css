@@ -601,17 +601,6 @@ dd {
 .preview-viewport:active {
   cursor: grabbing;
 }
-.preview-image {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform-origin: center;
-  max-width: none;
-  user-select: none;
-  pointer-events: none;
-  box-shadow: 0 2px 12px #0008;
-  background: repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 / 16px 16px;
-}
 .canvas-message {
   position: absolute;
   inset: 0;

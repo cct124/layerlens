@@ -3,8 +3,9 @@ import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { fitZoom, initialView, locateBounds, zoomAround } from './canvasView';
 import type { CanvasView } from './canvasView';
 import type { UiCanvas, UiRect } from '../../shared/api/devGenerated';
-import { developmentInstance } from './useDevObservation';
-import type { Bounds, SelectionBounds } from '../../shared/api/generated';
+import { useCompositeCanvas } from './useCompositeCanvas';
+import { hitLayers } from './canvasInspection';
+import type { Bounds, LayerSummary, SelectionBounds } from '../../shared/api/generated';
 import {
   beginRegion,
   documentPoint,
@@ -30,59 +31,30 @@ const props = withDefaults(
     disabled: boolean;
     snapEnabled?: boolean;
     snapIndex?: SnapIndex | null;
+    inspectionLayers?: readonly LayerSummary[] | null;
+    autoSelect?: boolean;
+    inspectionBusy?: boolean;
+    selectedId?: number | null;
   }>(),
-  { snapEnabled: true, snapIndex: null },
+  {
+    snapEnabled: true,
+    snapIndex: null,
+    inspectionLayers: null,
+    autoSelect: false,
+    inspectionBusy: false,
+    selectedId: null,
+  },
 );
 const emit = defineEmits<{
   'update:view': [view: CanvasView];
-  imageError: [];
+  imageError: [message: string];
+  inspect: [id: number | null, contextKey: string];
   region: [bounds: SelectionBounds, contextKey: string];
   clearSelection: [contextKey: string];
 }>();
 const viewport = ref<HTMLElement | null>(null);
-const imageDecoded = ref(false);
-const paintPrepared = ref(false);
-const decodeError = ref<string | null>(null);
-let decodeGeneration = 0;
-let decodingGeneration: number | null = null;
-let decodeFrame: number | null = null;
-function resetDecode() {
-  decodeGeneration++;
-  decodingGeneration = null;
-  imageDecoded.value = false;
-  paintPrepared.value = false;
-  decodeError.value = null;
-  if (decodeFrame !== null) cancelAnimationFrame(decodeFrame);
-  decodeFrame = null;
-}
-function imageLoaded() {
-  if (!developmentInstance()) return;
-  const image = viewport.value?.querySelector<HTMLImageElement>('.preview-image');
-  const generation = decodeGeneration,
-    url = props.url;
-  if (!image || !url || image.getAttribute('src') !== url) return;
-  if (decodingGeneration === generation) return;
-  decodingGeneration = generation;
-  const current = () => generation === decodeGeneration && props.url === url;
-  void image
-    .decode()
-    .then(() => {
-      if (!current()) return;
-      imageDecoded.value = true;
-      decodeFrame = requestAnimationFrame(() => {
-        if (current()) {
-          paintPrepared.value = true;
-          decodeFrame = null;
-        }
-      });
-    })
-    .catch((cause: unknown) => {
-      if (current())
-        decodeError.value = (cause instanceof Error ? cause.message : String(cause)).slice(0, 160);
-    });
-}
-watch(() => props.url, resetDecode, { flush: 'sync' });
-onUnmounted(resetDecode);
+const surfaceHost = ref<HTMLDivElement | null>(null);
+const dpr = ref(window.devicePixelRatio || 1);
 const size = ref({ width: 0, height: 0 });
 const effective = computed(() =>
   props.view.mode === 'fit'
@@ -92,6 +64,58 @@ const effective = computed(() =>
       }
     : props.view,
 );
+const rendering = useCompositeCanvas(
+  surfaceHost,
+  () => ({
+    url: props.url,
+    width: props.width,
+    height: props.height,
+    viewportWidth: size.value.width,
+    viewportHeight: size.value.height,
+    dpr: dpr.value,
+    view: effective.value,
+  }),
+  (message) => emit('imageError', message),
+);
+const ctrl = ref(false);
+const candidates = shallowRef<number[]>([]);
+let candidateContext = '';
+const hover = shallowRef<Bounds | null>(null);
+const probe = shallowRef<{
+  id: number;
+  x: number;
+  y: number;
+  moved: boolean;
+  temporary: boolean;
+  contextKey: string;
+  candidates: number[];
+} | null>(null);
+const canInspect = computed(
+  () =>
+    !!props.url &&
+    rendering.value.ready &&
+    props.inspectionLayers !== null &&
+    !props.disabled &&
+    !props.inspectionBusy,
+);
+function beginInspection(event: PointerEvent) {
+  if (!canInspect.value) return;
+  probe.value = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    moved: false,
+    temporary: event.ctrlKey,
+    contextKey: props.contextKey,
+    candidates: hitLayers(props.inspectionLayers!, point(event), props.width, props.height),
+  };
+}
+function nextCandidate() {
+  if (!canInspect.value || candidateContext !== props.contextKey || candidates.value.length < 2)
+    return;
+  const current = candidates.value.indexOf(props.selectedId ?? -1);
+  emit('inspect', candidates.value[(current + 1) % candidates.value.length]!, candidateContext);
+}
 let observer: ResizeObserver | undefined;
 const drag = shallowRef<{
   id: number;
@@ -143,22 +167,36 @@ function releasePointer(id: number | undefined) {
     viewport.value.releasePointerCapture(id);
 }
 function cancel() {
-  const id = regionDrag.value?.id ?? drag.value?.id;
+  const id = regionDrag.value?.id ?? drag.value?.id ?? probe.value?.id;
   regionDrag.value = null;
   drag.value = null;
+  probe.value = null;
+  candidates.value = [];
+  candidateContext = '';
+  hover.value = null;
+  ctrl.value = false;
   drawingNew.value = false;
   releasePointer(id);
 }
 function escape(event: KeyboardEvent) {
   // 长按产生的重复事件不能把一次取消草稿升级为清空已提交范围。
   if (event.repeat || event.isComposing) return;
-  const wasDragging = !!regionDrag.value || !!drag.value;
+  const wasDragging = !!regionDrag.value || !!drag.value || !!probe.value;
   cancel();
   if (!wasDragging && props.tool === 'region' && !props.disabled)
     emit('clearSelection', props.contextKey);
 }
 watch(
-  () => [props.contextKey, props.tool, props.disabled, props.url, props.width, props.height],
+  () => [
+    props.contextKey,
+    props.tool,
+    props.disabled,
+    props.url,
+    props.width,
+    props.height,
+    props.inspectionLayers,
+    props.autoSelect,
+  ],
   cancel,
   { flush: 'sync' },
 );
@@ -166,6 +204,8 @@ watch(
   () => props.view,
   () => {
     if (regionDrag.value) cancel();
+    hover.value = null;
+    candidates.value = [];
   },
   { flush: 'sync' },
 );
@@ -185,13 +225,38 @@ function refreshSnapping() {
   regionDrag.value = { ...region, ...snapped };
 }
 function altKey(event: KeyboardEvent) {
+  if (event.key === 'Control' && !event.isComposing) {
+    ctrl.value = event.type === 'keydown';
+    if (!ctrl.value) {
+      hover.value = null;
+      if (probe.value?.temporary) {
+        const id = probe.value.id;
+        probe.value = null;
+        if (!drag.value) releasePointer(id);
+      }
+    }
+  }
   if (event.key !== 'Alt' || event.isComposing || !regionDrag.value) return;
   regionDrag.value = { ...regionDrag.value, alt: event.type === 'keydown' };
   refreshSnapping();
 }
 watch(() => props.snapEnabled, refreshSnapping, { flush: 'sync' });
+let dprQuery: MediaQueryList | undefined;
+function observeDpr() {
+  dprQuery?.removeEventListener('change', displayChanged);
+  dprQuery = window.matchMedia?.(`(resolution: ${window.devicePixelRatio}dppx)`);
+  dprQuery?.addEventListener('change', displayChanged);
+}
+function displayChanged() {
+  const next = window.devicePixelRatio || 1;
+  if (dpr.value !== next) {
+    cancel();
+    dpr.value = next;
+  }
+  observeDpr();
+}
 onMounted(() => {
-  if (viewport.value?.querySelector<HTMLImageElement>('.preview-image')?.complete) imageLoaded();
+  observeDpr();
   observer = new ResizeObserver((entries) => {
     const entry = entries[0];
     if (entry) {
@@ -203,13 +268,16 @@ onMounted(() => {
   window.addEventListener('blur', cancel);
   window.addEventListener('keydown', altKey);
   window.addEventListener('keyup', altKey);
+  window.addEventListener('resize', displayChanged);
 });
 onUnmounted(() => {
   cancel();
   observer?.disconnect();
+  dprQuery?.removeEventListener('change', displayChanged);
   window.removeEventListener('blur', cancel);
   window.removeEventListener('keydown', altKey);
   window.removeEventListener('keyup', altKey);
+  window.removeEventListener('resize', displayChanged);
 });
 function setView(view: CanvasView) {
   cancel();
@@ -232,7 +300,10 @@ function wheel(event: WheelEvent) {
 }
 function start(event: PointerEvent) {
   if (props.tool === 'region') return startRegion(event, 'create');
-  if (event.button === 0 && !regionDrag.value) startPan(event, 0);
+  if (event.button === 0 && !regionDrag.value && !drag.value) {
+    startPan(event, 0);
+    if (props.autoSelect || event.ctrlKey) beginInspection(event);
+  }
 }
 function startPan(event: PointerEvent, button: 0 | 1) {
   if (
@@ -244,6 +315,9 @@ function startPan(event: PointerEvent, button: 0 | 1) {
   event.preventDefault();
   // 同一指针从左键草稿转为中键平移时保留捕获，避免释放捕获事件取消新手势。
   regionDrag.value = null;
+  probe.value = null;
+  candidates.value = [];
+  hover.value = null;
   drawingNew.value = false;
   viewport.value.focus({ preventScroll: true });
   viewport.value.setPointerCapture(event.pointerId);
@@ -256,6 +330,25 @@ function startPan(event: PointerEvent, button: 0 | 1) {
   };
 }
 function middleDown(event: PointerEvent) {
+  // Ctrl 在区域内部及控制点也临时检查，不能触发区域移动／尺寸调整。
+  if (
+    event.button === 0 &&
+    event.ctrlKey &&
+    props.tool === 'region' &&
+    !drag.value &&
+    !regionDrag.value &&
+    !probe.value
+  ) {
+    event.stopPropagation();
+    event.preventDefault();
+    if (canInspect.value && viewport.value) {
+      viewport.value.focus({ preventScroll: true });
+      viewport.value.setPointerCapture(event.pointerId);
+      beginInspection(event);
+      ctrl.value = true;
+    }
+    return;
+  }
   if (event.button !== 1) return;
   // 在捕获阶段处理，选框内部与控制点也能发起中键平移。
   event.stopPropagation();
@@ -265,9 +358,26 @@ function preventMiddleDefault(event: MouseEvent) {
   if (event.button === 1) event.preventDefault();
 }
 function cancelPointer(event: PointerEvent) {
-  if (event.pointerId === drag.value?.id || event.pointerId === regionDrag.value?.id) cancel();
+  if (
+    event.pointerId === drag.value?.id ||
+    event.pointerId === regionDrag.value?.id ||
+    event.pointerId === probe.value?.id
+  )
+    cancel();
 }
 function move(event: PointerEvent) {
+  const inspecting = probe.value;
+  if (inspecting?.id === event.pointerId) {
+    if (event.buttons & 4) {
+      startPan(event, 1);
+      return;
+    }
+    if (
+      Math.hypot(event.clientX - inspecting.x, event.clientY - inspecting.y) >=
+      MIN_REGION_DRAG_CSS_PX
+    )
+      probe.value = { ...inspecting, moved: true };
+  }
   const pan = drag.value;
   if (pan?.id === event.pointerId) {
     // 鼠标多键组合只在最后一个键松开时派发 pointerup，按 buttons 检查中键提前松开。
@@ -275,6 +385,11 @@ function move(event: PointerEvent) {
       cancel();
       return;
     }
+    if (
+      pan.button === 0 &&
+      Math.hypot(event.clientX - pan.x, event.clientY - pan.y) < MIN_REGION_DRAG_CSS_PX
+    )
+      return;
     emit('update:view', {
       ...pan.view,
       mode: 'manual',
@@ -293,6 +408,14 @@ function move(event: PointerEvent) {
     updateDraft(event);
     return;
   }
+  if (
+    !probe.value &&
+    canInspect.value &&
+    ((props.tool === 'pan' && props.autoSelect) || event.ctrlKey)
+  ) {
+    const id = hitLayers(props.inspectionLayers!, point(event), props.width, props.height)[0];
+    hover.value = props.inspectionLayers!.find((layer) => layer.id === id)?.bounds ?? null;
+  } else hover.value = null;
 }
 function updateDraft(event: PointerEvent) {
   const region = regionDrag.value;
@@ -350,6 +473,24 @@ function startRegion(event: PointerEvent, action: RegionAction) {
   };
 }
 function end(event: PointerEvent) {
+  const inspecting = probe.value;
+  if (inspecting?.id === event.pointerId) {
+    const valid =
+      !inspecting.moved &&
+      Math.hypot(event.clientX - inspecting.x, event.clientY - inspecting.y) <
+        MIN_REGION_DRAG_CSS_PX &&
+      inspecting.contextKey === props.contextKey &&
+      canInspect.value &&
+      (!inspecting.temporary || event.ctrlKey);
+    cancel();
+    ctrl.value = event.ctrlKey;
+    if (valid) {
+      candidates.value = inspecting.candidates;
+      candidateContext = inspecting.contextKey;
+      emit('inspect', inspecting.candidates[0] ?? null, inspecting.contextKey);
+    }
+    return;
+  }
   const region = regionDrag.value;
   if (region?.id === event.pointerId) {
     updateDraft(event);
@@ -396,21 +537,49 @@ function actualSize() {
 function observation(): UiCanvas | null {
   const element = viewport.value;
   if (!element) return null;
-  const image = element.querySelector<HTMLImageElement>('.preview-image');
-  const pointerId = regionDrag.value?.id ?? drag.value?.id;
+  const pointerId = regionDrag.value?.id ?? drag.value?.id ?? probe.value?.id;
   const rect = (r: DOMRect): UiRect => ({ x: r.x, y: r.y, width: r.width, height: r.height });
+  const viewportRect = element.getBoundingClientRect();
+  const imagePoint = screenPoint(
+    { x: 0, y: 0 },
+    {
+      width: props.width,
+      height: props.height,
+      viewportWidth: viewportRect.width,
+      viewportHeight: viewportRect.height,
+      view: effective.value,
+    },
+  );
   return {
-    viewport: rect(element.getBoundingClientRect()),
-    image: image ? rect(image.getBoundingClientRect()) : null,
+    viewport: rect(viewportRect),
+    image: rendering.value.decoded
+      ? {
+          x: viewportRect.x + imagePoint.x,
+          y: viewportRect.y + imagePoint.y,
+          width: props.width * effective.value.zoom,
+          height: props.height * effective.value.zoom,
+        }
+      : null,
     documentWidth: props.width,
     documentHeight: props.height,
-    imageDecoded:
-      imageDecoded.value &&
-      !!image &&
-      image.naturalWidth === props.width &&
-      image.naturalHeight === props.height,
-    paintPrepared: paintPrepared.value,
-    imageError: decodeError.value,
+    imageDecoded: rendering.value.decoded,
+    paintPrepared: rendering.value.ready,
+    imageError: rendering.value.error,
+    surface: rendering.value.surface,
+    sceneRevision: rendering.value.generation.toString(),
+    paintedRevision: rendering.value.paintedGeneration.toString(),
+    inspection: {
+      ready: props.inspectionLayers !== null,
+      selectedLayerId: props.selectedId,
+      detailsLayerId: null,
+      treeSelectedLayerId: null,
+      filterActive: false,
+      autoSelect: props.autoSelect,
+      ctrl: ctrl.value,
+      pending: props.inspectionBusy,
+      candidateCount: candidates.value.length,
+      precision: 'bounds',
+    },
     zoom: effective.value.zoom,
     panX: effective.value.x,
     panY: effective.value.y,
@@ -438,7 +607,16 @@ defineExpose({ locate, cancel, fit, actualSize, observation });
 <template>
   <div class="preview-pane">
     <div class="canvas-controls" aria-label="选区操作">
-      <span class="preview-label">保存时合成预览</span>
+      <span class="preview-label">合成预览 · 几何边界检查</span>
+      <button
+        v-if="candidates.length > 1"
+        data-dev-target="canvas:next"
+        :disabled="!canInspect"
+        @click="nextCandidate"
+      >
+        切换重叠图层（{{ candidates.length }}）
+      </button>
+      <span v-if="ctrl" class="preview-label">Ctrl · 临时检查</span>
       <div class="region-controls">
         <span v-if="tool === 'region'" class="snap-note" :title="snapNote">{{ snapNote }}</span>
         <span v-if="tool === 'region'">{{
@@ -471,6 +649,7 @@ defineExpose({ locate, cancel, fit, actualSize, observation });
       @auxclick="preventMiddleDefault"
       @pointerdown="start"
       @pointermove="move"
+      @pointerleave="hover = null"
       @pointerup="end"
       @pointercancel="cancelPointer"
       @lostpointercapture="cancelPointer"
@@ -480,23 +659,18 @@ defineExpose({ locate, cancel, fit, actualSize, observation });
       @keydown.up.prevent="setView({ ...effective, mode: 'manual', y: effective.y - 30 })"
       @keydown.down.prevent="setView({ ...effective, mode: 'manual', y: effective.y + 30 })"
     >
-      <img
-        v-if="url"
-        :key="url"
-        class="preview-image"
-        :src="url"
-        :alt="`${name} 保存时合成预览`"
-        draggable="false"
-        :width="width"
-        :height="height"
-        :style="{
-          width: `${width}px`,
-          height: `${height}px`,
-          transform: `translate(-50%, -50%) translate(${effective.x}px, ${effective.y}px) scale(${effective.zoom})`,
-        }"
-        @error="emit('imageError')"
-        @load="imageLoaded"
-      />
+      <div
+        v-if="url && rendering.decoded"
+        class="composite-background"
+        :style="boundaryStyle({ x: 0, y: 0, width, height })"
+      ></div>
+      <div
+        ref="surfaceHost"
+        class="composite-surface"
+        role="img"
+        :aria-label="`${name} 保存时合成预览`"
+      ></div>
+      <div v-if="hover" class="hover-boundary" :style="boundaryStyle(hover)"></div>
       <div
         v-if="bounds && bounds.width > 0 && bounds.height > 0"
         class="layer-boundary"
@@ -569,6 +743,23 @@ defineExpose({ locate, cancel, fit, actualSize, observation });
 </template>
 
 <style scoped>
+.composite-surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.composite-background {
+  position: absolute;
+  pointer-events: none;
+  background: repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 / 16px 16px;
+  box-shadow: 0 2px 12px #0008;
+}
+.hover-boundary {
+  position: absolute;
+  border: 1px dashed #91b9e8;
+  pointer-events: none;
+  box-sizing: border-box;
+}
 .snap-guide {
   position: absolute;
   z-index: 3;

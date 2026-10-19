@@ -274,6 +274,11 @@ impl Driver {
                 "已有保留或结果不确定的输入，请先按 Esc 并 releaseInputs。",
             ));
         }
+        let fill_target = if matches!(&request.action, UiAction::FillLayerSearch { .. }) {
+            "layers:search"
+        } else {
+            "task:name"
+        };
         match request.action {
             UiAction::TitlebarDoubleClick {} => {
                 if !self.instance.native_windows {
@@ -314,14 +319,14 @@ impl Driver {
                 )
                 .await?;
             }
-            UiAction::FillTaskName { text } => {
+            UiAction::FillTaskName { text } | UiAction::FillLayerSearch { text } => {
                 if text.len() > 256 || text.contains(['\r', '\n', '\0']) {
                     return Err(error(
                         Code::InvalidInput,
-                        "任务名称须为单行且不超过 256 UTF-8 字节。",
+                        "字段内容须为单行且不超过 256 UTF-8 字节。",
                     ));
                 }
-                let element = self.element("task:name").await?;
+                let element = self.element(fill_target).await?;
                 self.session_command(
                     Method::POST,
                     &format!("element/{element}/click"),

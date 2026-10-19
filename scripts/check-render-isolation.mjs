@@ -25,7 +25,7 @@ async function visit(dir) {
       !(
         lab
           ? /canvaskit|leafer|\.wasm$/i
-          : /render-lab|canvaskit|leafer|konva|NotoSans|LayerLensLabCJK|\.wasm$|\.ttf$|\.otf$/i
+          : /render-lab|canvaskit|leafer|NotoSans|LayerLensLabCJK|\.wasm$|\.ttf$|\.otf$/i
       ).test(entry.name),
       '构建包含应隔离的资源：' + entry.name,
     );

@@ -26,6 +26,7 @@
     "test:dev-mcp:m2-input": "node scripts/test-dev-stability.mjs --repeat 15 --webview-suite m2-input",
     "test:dev-mcp:m2-cleanup": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-cleanup",
     "test:dev-mcp:m2-window": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-window",
+    "test:dev-mcp:canvas": "node scripts/test-dev-stability.mjs --repeat 6 --webview-suite workspace-canvas",
     "test:dev-mcp:scripts": "node --test scripts/dev-mcp-runner.test.mjs scripts/windows-powershell.test.mjs scripts/render-statistics.test.mjs scripts/render-focus.test.mjs scripts/dev-mcp-memory.test.mjs scripts/render-environment.test.mjs",
     "artifacts:dev-mcp": "node scripts/collect-dev-mcp-artifacts.mjs",
     "bindings:dev:generate": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings",
@@ -71,6 +72,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
+    "konva": "10.9.0",
     "reka-ui": "2.10.4",
     "vue": "3.5.42"
   },
@@ -86,7 +88,6 @@
     "globals": "17.12.0",
     "husky": "9.1.7",
     "jsdom": "30.0.1",
-    "konva": "10.9.0",
     "prettier": "3.9.6",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.0",

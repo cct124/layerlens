@@ -209,7 +209,9 @@ it.each([
     expect(wrapper.findAll('.document-tab')).toHaveLength(2);
     await wrapper.get('.cleanup-confirm').trigger('click');
     await flushPromises();
-    expect(wrapper.find('img[alt="design-1.psd 保存时合成预览"]').exists()).toBe(false);
+    expect(wrapper.find('[role="img"][aria-label="design-1.psd 保存时合成预览"]').exists()).toBe(
+      false,
+    );
     expect(wrapper.get('[aria-label="区域选择"]').attributes('disabled')).toBeDefined();
     oldImage.resolve(png());
     await flushPromises();
@@ -673,7 +675,7 @@ it('图层勾选经核心确认后可固定任务，关闭文档仍可查看并�
   await flushPromises();
   const button = (text: string) => wrapper!.findAll('button').find((b) => b.text() === text)!;
   expect(button('固定任务').attributes('disabled')).toBeDefined();
-  await wrapper.get('input[type=checkbox]').setValue(true);
+  await wrapper.get('.layer-tree input[type=checkbox]').setValue(true);
   await flushPromises();
   expect(wrapper.text()).toContain('包含 1 个图层');
   await button('固定任务').trigger('click');
@@ -730,6 +732,40 @@ it('停靠面板独立切换，保留搜索、任务草稿及无文档时的任�
   expect(wrapper.get('#resources-panel-tasks').isVisible()).toBe(true);
   expect(wrapper.get('.task-name input').isVisible()).toBe(true);
   expect(wrapper.get('[aria-label="区域选择"]').attributes('disabled')).toBeDefined();
+});
+
+it('画布检查等待核心确认，切换文档后迟到回执不显示旧边界或改新文档视图', async () => {
+  current = state('1', ['1', '2']);
+  const request = deferred<WorkspaceSnapshot>();
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((command, args, options) => {
+    if (
+      command === 'workspace_action' &&
+      (args as { request: { action: { kind: string } } }).request.action.kind === 'selectLayer'
+    )
+      return request.promise;
+    return base(command, args, options);
+  });
+  wrapper = mount(WorkspaceView);
+  await flushPromises();
+  const canvas = wrapper.getComponent(PreviewCanvas);
+  const context = canvas.props('contextKey');
+  canvas.vm.$emit('inspect', 0, context);
+  await flushPromises();
+  expect(canvas.props('selectedId')).toBeNull();
+  expect(canvas.props('inspectionBusy')).toBe(true);
+  const selected = state('2', ['1', '2']);
+  selected.documents[0]!.selectedLayerId = 0;
+  emit(state('3', ['1', '2'], '2'));
+  await flushPromises();
+  request.resolve(selected);
+  await flushPromises();
+  expect(wrapper.getComponent(PreviewCanvas).props('selectedId')).toBeNull();
+  expect(wrapper.getComponent(PreviewCanvas).props('contextKey')).not.toBe(context);
+  expect(wrapper.find('.layer-boundary').exists()).toBe(false);
+  expect(
+    vi.mocked(invoke).mock.calls.filter(([command]) => command === 'selection_request'),
+  ).toHaveLength(1);
 });
 
 it('工具快捷键经核心清空确认才切换，错误在图层面板下也可见；输入中不抢快捷键', async () => {
@@ -878,7 +914,7 @@ describe('只读桌面工作区', () => {
     wrapper = mount(WorkspaceView);
     await flushPromises();
     await wrapper.get('[aria-label="放大"]').trigger('click');
-    const transform = wrapper.get('img').attributes('style');
+    const transform = wrapper.getComponent(PreviewCanvas).props('view');
     const actions = () =>
       vi.mocked(invoke).mock.calls.filter((call) => call[0] === 'workspace_action');
     const before = actions().length;
@@ -886,7 +922,7 @@ describe('只读桌面工作区', () => {
     await flushPromises();
     expect(actions()).toHaveLength(before);
     expect(wrapper.findAll('.document-tab')).toHaveLength(1);
-    expect(wrapper.get('img').attributes('style')).toBe(transform);
+    expect(wrapper.getComponent(PreviewCanvas).props('view')).toEqual(transform);
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     expect((await fileMenu()).attributes('disabled')).toBeUndefined();
   });
@@ -990,7 +1026,7 @@ describe('只读桌面工作区', () => {
     emit(state('3'));
     await flushPromises();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
-    expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.find('.composite-surface').exists()).toBe(false);
   });
   it('每个文档保留自己的缩放和平移', async () => {
     current = state('1', ['1', '2'], '1');
@@ -998,13 +1034,13 @@ describe('只读桌面工作区', () => {
     await flushPromises();
     await wrapper.get('[aria-label="放大"]').trigger('click');
     await wrapper.get('[aria-label="PSD 预览画布"]').trigger('keydown', { key: 'ArrowRight' });
-    const transform = wrapper.get('img').attributes('style');
+    const transform = wrapper.getComponent(PreviewCanvas).props('view');
     emit(state('2', ['1', '2'], '2'));
     await flushPromises();
-    expect(wrapper.get('img').attributes('style')).not.toBe(transform);
+    expect(wrapper.getComponent(PreviewCanvas).props('view')).not.toEqual(transform);
     emit(state('3', ['1', '2'], '1'));
     await flushPromises();
-    expect(wrapper.get('img').attributes('style')).toBe(transform);
+    expect(wrapper.getComponent(PreviewCanvas).props('view')).toEqual(transform);
   });
   it('预览失败保留文档信息并允许重试', async () => {
     current = state('1', ['1']);

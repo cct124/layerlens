@@ -54,6 +54,9 @@ pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
         "cleanup:tasks",
         "canvas",
         "canvas:reframe",
+        "canvas:auto",
+        "canvas:next",
+        "layers:search",
         "canvas:snap",
         "range:clear",
         "range:view",
@@ -64,7 +67,7 @@ pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
         ["document", id] => valid_id(id),
         ["task", id, action] => valid_id(id) && ["view", "release", "cleanup"].contains(action),
         ["layer", id, action] => {
-            super::observation::number(id).is_ok() && ["select", "check"].contains(action)
+            super::observation::number(id).is_ok() && ["select", "check", "toggle"].contains(action)
         }
         ["handle", edge] => ["nw", "n", "ne", "e", "se", "s", "sw", "w"].contains(edge),
         _ => false,

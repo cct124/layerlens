@@ -257,7 +257,7 @@ Windows 的顶层 HWND 焦点查询不包含 WebView2 子窗口。main 的 `focu
 
 ## 逐轮显示环境观测（2026-10-19）
 
-复用 `dev_ui_state`／`dev_ui_wait` 和显式原生窗口的三个工具，工具数不增加。`UiWindow` 新增 `displayRevision`、`visible`、`canvasViewport`：同一前端挂载内实际 DPR、窗口／画布容器或页面可见性变化递增显示代次，恢复原值也保留变化；监听 DPR 媒体查询及可见性事件。它与业务选择版本无关，场景释放后画布容器仍可观测。
+复用 `dev_ui_state`／`dev_ui_wait` 和显式原生窗口的三个工具，工具数不增加。`UiWindow` 新增 `displayRevision`、`visible`、`canvasViewport`：同一前端挂载内实际 DPR、窗口／画布容器或页面可见性变化递增显示代次，恢复原值也保留变化；监听 DPR 媒体查询及可见性事件。它与业务选择版本无关；实验场景释放后容器仍在，正式工作区关闭全部文档后 `canvasViewport` 为 null。
 
 `dev_ui_wait` 的 `display` 条件接收正整数 `width`／`height`、有限 `devicePixelRatio`（0.1–16）及可空规范十进制 `afterRevision`；要求实际前端匹配尺寸／DPR，并在给出代次时严格更新。复用原前端身份、超时及最后状态保留，不依赖正式窗口按钮。
 
@@ -268,6 +268,20 @@ Konva 脚本以两次原生观测夹住前端观测，保存原生窗口尺寸�
 基线只在显式准备完成后建立，后续不可重置来抹掉异常。即使焦点或尺寸恢复，累计计数仍使原测量无效；预定多个独立进程按样本比较相同显示签名，不混入不同 DPR。环境捕获失败保存可用的部分结果与错误，不以 null 当作通过。报告记录相关运行器脚本指纹，区别同一 EXE 下的脚本变更；旧报告保留，不补写缺失字段。观测是应用事件／采样证据，不宣称连续物理屏幕监控或真实跨屏验证。
 
 `environment` 工作负载通过 MCP 真实失焦／恢复、缩放窗口／恢复验证负向检测，再从恢复后开始固定循环。该负向场景与性能矩阵分开，旧门槛和失败报告保留。通用截图运行器使用独立固定 Python 环境，GUI 前检查缺失依赖，入口见 [README](../README.md#检查与测试)。
+
+## 正式 Konva 画布观测（2026-10-19）
+
+`UiCanvas` 增加实际 `surface`、规范十进制 `sceneRevision`／`paintedRevision` 和 `inspection`。图像几何由文档坐标变换计算，绘制就绪来自真实解码及 Konva draw 后的帧确认，不再依赖 DOM img。`imageReady` 及业务 `frontendImageReady` 同时要求当前代次、实际后备像素、CSS 尺寸与窗口 DPR 一致；保留旧名称但语义更严格。
+
+- `canvasPaint` 等待固定 `documentId`／`revision` 和至少 `sceneAtLeast` 的完整绘制，可用于滚轮、布局及重载后的同步。
+- `canvasModifiers` 同时等待 `alt`／`ctrl` 实际状态及 `keyEventsAtLeast`。可信按键计数在捕获时增加，不能单独证明后续组件处理已完成；禁止用任意 `viewRevision` 变化替代指定输入完成。
+- `inspection` 等待固定文档修订、`selectedLayerId`（可空）、`autoSelect`、`ctrl`；要求完整摘要、请求结束，核心选中项与实际树行、实际属性标题一致。候选只报告数量，`precision` 首批固定为 `bounds`，不传完整私有图层名称或像素。
+- `canvas:auto`／`canvas:next` 是新增语义输入目标；Ctrl、普通点击／组合手势、真实失焦、原生尺寸调整继续复用现有受限工具，不能通过观测桥修改状态。
+- `fillLayerSearch` 经固定搜索输入框发送真实按键，只接收单行且不超过 256 UTF-8 字节的文本；`layerFilter` 等待实际过滤是否启用，报告不包含搜索原文。`layer:<id>:toggle` 只操作组的折叠按钮，用于验证树视图变化不影响画布候选。
+
+`test:dev-mcp:canvas` 串行运行 `canvas-inspection`、`canvas-display`、`canvas-memory`，默认各两个独立进程。覆盖默认开关、重叠与隐藏／透明边界、Ctrl 和任务独立、失焦取消，25%／100%／200% 合成图色块、窗口重排、重载和标签视图，以及每实例固定 20 轮打开／关闭。截图通过开发 MCP 获取，由独立预期色块校验；不等于完整 Photoshop 保真。每轮及终态环境、40 次内存采样、原门槛和失败报告保留。`canvas-sync` 仅将基线与检查各运行两次，用于输入同步修复后的定向复验，不代替显示或资源场景。
+
+正式资源循环允许关闭文档后 Canvas 为 null、随挂载改变显示代次；原生窗口尺寸／DPI／焦点累计历史仍必须固定，每次就绪的视口必须一致，不将生命周期变化当作系统显示漂移，也不把真实漂移抹掉。该样本只验证正式合成路径，不能改判历史 2000 位图层资源斜率失败。开发协议未发布，应用和运行器须同版本；DTO 由 Rust 重新生成。
 
 ## 分批实施与出口
 

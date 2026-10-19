@@ -8,6 +8,28 @@ export interface LayerTreeView {
 }
 export const initialTree = (): LayerTreeView => ({ collapsed: [], search: '', scroll: 0 });
 
+/** 画布检查确认后显露核心选中项；展开祖先并清除遮挡该项的搜索条件。 */
+export function revealLayer(
+  layers: LayerSummary[],
+  view: LayerTreeView,
+  id: number,
+): LayerTreeView {
+  const parents = new Map(layers.map((layer) => [layer.id, layer.parentId]));
+  const ancestors = new Set<number>();
+  let parent = parents.get(id);
+  while (parent !== null && parent !== undefined && !ancestors.has(parent)) {
+    ancestors.add(parent);
+    parent = parents.get(parent);
+  }
+  const next = {
+    ...view,
+    search: '',
+    collapsed: view.collapsed.filter((value) => !ancestors.has(value)),
+  };
+  const row = treeRows(layers, next).findIndex(({ layer }) => layer.id === id);
+  return { ...next, scroll: Math.max(0, row * 28 - 56) };
+}
+
 export function treeRows(layers: LayerSummary[], view: LayerTreeView) {
   const byId = new Map(layers.map((layer) => [layer.id, layer]));
   const query = view.search.trim().toLocaleLowerCase();

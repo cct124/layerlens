@@ -37,7 +37,15 @@ export async function captureDisplayEnvironment({ state, tool, args }) {
                 textMode: view.renderLab.textMode,
                 surface: view.renderLab.surface,
               }
-            : null,
+            : {
+                generation: view.canvas?.sceneRevision ?? '0',
+                paintedRevision: view.canvas?.paintedRevision ?? '0',
+                phase: view.canvas ? (view.canvas.paintPrepared ? 'ready' : 'loading') : 'released',
+                sourceSha256: null,
+                fontSha256: null,
+                textMode: 'savedComposite',
+                surface: view.canvas?.surface ?? null,
+              },
         });
       },
     ],
@@ -89,8 +97,8 @@ export function displayIssues(current, baseline = null) {
       n.physicalWidth,
       n.physicalHeight,
     ].every(positive) ||
-    !w.canvasViewport ||
-    ![w.canvasViewport.width, w.canvasViewport.height].every(positive) ||
+    (ui.render?.phase !== 'released' &&
+      (!w.canvasViewport || ![w.canvasViewport.width, w.canvasViewport.height].every(positive))) ||
     ![
       w.displayRevision,
       w.blurEvents,

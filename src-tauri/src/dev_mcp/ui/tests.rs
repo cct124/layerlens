@@ -410,6 +410,27 @@ fn canvas_observation() -> UiObservation {
         image_decoded: true,
         paint_prepared: true,
         image_error: None,
+        surface: Some(UiRenderSurface {
+            width: 100,
+            height: 80,
+            css_width: 100.0,
+            css_height: 80.0,
+            configured_dpr: 1.0,
+        }),
+        scene_revision: "1".into(),
+        painted_revision: "1".into(),
+        inspection: UiCanvasInspection {
+            ready: true,
+            selected_layer_id: None,
+            details_layer_id: None,
+            tree_selected_layer_id: None,
+            filter_active: false,
+            auto_select: false,
+            ctrl: false,
+            pending: false,
+            candidate_count: 0,
+            precision: "bounds".into(),
+        },
         zoom: 1.0,
         pan_x: 0.0,
         pan_y: 0.0,
@@ -422,6 +443,55 @@ fn canvas_observation() -> UiObservation {
         snap_y: None,
     });
     view
+}
+#[test]
+fn production_canvas_ready_requires_current_paint_surface_and_dpr() {
+    let mut view = canvas_observation();
+    let c = view.canvas.as_mut().unwrap();
+    assert!(c.painted(1.0));
+    assert!(!c.painted(2.0));
+    c.scene_revision = "2".into();
+    assert!(!c.painted(1.0));
+    c.painted_revision = "2".into();
+    c.surface.as_mut().unwrap().width = 200;
+    assert!(!c.painted(1.0));
+    c.surface.as_mut().unwrap().width = 100;
+    c.image_error = Some("decode failed".into());
+    assert!(!c.painted(1.0));
+}
+#[tokio::test]
+async fn modifier_wait_does_not_accept_key_delivery_with_old_component_state() {
+    let state = Observations::default();
+    let mut view = canvas_observation();
+    view.input.key_events = "2".into();
+    view.canvas.as_mut().unwrap().alt = true;
+    state.publish("instance", view.clone()).unwrap();
+    let request = UiWaitRequest {
+        frontend_id: Some(view.frontend_id.clone()),
+        timeout_ms: 1,
+        condition: UiCondition::CanvasModifiers {
+            alt: false,
+            ctrl: false,
+            key_events_at_least: "2".into(),
+        },
+    };
+    assert!(
+        !state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    view.canvas.as_mut().unwrap().alt = false;
+    view.view_revision = "2".into();
+    state.publish("instance", view).unwrap();
+    assert!(
+        state
+            .wait(request, &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
 }
 #[test]
 fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
@@ -450,6 +520,60 @@ fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
     view.cleanup.opened = false;
     view.canvas.as_mut().unwrap().image_decoded = false;
     assert!(super::driver::validate_scroll(&view, 10, 20, 1).is_err());
+}
+
+#[tokio::test]
+async fn inspection_wait_requires_core_tree_properties_and_current_document() {
+    let state = Observations::default();
+    let mut view = canvas_observation();
+    view.active_document = Some(UiDocument {
+        id: "1".into(),
+        revision: "2".into(),
+    });
+    view.canvas.as_mut().unwrap().inspection.selected_layer_id = Some(3);
+    let request = UiWaitRequest {
+        frontend_id: Some(view.frontend_id.clone()),
+        timeout_ms: 1,
+        condition: UiCondition::Inspection {
+            document_id: "1".into(),
+            revision: "2".into(),
+            selected_layer_id: Some(3),
+            auto_select: false,
+            ctrl: false,
+        },
+    };
+    state.publish("instance", view.clone()).unwrap();
+    assert!(
+        !state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    let inspection = &mut view.canvas.as_mut().unwrap().inspection;
+    inspection.tree_selected_layer_id = Some(3);
+    inspection.details_layer_id = Some(3);
+    view.view_revision = "2".into();
+    state.publish("instance", view.clone()).unwrap();
+    assert!(
+        state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    view.active_document.as_mut().unwrap().revision = "4".into();
+    view.view_revision = "3".into();
+    state.publish("instance", view).unwrap();
+    assert!(
+        !state
+            .wait(request, &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    assert!(targets::selector("canvas:auto").is_ok());
+    assert!(targets::selector("canvas:next").is_ok());
 }
 
 #[test]

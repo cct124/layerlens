@@ -51,6 +51,21 @@ fn surface(value: &UiRenderSurface) -> bool {
         && value.configured_dpr.is_finite()
         && (0.1..=16.0).contains(&value.configured_dpr)
 }
+impl UiCanvas {
+    pub(crate) fn painted(&self, dpr: f64) -> bool {
+        self.image_decoded
+            && self.paint_prepared
+            && self.image_error.is_none()
+            && self.scene_revision == self.painted_revision
+            && self.surface.as_ref().is_some_and(|s| {
+                (s.configured_dpr - dpr).abs() < 0.000001
+                    && (s.css_width - self.viewport.width).abs() <= 1.0
+                    && (s.css_height - self.viewport.height).abs() <= 1.0
+                    && (f64::from(s.width) - (s.css_width * dpr).floor()).abs() <= 1.0
+                    && (f64::from(s.height) - (s.css_height * dpr).floor()).abs() <= 1.0
+            })
+    }
+}
 impl Observations {
     pub(crate) fn subscribe(&self) -> tokio::sync::watch::Receiver<Option<Arc<UiObservation>>> {
         self.latest.subscribe()
@@ -167,6 +182,10 @@ impl Observations {
             || value.region.as_ref().is_some_and(|r| !rect(r))
             || value.canvas.as_ref().is_some_and(|c| {
                 !rect(&c.viewport)
+                    || c.surface.as_ref().is_some_and(|s| !surface(s))
+                    || c.inspection.precision != "bounds"
+                    || c.inspection.candidate_count > 100_000
+                    || c.image_error.as_ref().is_some_and(|s| s.len() > 1024)
                     || c.image.as_ref().is_some_and(|r| !rect(r))
                     || c.draft.as_ref().is_some_and(|r| !rect(r))
                     || !c.zoom.is_finite()
@@ -183,6 +202,11 @@ impl Observations {
             })
         {
             return Err(error(Code::InvalidInput, "前端报告超出有效范围。"));
+        }
+        if let Some(canvas) = &value.canvas
+            && number(&canvas.painted_revision)? > number(&canvas.scene_revision)?
+        {
+            return Err(error(Code::InvalidInput, "绘制确认不能超出场景代次。"));
         }
         let epoch = number(&value.document_epoch)?;
         let revision = number(&value.view_revision)?;
@@ -276,6 +300,32 @@ impl Observations {
 impl UiCondition {
     fn validate(&self) -> Result<(), WorkspaceError> {
         let valid = match self {
+            Self::CanvasModifiers {
+                key_events_at_least,
+                ..
+            } => {
+                number(key_events_at_least)?;
+                true
+            }
+            Self::CanvasPaint {
+                document_id,
+                revision,
+                scene_at_least,
+            } => {
+                number(document_id)?;
+                number(revision)?;
+                number(scene_at_least)?;
+                true
+            }
+            Self::Inspection {
+                document_id,
+                revision,
+                ..
+            } => {
+                number(document_id)?;
+                number(revision)?;
+                true
+            }
             Self::Renderer {
                 engine,
                 phase,
@@ -373,6 +423,21 @@ impl UiCondition {
     }
     fn matches(&self, value: &UiObservation) -> bool {
         match self {
+            Self::CanvasModifiers {
+                alt,
+                ctrl,
+                key_events_at_least,
+            } => {
+                value
+                    .canvas
+                    .as_ref()
+                    .is_some_and(|c| c.alt == *alt && c.inspection.ctrl == *ctrl)
+                    && number(&value.input.key_events).ok() >= number(key_events_at_least).ok()
+            }
+            Self::LayerFilter { active } => value
+                .canvas
+                .as_ref()
+                .is_some_and(|c| c.inspection.filter_active == *active),
             Self::Display {
                 width,
                 height,
@@ -384,6 +449,41 @@ impl UiCondition {
                     && (value.window.device_pixel_ratio - device_pixel_ratio).abs() < 0.000001
                     && after_revision.as_ref().is_none_or(|after| {
                         number(&value.window.display_revision).ok() > number(after).ok()
+                    })
+            }
+            Self::CanvasPaint {
+                document_id,
+                revision,
+                scene_at_least,
+            } => {
+                value
+                    .active_document
+                    .as_ref()
+                    .is_some_and(|d| &d.id == document_id && &d.revision == revision)
+                    && value.canvas.as_ref().is_some_and(|c| {
+                        c.painted(value.window.device_pixel_ratio)
+                            && number(&c.painted_revision).ok() >= number(scene_at_least).ok()
+                    })
+            }
+            Self::Inspection {
+                document_id,
+                revision,
+                selected_layer_id,
+                auto_select,
+                ctrl,
+            } => {
+                value
+                    .active_document
+                    .as_ref()
+                    .is_some_and(|d| &d.id == document_id && &d.revision == revision)
+                    && value.canvas.as_ref().is_some_and(|c| {
+                        c.inspection.ready
+                            && !c.inspection.pending
+                            && c.inspection.selected_layer_id == *selected_layer_id
+                            && c.inspection.details_layer_id == *selected_layer_id
+                            && c.inspection.tree_selected_layer_id == *selected_layer_id
+                            && c.inspection.auto_select == *auto_select
+                            && c.inspection.ctrl == *ctrl
                     })
             }
             Self::RenderInteraction {
@@ -453,7 +553,7 @@ impl UiCondition {
                     && value
                         .canvas
                         .as_ref()
-                        .is_some_and(|c| c.image_decoded && c.paint_prepared)
+                        .is_some_and(|c| c.painted(value.window.device_pixel_ratio))
             }
             Self::Panel { panel } => &value.panel == panel,
             Self::Tool {

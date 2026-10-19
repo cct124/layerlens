@@ -20,7 +20,8 @@ import type { WorkspaceMenu, WorkspaceMenuCommand } from './workspaceMenu';
 import { workspaceShortcut } from './workspaceShortcuts';
 import './inspection.css';
 import { useLayers } from './useLayers';
-import { initialTree } from './layerTree';
+import { initialTree, revealLayer } from './layerTree';
+import { inspectionLayers } from './canvasInspection';
 import type { LayerTreeView } from './layerTree';
 import { initialView } from './canvasView';
 import type { CanvasView } from './canvasView';
@@ -75,6 +76,9 @@ const {
   reload: reloadLayers,
 } = useLayers(active);
 const snapEnabled = ref(true);
+const autoSelect = ref(false);
+const inspectionPending = ref(false);
+const hitIndex = computed(() => inspectionLayers(layersComplete.value ? layers.value : null));
 const snapIndex = computed(() =>
   active.value
     ? buildSnapIndex(
@@ -204,15 +208,36 @@ function cleanTaskDocument(task: TaskDto) {
 const selectedBounds = computed(
   () => layers.value.find((layer) => layer.id === active.value?.selectedLayerId)?.bounds ?? null,
 );
-function selectLayer(layerId: number | null) {
+async function selectLayer(layerId: number | null, reveal = false) {
+  if (!active.value || inspectionPending.value || toolsBusy.value) return;
+  const document = active.value;
+  const context = selectionContext.value;
   inspectorTab.value = 'properties';
-  if (active.value)
-    void act({
+  inspectionPending.value = true;
+  try {
+    await act({
       kind: 'selectLayer',
-      documentId: active.value.id,
-      revision: active.value.revision,
+      documentId: document.id,
+      revision: document.revision,
       layerId,
     });
+    if (
+      reveal &&
+      layerId !== null &&
+      context === selectionContext.value &&
+      active.value?.selectedLayerId === layerId
+    ) {
+      const tree = trees.get(document.id);
+      if (tree) tree.view = revealLayer(layers.value, tree.view, layerId);
+      resourceTab.value = 'layers';
+    }
+  } finally {
+    inspectionPending.value = false;
+  }
+}
+function inspectCanvas(layerId: number | null, contextKey: string) {
+  if (selectionContext.value === contextKey && layersComplete.value)
+    void selectLayer(layerId, true);
 }
 watch(
   snapshot,
@@ -309,8 +334,17 @@ useDevObservation(() => ({
       <WorkspaceIcon :name="tool === 'pan' ? 'move' : 'region'" />
       <strong>{{ tool === 'pan' ? '移动工具' : '区域选择' }}</strong>
       <span class="tool-help">{{
-        tool === 'pan' ? '拖动画布 · 滚轮缩放' : '左键框选 / 调整 · 中键平移 · Esc 清空'
+        tool === 'pan'
+          ? '拖动画布 · Ctrl 点击检查图层'
+          : '左键框选 / 调整 · 中键平移 · Ctrl 点击检查'
       }}</span>
+      <label
+        v-if="tool === 'pan'"
+        class="snap-toggle"
+        title="按几何边界检查图层，透明区域可能命中；不加入任务范围"
+      >
+        <input v-model="autoSelect" data-dev-target="canvas:auto" type="checkbox" />自动选择图层
+      </label>
       <label
         v-if="tool === 'region'"
         class="snap-toggle"
@@ -424,11 +458,16 @@ useDevObservation(() => ({
               :tool="tool"
               :snap-enabled="snapEnabled"
               :snap-index="snapIndex"
+              :inspection-layers="hitIndex"
+              :selected-id="active.selectedLayerId"
+              :auto-select="autoSelect"
+              :inspection-busy="inspectionPending"
               :region="snapshot?.selection.region ?? null"
               :context-key="selectionContext"
               :disabled="selection.busy || !!snapshot?.shuttingDown || picking"
               @update:view="views.set(active.id, $event)"
               @region="commitRegion"
+              @inspect="inspectCanvas"
               @clear-selection="clearCanvasSelection"
               @image-error="imageFailed"
             >

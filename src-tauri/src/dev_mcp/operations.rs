@@ -195,7 +195,7 @@ pub(super) async fn wait(
                     && view
                         .canvas
                         .as_ref()
-                        .is_some_and(|c| c.image_decoded && c.paint_prepared)
+                        .is_some_and(|c| c.painted(view.window.device_pixel_ratio))
             }),
             _ => request.condition.matches(&last)?,
         };

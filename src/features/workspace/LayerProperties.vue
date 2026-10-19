@@ -27,7 +27,7 @@ async function copy(text: string) {
       <span>在下方点击图层名称，查看位置、尺寸和文字样式。勾选框仅用于选择任务范围。</span>
     </div>
     <template v-else>
-      <h3>{{ details.layer.name || '（空名称）' }}</h3>
+      <h3 :data-inspected-layer="details.layer.id">{{ details.layer.name || '（空名称）' }}</h3>
       <p v-if="details.layer.nameTruncated" class="subtle">名称显示前 256 个字符。</p>
       <dl class="property-facts">
         <dt>类型</dt>

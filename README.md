@@ -93,6 +93,7 @@ npm run test:dev-mcp:m2     # 独立实例验证基线、三种缩放几何及�
 npm run test:dev-mcp:m2-input # 中键、组合手势和吸附边界各重复 5 次
 npm run test:dev-mcp:m2-cleanup # 128 项清理、过期、恢复及迟到结果各重复 5 次
 npm run test:dev-mcp:m2-window # 窗口控制、真实失焦、菜单焦点及正常退出各重复 5 次
+npm run test:dev-mcp:canvas # 正式 Konva 检查、显示与 20 轮生命周期场景，各 2 个独立实例
 npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
 npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
 ```
@@ -100,6 +101,8 @@ npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；�
 上述 npm 入口可从 Windows PowerShell 5.1 或 PowerShell 7 启动。调用 5.1 的子进程会独立重建模块搜索路径，避免继承 PowerShell 7 的 `PSModulePath` 导致哈希／签名校验命令不可用；不修改用户或系统环境，脚本失败仍返回非零退出码。
 
 套件默认先检查一次普通 release，再执行 5 轮业务／WebView 配对并行测试；允许 `--repeat 2` 至 `20`，不自动重试失败。`--app` 默认 `target/debug/layerlens.exe`，`--release-app` 默认 `target/release/layerlens.exe`；`--environment` 默认读取 `.local/dev-mcp/driver-preparation.json`，仅为测试子进程固定运行时。结果写入 `.local/dev-mcp/stability-*/summary.json`、`summary.md` 和逐次 `runs/` 目录。没有结果、实例重复、超时或退出后残留均不能通过。
+
+正式画布套件串行执行三个场景。2026-10-19 本机显示与检查同步已通过，两个完整 20 轮实例仍超过原定内存增长斜率门槛；门槛保留，不能将本批视为资源验收通过。仅复验输入同步可用 `node scripts/test-dev-stability.mjs --webview-suite canvas-sync --repeat 4`，基线和检查各两个实例；它不替代完整画布套件。实际构建模式、原始失败和证据见 [RENDER-04](devlog/_plan/261019/RENDER-04-Konva正式工作区接入.md)。
 
 产物收集默认扫描 `.local/dev-mcp` 下已知回归目录；可用 `-- --source .local/dev-mcp/stability-本次目录` 限定一套结果。默认创建独立 `artifacts-*/files/`，也可用 `--output` 指定尚不存在的目标。只收集报告、日志与指定截图，生成 SHA-256 清单；连接文件、配置、profile、PSD 和驱动不进入副本。CI 在成功／失败后均尝试收集并上传，保留 14 天；本机原始运行目录保留到开发者自行清理。
 
@@ -141,13 +144,13 @@ npm run test:dev-mcp:desktop -- --app target/release/layerlens.exe --expect-disa
 
 ## Konva 渲染验证
 
-正式接入方案见 [Konva 工作区接入](docs/10-Konva工作区接入.md)，本批仅完成设计与测试准备，正式画布仍使用合成预览。`npm run check:render-lab` 统一检查 Rust 渲染特性、场景 DTO 与隔离前端构建，并纳入 Windows CI。
+正式接入方案见 [Konva 工作区接入](docs/10-Konva工作区接入.md)，正式画布已由 Konva 显示保存时合成预览并支持直接检查图层。完整图层重绘和资源稳定性仍待验收。`npm run check:render-lab` 统一检查 Rust 渲染特性、场景 DTO 与隔离前端构建，并纳入 Windows CI。
 
 逐轮环境回归：`npm run test:konva -- --workload environment --cases path-100 --repeat 1`，先按下文生成 corpus、准备驱动并构建验证程序。该用例通过原生 MCP 切换焦点／尺寸并恢复，再完成 3 轮加载／释放；报告保留预期负向识别与成功终态，不代表跨屏实测。其他 Konva 工作负载在固定循环和绘制前后记录显示环境，检查实际窗口 DPR 与 Canvas backing store。终态缺失、观察到的中途变化或跨进程条件不一致均失败，不自动重试。
 
 2026-10-17 用户已选定 **Konva** 作为正式工作区的 Canvas 渲染框架，依据与接入边界见[当前渲染决策](docs/09-渲染器对比实验.md#当前选型决定2026-10-17)。实验代码和关键证据已在本机备份；当前只保留 Konva 验证窗口、Rust 场景／资源、开发测试 MCP 及有效回归，Leafer／CanvasKit 源码与依赖、多引擎选择和对比调度已移除。清理与验证记录见 [RENDER-03](devlog/_fin/261017/RENDER-03-选型实验清理与Konva验证收敛.md)。固定清理回归 6／7 项通过；tab-1 的诊断流程完成，但热绘制 P95 50.5 ms 超过原定 50 ms 门槛，失败报告保留，未重试。
 
-历史实验见 [RENDER-01](devlog/_fin/261016/RENDER-01-渲染器对比实验.md) 和 [RENDER-02](devlog/_fin/261016/RENDER-02-tab-1真实大稿对比.md)：大稿诊断交互通过，完整视觉与资源验收未通过，原结论和失败记录保留。正式接入待实施，普通工作区仍使用合成图预览。Konva 验证窗口提供实色路径、固定中英文字体、透明位图、简单蒙版、共享／原生排版及检查选择；真实字体、复杂效果与完整 Photoshop 保真按样本验收。
+历史实验见 [RENDER-01](devlog/_fin/261016/RENDER-01-渲染器对比实验.md) 和 [RENDER-02](devlog/_fin/261016/RENDER-02-tab-1真实大稿对比.md)：大稿诊断交互通过，完整视觉与资源验收未通过，原结论和失败记录保留。正式工作区已使用 Konva 显示保存时合成图，新增默认关闭的自动选择、Ctrl 临时检查和重叠候选切换；选择由核心确认，树与属性同步，任务范围不变。当前为几何边界命中，透明孔可能命中；合成图放大仍是位图，不代表高清文字重绘。验证进展见 [RENDER-04](devlog/_plan/261019/RENDER-04-Konva正式工作区接入.md)。Konva 验证窗口继续提供实色路径、固定中英文字体、透明位图、简单蒙版、共享／原生排版及检查选择；真实字体、复杂效果与完整 Photoshop 保真按样本验收。
 
 ```powershell
 npm run bindings:render:generate
@@ -159,7 +162,7 @@ npm run test:render-lab
 
 稳定性入口复用已有普通 release 作为开发入口关闭检查，每轮串行业务和 Konva 场景，共 3 轮；首次执行先按上文构建普通 release。单轮可用 `npm run test:dev-mcp:webview -- --scenario render-lab --driver <msedgedriver.exe>`，附加 `--visible` 显示验证窗口。所有输入经测试 MCP；测试结束自动正常退出。报告和 100%／200%／400% 截图保留在 `.local/dev-mcp/`，使用产物收集器保留白名单副本。
 
-验证构建沿用 `render-lab` Rust feature 和单独的 `tauri.render-lab.conf.json`／Vite mode，产物为 `dist-render-lab/`。仅显式 `renderLab: true` 的开发配置加载专属页面并授予场景读取权限；普通构建检查不含验证入口、引擎或字体，验证构建也检查无 Leafer／CanvasKit／WASM，CSP 已移除 WASM 执行许可。`bindings:render:check` 检查契约，`test:render-lab:core` 检查真实 PSD 数据和预算；本地功能报告不等同于远端 CI。
+验证构建沿用 `render-lab` Rust feature 和单独的 `tauri.render-lab.conf.json`／Vite mode，产物为 `dist-render-lab/`。仅显式 `renderLab: true` 的开发配置加载专属页面并授予场景读取权限；普通构建允许正式 Konva，检查不含验证入口、实验资源或字体，验证构建也检查无 Leafer／CanvasKit／WASM，CSP 已移除 WASM 执行许可。`bindings:render:check` 检查契约，`test:render-lab:core` 检查真实 PSD 数据和预算；本地功能报告不等同于远端 CI。
 
 规模及排版回归入口：
 
@@ -209,7 +212,7 @@ npm run test:konva -- --app target/release/layerlens.exe --project-source .local
 python scripts/test-dev-capture.py
 ```
 
-`project` 分别记录严格场景和源图层诊断，`project-memory` 每实例固定 20 轮及 60 秒自然空闲观察。大截图通过 `dev_ui_capture` 的同一捕获分块传输并验证 RGBA 指纹，不提高单张 MCP 图像的 512 KiB 限制。`completedWithLimitations` 仅表示诊断套件完成，`fullSceneAccepted=false` 时不能宣称完整 PSD 保真；额度及证据要求见[大稿边界](docs/09-渲染器对比实验.md#真实大稿补测边界)。当前内存脚本尚未逐轮断言 DPR／视口／焦点；RENDER-02 已发现显示环境变化，补齐这项观测与回归前不能将该入口作为产品资源稳定性验收。清理不重跑已结束的选型矩阵，也不改变原门槛与失败结论。
+`project` 分别记录严格场景和源图层诊断，`project-memory` 每实例固定 20 轮及 60 秒自然空闲观察。大截图通过 `dev_ui_capture` 的同一捕获分块传输并验证 RGBA 指纹，不提高单张 MCP 图像的 512 KiB 限制。`completedWithLimitations` 仅表示诊断套件完成，`fullSceneAccepted=false` 时不能宣称完整 PSD 保真；额度及证据要求见[大稿边界](docs/09-渲染器对比实验.md#真实大稿补测边界)。当前脚本已接逐轮及终态 DPR／视口／焦点观测；RENDER-02 的历史环境缺口和失败仍保留，不能据此补判旧实验或宣称产品资源稳定。清理不重跑已结束的选型矩阵，也不改变原门槛与失败结论。
 
 `check-konva-project.py` 分别报告 `capturesComplete` 与 `functionalPassed`；截图齐全不会覆盖功能／性能失败，`fullSceneAccepted` 始终保持诊断限制。对已有报告复核可加 `--output <尚不存在的JSON路径>`，只读取原报告和截图并另存结果，保留原始失败证据。
 

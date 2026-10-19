@@ -91,6 +91,18 @@ export function useDevObservation(project: () => Projection) {
       const dialog = document.querySelector('dialog[open].cleanup-dialog');
       const list = dialog?.querySelector('.cleanup-tasks');
       const projection = project();
+      const inspectedId = (selector: string) => {
+        const value = document.querySelector<HTMLElement>(selector)?.dataset.inspectedLayer;
+        return value !== undefined && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : null;
+      };
+      if (projection.canvas && !projection.renderLab) {
+        projection.canvas.inspection = {
+          ...projection.canvas.inspection,
+          detailsLayerId: inspectedId('.layer-properties [data-inspected-layer]'),
+          treeSelectedLayerId: inspectedId('.tree-row[data-inspected-layer]'),
+          filterActive: !!document.querySelector<HTMLInputElement>('.layer-search')?.value.trim(),
+        };
+      }
       const bounds = (element: Element) => {
         const { x, y, width, height } = element.getBoundingClientRect();
         return { x, y, width, height };
@@ -219,7 +231,14 @@ export function useDevObservation(project: () => Projection) {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ['open', 'aria-expanded', 'aria-selected', 'aria-label', 'disabled'],
+      attributeFilter: [
+        'open',
+        'aria-expanded',
+        'aria-selected',
+        'aria-label',
+        'disabled',
+        'data-inspected-layer',
+      ],
     });
     document.addEventListener('pointerdown', pointer, true);
     document.addEventListener('pointermove', pointer, true);

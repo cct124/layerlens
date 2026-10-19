@@ -6,6 +6,7 @@ import {
   displayIssues,
   displaySignature,
 } from './dev-mcp-render-environment.mjs';
+import { recordWorkspaceEnvironment } from './dev-mcp-workspace-canvas.mjs';
 
 function fixture() {
   const native = {
@@ -124,4 +125,36 @@ test('固定循环保留全部样本，失败终态不覆盖成功历史且不�
   assert.equal(report.displayEnvironment.valid, false);
   assert.equal(report.displayEnvironment.terminal.label, 'terminal-failure');
   assert.equal(report.displayEnvironment.terminal.ui.window.displayRevision, '2');
+});
+
+test('正式画布释放无表面是有效状态，但原生历史变化仍保存失败末态', async () => {
+  const current = fixture();
+  const view = {
+    ...current.ui,
+    canvas: {
+      sceneRevision: '1',
+      paintedRevision: '1',
+      paintPrepared: true,
+      surface: current.ui.render.surface,
+    },
+    renderLab: null,
+  };
+  const report = { scenario: 'canvas-memory' };
+  const context = {
+    report,
+    args: (x) => x,
+    state: async () => view,
+    tool: async () => ({ value: { ...current.nativeAfter } }),
+  };
+  await recordWorkspaceEnvironment(context, 'ready', 0);
+  view.canvas = null;
+  view.window.canvasViewport = null;
+  await recordWorkspaceEnvironment(context, 'released', 0);
+  current.nativeAfter.resizeEvents = '2';
+  await assert.rejects(
+    recordWorkspaceEnvironment(context, 'terminal-failure', null, true),
+    /workspace-window-history-changed/,
+  );
+  assert.equal(report.workspaceEnvironment.samples.length, 3);
+  assert.equal(report.workspaceEnvironment.terminal.valid, false);
 });

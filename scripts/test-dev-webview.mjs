@@ -20,9 +20,13 @@ import { exerciseRenderBenchmark } from './dev-mcp-render-benchmark.mjs';
 import { exerciseRenderAcceptance } from './dev-mcp-render-acceptance.mjs';
 import { exerciseRenderProject } from './dev-mcp-render-project.mjs';
 import { captureTiled } from './dev-mcp-capture.mjs';
-import { checkDevPython } from './dev-python.mjs';
+import { checkDevPython, runDevPython } from './dev-python.mjs';
 import { createDisplayGuard } from './dev-mcp-render-environment.mjs';
 import { exerciseDisplayEnvironment } from './dev-mcp-display-webview.mjs';
+import {
+  exerciseWorkspaceCanvas,
+  recordWorkspaceEnvironment,
+} from './dev-mcp-workspace-canvas.mjs';
 
 const { values: options } = parseArgs({
   options: {
@@ -42,6 +46,9 @@ assert.equal(process.platform, 'win32', '当前真实 WebView 回归仅验证 Wi
 assert(
   [
     'baseline',
+    'canvas-inspection',
+    'canvas-display',
+    'canvas-memory',
     'render-lab',
     'render-benchmark',
     'geometry-25',
@@ -76,6 +83,7 @@ const runs = path.join(run, 'instances');
 await mkdir(runs);
 const isBenchmark = options.scenario === 'render-benchmark';
 const isRender = options.scenario.startsWith('render-');
+const isWorkspaceCanvas = options.scenario.startsWith('canvas-');
 assert(!options['sample-root'] || isBenchmark);
 assert(!options.sample || isBenchmark);
 assert(
@@ -100,7 +108,9 @@ const sampleRoot = path.resolve(
 const samples = isBenchmark
   ? [options.sample ?? 'render-simple.psd']
   : [
-      options.scenario === 'render-lab' ? 'render-simple.psd' : 'viewer-scale.psd',
+      options.scenario === 'render-lab' || isWorkspaceCanvas
+        ? 'render-simple.psd'
+        : 'viewer-scale.psd',
       'bitmap-rle.psd',
     ];
 assert(samples.every((name) => path.basename(name) === name && name.endsWith('.psd')));
@@ -147,6 +157,12 @@ const report = {
       [
         'test-dev-webview.mjs',
         'dev-mcp-display-webview.mjs',
+        'dev-mcp-workspace-canvas.mjs',
+        'dev-mcp-m2-webview.mjs',
+        'dev-mcp-input-webview.mjs',
+        'dev-mcp-cleanup-webview.mjs',
+        'dev-mcp-window-webview.mjs',
+        'check-composite-capture.py',
         'dev-mcp-render-environment.mjs',
         'dev-mcp-render-acceptance.mjs',
         'dev-mcp-render-benchmark.mjs',
@@ -456,9 +472,13 @@ try {
     JSON.stringify({
       sampleRoot,
       runRoot: runs,
-      visible: options.visible || isBenchmark || options.scenario.startsWith('window-'),
+      visible:
+        options.visible ||
+        isBenchmark ||
+        isWorkspaceCanvas ||
+        options.scenario.startsWith('window-'),
       webDriverUrl: endpoint,
-      nativeWindows: isBenchmark || options.scenario.startsWith('window-'),
+      nativeWindows: isBenchmark || isWorkspaceCanvas || options.scenario.startsWith('window-'),
       renderLab: isRender,
       largeRender: options['render-large'],
     }),
@@ -493,7 +513,8 @@ try {
   assert.equal(info.instanceId, connection.instanceId);
   report.instanceId = info.instanceId;
   report.buildProfile = info.buildProfile;
-  const expectedTools = isBenchmark || options.scenario.startsWith('window-') ? 20 : 17;
+  const expectedTools =
+    isBenchmark || isWorkspaceCanvas || options.scenario.startsWith('window-') ? 20 : 17;
   assert.equal((await rpc('tools/list', {})).tools.length, expectedTools);
   let view = await wait({ kind: 'ready' });
   frontend = view.frontendId;
@@ -534,7 +555,7 @@ try {
     view.canvas.documentWidth,
     isBenchmark
       ? sourceHeader.readUInt32BE(18)
-      : options.scenario === 'render-lab'
+      : options.scenario === 'render-lab' || isWorkspaceCanvas
         ? 480
         : options.scenario.startsWith('cleanup')
           ? 4
@@ -544,13 +565,56 @@ try {
     view.canvas.documentHeight,
     isBenchmark
       ? sourceHeader.readUInt32BE(14)
-      : options.scenario === 'render-lab'
+      : options.scenario === 'render-lab' || isWorkspaceCanvas
         ? 320
         : options.scenario.startsWith('cleanup')
           ? 3
           : 128,
   );
-  if (isBenchmark) {
+  if (isWorkspaceCanvas) {
+    await exerciseWorkspaceCanvas({
+      scenario: options.scenario,
+      state,
+      core,
+      wait,
+      waitCore,
+      action,
+      click,
+      key,
+      point,
+      selection,
+      workspace,
+      tool,
+      args,
+      report,
+      screenshot,
+      document: a,
+      checkpoint: async () =>
+        writeFile(
+          path.join(run, 'report-progress.json'),
+          redact(JSON.stringify(report, null, 2), [connection?.token]),
+        ),
+      verifyComposite: async (name, view) => {
+        let evidence;
+        try {
+          evidence = runDevPython(
+            [path.join(root, 'scripts/check-composite-capture.py'), path.join(run, name)],
+            {
+              cwd: root,
+              windowsHide: true,
+              encoding: 'utf8',
+              input: JSON.stringify({ canvas: view.canvas, dpr: view.window.devicePixelRatio }),
+            },
+          );
+        } catch (cause) {
+          if (cause.stdout?.length)
+            (report.visualChecks ??= []).push({ name, ...JSON.parse(cause.stdout.toString()) });
+          throw cause;
+        }
+        (report.visualChecks ??= []).push({ name, ...JSON.parse(evidence) });
+      },
+    });
+  } else if (isBenchmark) {
     await (
       options['render-workload'] === 'environment'
         ? exerciseDisplayEnvironment
@@ -663,15 +727,19 @@ try {
     assert(Math.abs(view.canvas.draft.y + view.canvas.draft.height - 40) < 0.01);
     let keyResult = await key('alt', 'down');
     view = await wait({
-      kind: 'viewRevision',
-      atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
+      kind: 'canvasModifiers',
+      alt: true,
+      ctrl: false,
+      keyEventsAtLeast: (BigInt(keyResult.value.before.input.keyEvents) + 1n).toString(),
     });
     assert.equal(view.canvas.alt, true);
     assert.equal(view.canvas.snapGuides, 0);
     keyResult = await key('alt', 'up');
     view = await wait({
-      kind: 'viewRevision',
-      atLeast: (BigInt(keyResult.value.before.viewRevision) + 1n).toString(),
+      kind: 'canvasModifiers',
+      alt: false,
+      ctrl: false,
+      keyEventsAtLeast: (BigInt(keyResult.value.before.input.keyEvents) + 1n).toString(),
     });
     assert.equal(view.canvas.alt, false);
     assert.equal(view.canvas.snapGuides, 2);
@@ -909,6 +977,8 @@ try {
   report.finalView = await state();
   report.finalCore = await core();
   if (display) await display.finish('success');
+  if (isWorkspaceCanvas)
+    await recordWorkspaceEnvironment({ state, tool, args, report }, 'terminal-success', null, true);
   assert.deepEqual(
     await Promise.all(samples.map((s) => hash(path.join(sampleRoot, s)))),
     sourceHashes,
@@ -936,6 +1006,24 @@ try {
   report.phase = 'complete';
 } catch (error) {
   report.error = error.stack ?? String(error);
+  if (isWorkspaceCanvas && frontend) {
+    try {
+      report.failureView = await state();
+      report.failureCore = await core();
+    } catch (cause) {
+      report.failureStateError = String(cause);
+    }
+    try {
+      await recordWorkspaceEnvironment(
+        { state, tool, args, report },
+        'terminal-failure',
+        null,
+        true,
+      );
+    } catch (cause) {
+      report.workspaceTerminalError = String(cause);
+    }
+  }
   if (display) {
     try {
       await display.finish('failure');

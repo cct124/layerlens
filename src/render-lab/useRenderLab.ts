@@ -522,6 +522,30 @@ export function useRenderLab() {
               imageDecoded: status.fontReady,
               paintPrepared: status.phase === 'ready',
               imageError: status.error,
+              sceneRevision: status.generation,
+              paintedRevision: status.phase === 'ready' ? status.generation : '0',
+              surface:
+                canvas && canvasBounds
+                  ? {
+                      width: canvas.width,
+                      height: canvas.height,
+                      cssWidth: canvasBounds.width,
+                      cssHeight: canvasBounds.height,
+                      configuredDpr: view.dpr,
+                    }
+                  : null,
+              inspection: {
+                ready: status.phase === 'ready',
+                selectedLayerId: active.value?.selectedLayerId ?? null,
+                detailsLayerId: null,
+                treeSelectedLayerId: null,
+                filterActive: false,
+                autoSelect: status.autoSelect,
+                ctrl: status.ctrl,
+                pending: selecting.value,
+                candidateCount: status.candidateIds.length,
+                precision: 'bounds',
+              },
               zoom: view.zoom,
               panX: view.panX,
               panY: view.panY,

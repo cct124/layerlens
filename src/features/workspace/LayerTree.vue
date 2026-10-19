@@ -103,6 +103,7 @@ watch(
     </div>
     <input
       class="layer-search"
+      data-dev-target="layers:search"
       aria-label="搜索图层"
       placeholder="搜索图层名称"
       :value="view.search"
@@ -121,6 +122,7 @@ watch(
             'in-range': rangeIds.includes(row.layer.id),
           }"
           role="treeitem"
+          :data-inspected-layer="selected === row.layer.id ? row.layer.id : undefined"
           :aria-level="row.depth + 1"
           :aria-selected="selected === row.layer.id"
           :aria-expanded="
@@ -138,6 +140,7 @@ watch(
           <button
             v-if="row.layer.kind === 'group'"
             class="tree-toggle"
+            :data-dev-target="`layer:${row.layer.id}:toggle`"
             :aria-label="`${view.collapsed.includes(row.layer.id) ? '展开' : '折叠'} ${row.layer.name}`"
             @click="toggle(row.layer.id)"
           >

@@ -6,7 +6,9 @@ export type UiDocument = { id: string, revision: string, };
 
 export type UiSnapTarget = { position: number, layerId: number | null, };
 
-export type UiCanvas = { viewport: UiRect, image: UiRect | null, documentWidth: number, documentHeight: number, imageDecoded: boolean, paintPrepared: boolean, imageError: string | null, zoom: number, panX: number, panY: number, panning: boolean, pointerCaptured: boolean, draft: UiRect | null, alt: boolean, snapGuides: number, snapX: UiSnapTarget | null, snapY: UiSnapTarget | null, };
+export type UiCanvas = { viewport: UiRect, image: UiRect | null, documentWidth: number, documentHeight: number, imageDecoded: boolean, paintPrepared: boolean, imageError: string | null, surface: UiRenderSurface | null, sceneRevision: string, paintedRevision: string, inspection: UiCanvasInspection, zoom: number, panX: number, panY: number, panning: boolean, pointerCaptured: boolean, draft: UiRect | null, alt: boolean, snapGuides: number, snapX: UiSnapTarget | null, snapY: UiSnapTarget | null, };
+
+export type UiCanvasInspection = { ready: boolean, selectedLayerId: number | null, detailsLayerId: number | null, treeSelectedLayerId: number | null, filterActive: boolean, autoSelect: boolean, ctrl: boolean, pending: boolean, candidateCount: number, precision: string, };
 
 export type UiTask = { id: string, status: string, snapshotId: string, };
 

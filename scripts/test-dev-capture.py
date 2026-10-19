@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 from PIL import Image
 
@@ -12,6 +14,27 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 class CaptureTests(unittest.TestCase):
+    def test_composite_reference_rejects_wrong_pixels(self):
+        with tempfile.TemporaryDirectory(prefix="layerlens-composite-") as temporary:
+            file = Path(temporary) / "sample.png"
+            image = Image.new("RGB", (480, 320), (248, 249, 252))
+            from PIL import ImageDraw
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((24, 170, 173, 274), fill=(40, 115, 210))
+            draw.rectangle((125, 215, 254, 279), fill=(32, 175, 135))
+            draw.rectangle((48, 190, 127, 253), fill=(240, 105, 50))
+            draw.rectangle((72, 206, 103, 237), fill=(40, 115, 210))
+            view = {"dpr": 1, "canvas": {"image": {"x": 0, "y": 0}, "zoom": 1,
+                    "viewport": {"x": 0, "y": 0, "width": 480, "height": 320}}}
+            for wrong in [False, True]:
+                if wrong:
+                    image.putpixel((85, 220), (0, 0, 0))
+                image.save(file)
+                result = subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("check-composite-capture.py")), str(file)],
+                                        input=json.dumps(view), text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 1 if wrong else 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["passed"], not wrong)
+
     def test_integrity_and_rejection(self):
         with tempfile.TemporaryDirectory(prefix='layerlens-capture-') as temporary:
             directory=Path(temporary)

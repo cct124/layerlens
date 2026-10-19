@@ -19,6 +19,7 @@ fn main() -> io::Result<()> {
         UiDocument::decl(&config),
         UiSnapTarget::decl(&config),
         UiCanvas::decl(&config),
+        UiCanvasInspection::decl(&config),
         UiTask::decl(&config),
         UiCleanup::decl(&config),
         UiContent::decl(&config),

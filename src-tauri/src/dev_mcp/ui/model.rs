@@ -32,6 +32,10 @@ pub(crate) struct UiCanvas {
     pub image_decoded: bool,
     pub paint_prepared: bool,
     pub image_error: Option<String>,
+    pub surface: Option<UiRenderSurface>,
+    pub scene_revision: String,
+    pub painted_revision: String,
+    pub inspection: UiCanvasInspection,
     pub zoom: f64,
     pub pan_x: f64,
     pub pan_y: f64,
@@ -42,6 +46,22 @@ pub(crate) struct UiCanvas {
     pub snap_guides: u32,
     pub snap_x: Option<UiSnapTarget>,
     pub snap_y: Option<UiSnapTarget>,
+}
+
+/// 正式画布检查投影；选中项来自核心，候选只统计数量以保持报告有界。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiCanvasInspection {
+    pub ready: bool,
+    pub selected_layer_id: Option<u32>,
+    pub details_layer_id: Option<u32>,
+    pub tree_selected_layer_id: Option<u32>,
+    pub filter_active: bool,
+    pub auto_select: bool,
+    pub ctrl: bool,
+    pub pending: bool,
+    pub candidate_count: u32,
+    pub precision: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -176,6 +196,9 @@ pub(crate) enum UiAction {
     FillTaskName {
         text: String,
     },
+    FillLayerSearch {
+        text: String,
+    },
     /// 同一次 W3C Actions 完成左键拖动；坐标为 viewport CSS 像素且限定画布内。
     /// hold 仅用于观察草稿后 Esc 取消，再调用 releaseInputs；提交使用 hold=false。
     Drag {
@@ -291,6 +314,28 @@ pub(crate) struct InputResult {
     deny_unknown_fields
 )]
 pub(crate) enum UiCondition {
+    /// 输入计数和组件修饰键状态必须同时满足，避免匹配传播尚未完成的观测。
+    CanvasModifiers {
+        alt: bool,
+        ctrl: bool,
+        key_events_at_least: String,
+    },
+    LayerFilter {
+        active: bool,
+    },
+    /// 真实正式画布绘制就绪，不以输入派发完成或解码完成替代。
+    CanvasPaint {
+        document_id: String,
+        revision: String,
+        scene_at_least: String,
+    },
+    Inspection {
+        document_id: String,
+        revision: String,
+        selected_layer_id: Option<u32>,
+        auto_select: bool,
+        ctrl: bool,
+    },
     Renderer {
         engine: String,
         phase: String,
