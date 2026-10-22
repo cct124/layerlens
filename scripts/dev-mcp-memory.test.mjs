@@ -29,6 +29,21 @@ test('身份错误的原始采样保留，但不生成有效总和', () => {
   assert.deepEqual(retained[0].processes, metrics.processes);
   assert.deepEqual(retained[0].errors, metrics.errors);
 });
+
+test('进程角色只分解同一总量，未知角色仍计费且不混称 GPU 显存', () => {
+  const metrics = sample();
+  metrics.processes[1].webviewKind = 'gpu';
+  metrics.processes.push({
+    processId: 13,
+    role: 'webview',
+    webviewKind: 'new-role',
+    privateBytes: 50,
+    workingSetBytes: 60,
+  });
+  const retained = [];
+  assert.equal(recordMemorySample(retained, metrics, 10, {}), 450);
+  assert.deepEqual(retained[0].privateBytesByKind, { application: 100, gpu: 300, unknown: 50 });
+});
 test('错误根进程、缺少 WebView 和不可用内存均拒绝', () => {
   for (const change of [
     (m) => {

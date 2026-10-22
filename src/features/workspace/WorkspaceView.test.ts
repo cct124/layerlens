@@ -16,6 +16,7 @@ import type {
 import WorkspaceView from './WorkspaceView.vue';
 import PreviewCanvas from './PreviewCanvas.vue';
 import { mockNativeDialog } from '../../test/nativeDialog';
+import { readPreviewResources } from './previewResources';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
@@ -1003,6 +1004,7 @@ describe('只读桌面工作区', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('通知无效');
   });
   it('图像串行读取，切换后丢弃旧结果并在关闭时撤销 URL', async () => {
+    const resourcesBefore = readPreviewResources();
     const old = deferred<ArrayBuffer>();
     current = state('1', ['1']);
     const base = vi.mocked(invoke).getMockImplementation()!;
@@ -1017,9 +1019,11 @@ describe('只读桌面工作区', () => {
     emit(state('2', ['1', '2'], '2'));
     await flushPromises();
     expect(vi.mocked(invoke).mock.calls.filter((c) => c[0] === 'read_preview')).toHaveLength(1);
+    expect(readPreviewResources().reads.live).toBe(resourcesBefore.reads.live + 1);
     old.resolve(png());
     await flushPromises();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(readPreviewResources().objectUrls.live).toBe(resourcesBefore.objectUrls.live + 1);
     expect(invoke).toHaveBeenCalledWith('read_preview', {
       request: { protocolVersion: 1, documentId: '2', revision: '2' },
     });
@@ -1027,6 +1031,8 @@ describe('只读桌面工作区', () => {
     await flushPromises();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
     expect(wrapper.find('.composite-surface').exists()).toBe(false);
+    expect(readPreviewResources().reads.live).toBe(resourcesBefore.reads.live);
+    expect(readPreviewResources().objectUrls.live).toBe(resourcesBefore.objectUrls.live);
   });
   it('每个文档保留自己的缩放和平移', async () => {
     current = state('1', ['1', '2'], '1');
@@ -1059,6 +1065,7 @@ describe('只读桌面工作区', () => {
     });
   });
   it('订阅失败可重连，销毁后移除监听且丢弃晚到图像', async () => {
+    const resourcesBefore = readPreviewResources();
     vi.mocked(listen).mockRejectedValueOnce(new Error('连接中断'));
     wrapper = mount(WorkspaceView);
     await flushPromises();
@@ -1073,9 +1080,12 @@ describe('只读桌面工作区', () => {
     await flushPromises();
     wrapper.unmount();
     wrapper = undefined;
+    expect(readPreviewResources().reads.live).toBe(resourcesBefore.reads.live + 1);
     image.resolve(png());
     await flushPromises();
     expect(stop).toHaveBeenCalledOnce();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(readPreviewResources().reads.live).toBe(resourcesBefore.reads.live);
+    expect(readPreviewResources().objectUrls.live).toBe(resourcesBefore.objectUrls.live);
   });
 });

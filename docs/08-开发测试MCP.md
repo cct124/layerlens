@@ -155,6 +155,7 @@ CI 的收集与上传步骤使用 `always()`，测试准备或运行失败后仍
 
 - `dev_instance.buildProfile` 由 Rust 的 `debug_assertions` 给出 `debug`／`release`，报告不能从文件名推断构建模式。
 - `dev_process_metrics` 接受身份封装内的空 `request`，不接受 PID、路径或脚本；通过固定 `sysinfo 0.35.1` 的安全 API 读取本实例与 WebView 后代，返回 PID／父 PID／秒级创建时间、工作集及私有提交量。只启用 Windows 的可选 `system` 功能，MIT 许可证；正式构建无此直接依赖，保留全仓库 `unsafe_code = "forbid"`。跨进程工作集包含重复共享页；私有提交量不是私有 RSS，离散快照不是峰值或 GPU 显存。
+- `webviewKind` 从已核验的本实例后代启动标志识别 browser／renderer／gpu／utility，无法读取、冲突或不支持的标志保留 unknown，应用进程为 null。保持原 `role` 字段和计费总量；不返回原始参数、路径或命令行。它描述进程类型，不能把 GPU 进程私有提交量称为显存。
 - `canvasGesture.steps` 增加 `moveTimed { x, y, durationMs }`，单步时长 1–100 ms；首步仍须为普通 `move`，全部坐标／步骤在派发前校验，最多 32 步。普通 `move` 的 100 ms 行为不变。W3C 时长是请求值，实际调度必须用前端观测核对。
 - 语义目标保留 `render:shared`／`render:native`、`render:clear-metrics`。PNG 只在 MCP 显式采集时编码，不进入连续平移。
 - `renderLab` 保留读取、字体／图片准备、首次就绪、排版模式、原生／共享文字层数、未绘制层数、命中／核心选层耗时与最近 60 项绘制样本；移除仅 CanvasKit 填充的 `textLines`。沿用 32 KiB 观测限额。同步绘制采用公共 Canvas 读回屏障；平移样本明确标记 `synchronized=false`，不将其 API 提交耗时冒充 GPU／屏幕完成。
@@ -279,9 +280,17 @@ Konva 脚本以两次原生观测夹住前端观测，保存原生窗口尺寸�
 - `canvas:auto`／`canvas:next` 是新增语义输入目标；Ctrl、普通点击／组合手势、真实失焦、原生尺寸调整继续复用现有受限工具，不能通过观测桥修改状态。
 - `fillLayerSearch` 经固定搜索输入框发送真实按键，只接收单行且不超过 256 UTF-8 字节的文本；`layerFilter` 等待实际过滤是否启用，报告不包含搜索原文。`layer:<id>:toggle` 只操作组的折叠按钮，用于验证树视图变化不影响画布候选。
 
-`test:dev-mcp:canvas` 串行运行 `canvas-inspection`、`canvas-display`、`canvas-memory`，默认各两个独立进程。覆盖默认开关、重叠与隐藏／透明边界、Ctrl 和任务独立、失焦取消，25%／100%／200% 合成图色块、窗口重排、重载和标签视图，以及每实例固定 20 轮打开／关闭。截图通过开发 MCP 获取，由独立预期色块校验；不等于完整 Photoshop 保真。每轮及终态环境、40 次内存采样、原门槛和失败报告保留。`canvas-sync` 仅将基线与检查各运行两次，用于输入同步修复后的定向复验，不代替显示或资源场景。
+`test:dev-mcp:canvas` 串行运行 `canvas-inspection`、`canvas-display`，默认各两个独立进程。覆盖默认开关、重叠与隐藏／透明边界、Ctrl 和任务独立、失焦取消，25%／100%／200% 合成图色块、窗口重排、重载和标签视图。截图通过开发 MCP 获取，由独立预期色块校验；不等于完整 Photoshop 保真。`canvas-sync` 仅将基线与检查各运行两次，用于输入同步修复后的定向复验，不代替显示或资源场景。
+
+`test:dev-mcp:canvas-resources` 使用 `canvas-resources` 套件，三个独立 release 实例，各固定 20 轮打开／关闭；`canvas-memory` 本身拒绝 debug。`build:dev-mcp:release` 复用 Cargo 缓存并在成功／失败后恢复已有普通 release，测试 EXE 独立保存在 `target/dev-mcp-release/`，CI 复用相同入口。每轮保存耗时、原时机的 40 次内存及资源观测，之后在 0／10／30／60 秒保存自然空闲曲线；原门槛先计算并保留，空闲回落不能改判循环失败，无强制 GC。
+
+`previewResources` 在无活动 Canvas 时仍报告：绘制器、Stage、Image、Blob URL、预览读取、decode 和应用 RAF 各自的 created／released／live；来自真实取得／释放路径，不保留被观测对象。异步读取／decode 直到实际完成才释放计数，组件销毁不提前归零。另记录 DOM 中正式 Canvas 数量和后备像素数，不代表所有离屏表面、JS 堆、浏览器缓存或显存。`previewReleased {atLeast}` 同时要求核心序号满足、无活动文档／Canvas、所有应用拥有资源及 DOM 表面归零；格式不一致的计数拒绝。观测仅供诊断，资源门槛仍使用 OS 私有提交量。
 
 正式资源循环允许关闭文档后 Canvas 为 null、随挂载改变显示代次；原生窗口尺寸／DPI／焦点累计历史仍必须固定，每次就绪的视口必须一致，不将生命周期变化当作系统显示漂移，也不把真实漂移抹掉。该样本只验证正式合成路径，不能改判历史 2000 位图层资源斜率失败。开发协议未发布，应用和运行器须同版本；DTO 由 Rust 重新生成。
+
+## 虚拟机执行环境
+
+可通过 SSH 使用已有 Windows 虚拟机运行开发测试 MCP；界面测试使用已登录的交互桌面，性能单独建立基线。使用约定见 [README](../README.md#通过-ssh-在虚拟机中测试)。
 
 ## 分批实施与出口
 

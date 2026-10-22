@@ -2,6 +2,7 @@ import { onScopeDispose, ref, watch } from 'vue';
 import type { Ref } from 'vue';
 import type { WorkspacePreview } from '../../shared/api/generated';
 import { readPreview, workspaceMessage } from '../../shared/api/workspace';
+import { ownPreviewResource } from './previewResources';
 
 /** 串行读取 PNG，只持有当前 Blob URL；切换、关闭和销毁立即撤销旧图像。 */
 export function usePreview(preview: Readonly<Ref<WorkspacePreview | null>>) {
@@ -13,8 +14,11 @@ export function usePreview(preview: Readonly<Ref<WorkspacePreview | null>>) {
   let generation = 0;
   let wanted: { documentId: string; revision: string } | null = null;
   let attempted = -1;
+  let releaseUrl: (() => void) | null = null;
   function release() {
     if (url.value) URL.revokeObjectURL(url.value);
+    releaseUrl?.();
+    releaseUrl = null;
     url.value = null;
   }
   async function pump() {
@@ -24,13 +28,17 @@ export function usePreview(preview: Readonly<Ref<WorkspacePreview | null>>) {
     const target = wanted;
     const current = generation;
     attempted = current;
+    const finishRead = ownPreviewResource('reads');
     try {
       const bytes = await readPreview(target.documentId, target.revision);
-      if (!disposed && current === generation)
+      if (!disposed && current === generation) {
         url.value = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+        releaseUrl = ownPreviewResource('objectUrls');
+      }
     } catch (cause: unknown) {
       if (!disposed && current === generation) error.value = workspaceMessage(cause);
     } finally {
+      finishRead();
       running = false;
       if (!disposed) {
         loading.value = false;

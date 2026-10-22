@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { useDevObservation } from './useDevObservation';
+import { ownPreviewResource } from './previewResources';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 const active: ReturnType<typeof mount>[] = [];
 function setup(checkDom = false) {
@@ -62,6 +63,21 @@ afterEach(() => {
   vi.mocked(invoke).mockReset();
 });
 describe('开发观测生命周期', () => {
+  it('无活动 Canvas 时仍报告在途资源，实际释放后独立唤醒观测', async () => {
+    window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };
+    setup();
+    await flushPromises();
+    const before = window.__LAYERLENS_DEV_VIEW__!.read()!.previewResources.decodes;
+    const release = ownPreviewResource('decodes');
+    await flushPromises();
+    expect(window.__LAYERLENS_DEV_VIEW__!.read()!.previewResources.decodes.live).toBe(
+      before.live + 1,
+    );
+    release();
+    release();
+    await flushPromises();
+    expect(window.__LAYERLENS_DEV_VIEW__!.read()!.previewResources.decodes.live).toBe(before.live);
+  });
   it('DPR 独立变化和恢复递增显示代次，卸载释放媒体查询监听', async () => {
     window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };
     vi.mocked(invoke).mockResolvedValue(undefined);

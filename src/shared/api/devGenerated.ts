@@ -10,6 +10,10 @@ export type UiCanvas = { viewport: UiRect, image: UiRect | null, documentWidth: 
 
 export type UiCanvasInspection = { ready: boolean, selectedLayerId: number | null, detailsLayerId: number | null, treeSelectedLayerId: number | null, filterActive: boolean, autoSelect: boolean, ctrl: boolean, pending: boolean, candidateCount: number, precision: string, };
 
+export type UiResourceCount = { created: number, released: number, live: number, };
+
+export type UiPreviewResources = { renderers: UiResourceCount, stages: UiResourceCount, images: UiResourceCount, objectUrls: UiResourceCount, reads: UiResourceCount, decodes: UiResourceCount, frames: UiResourceCount, canvasElements: number, canvasPixels: number, };
+
 export type UiTask = { id: string, status: string, snapshotId: string, };
 
 export type UiCleanup = { opened: boolean, phase: string | null, planId: string | null, taskIds: Array<string>, syncing: boolean, syncError: boolean, pending: boolean, renderedTasks: number, scrollable: boolean, scrolledToEnd: boolean, focusInside: boolean, };
@@ -36,7 +40,7 @@ export type UiRenderLab = { surface: UiRenderSurface | null, engine: string, pha
 
 export type UiRenderSample = { generation: string, operation: string, submitMs: number, readyMs: number, readbackMs: number, synchronized: boolean, frameIntervalMs: number | null, inputToReadyMs: number | null, };
 
-export type UiObservation = { renderLab: UiRenderLab | null, instanceId: string, frontendId: string,
+export type UiObservation = { previewResources: UiPreviewResources, renderLab: UiRenderLab | null, instanceId: string, frontendId: string,
 /**
  * 前端挂载时 timeOrigin + now 的微秒整数，用于丢弃旧挂载或旧页面迟到报告。
  */

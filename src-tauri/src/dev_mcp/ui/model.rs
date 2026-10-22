@@ -138,9 +138,33 @@ pub(crate) struct UiWindow {
     pub controls: Vec<UiWindowControl>,
 }
 
+/// 仅计应用拥有的资源，不代表 GC 存活数、浏览器缓存或 GPU 内存。
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiResourceCount {
+    pub created: u32,
+    pub released: u32,
+    pub live: u32,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiPreviewResources {
+    pub renderers: UiResourceCount,
+    pub stages: UiResourceCount,
+    pub images: UiResourceCount,
+    pub object_urls: UiResourceCount,
+    pub reads: UiResourceCount,
+    pub decodes: UiResourceCount,
+    pub frames: UiResourceCount,
+    pub canvas_elements: u32,
+    pub canvas_pixels: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiObservation {
+    pub preview_resources: UiPreviewResources,
     #[serde(default)]
     pub render_lab: Option<UiRenderLab>,
     pub instance_id: String,
@@ -314,6 +338,10 @@ pub(crate) struct InputResult {
     deny_unknown_fields
 )]
 pub(crate) enum UiCondition {
+    /// 等待空工作区真实释放应用拥有的前端预览资源，不执行 GC。
+    PreviewReleased {
+        at_least: String,
+    },
     /// 输入计数和组件修饰键状态必须同时满足，避免匹配传播尚未完成的观测。
     CanvasModifiers {
         alt: bool,

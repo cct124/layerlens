@@ -104,7 +104,7 @@
 
 专项代码直接依赖已锁定候选，完全位于 `.local/psd-tab-1/probe/`，用于区别正式核心限制与候选能力。探索模式关闭 `strict` 与 `throw_for_missing_features` 仅用于发现可读取内容，不能视为生产修复。正式源码、默认预算及拒绝行为均保持本轮测试前状态。统计仅输出数量、偏移、指纹及限制，不记录设计文字和图层名称。
 
-运行环境为 Windows 11 x64（10.0.26200）、AMD Ryzen 9 7945HX、物理内存约 31.69 GiB，debug 构建。元数据探索解析约 112 ms，进程峰值约 440 MiB；合成预览读取＋解析／解码约 2.63 s，PNG 编码约 2.23 s，包含诊断统计的探针总计约 6.10 s、峰值约 547 MiB；5 项原始通道抽样总计约 2.24 s、峰值约 564 MiB。峰值取 Windows 进程 `PeakWorkingSet64` 的 25 ms 轮询观察值，独立进程设 45 s／900 MiB 终止阈值，均未触发。原文件已被先前测试读取，未清空或控制系统缓存，以上是单次探索记录，不是冷启动、release 或 UI 性能承诺。
+运行环境为 Windows 11 x64，debug 构建。元数据探索解析约 112 ms，进程峰值约 440 MiB；合成预览读取＋解析／解码约 2.63 s，PNG 编码约 2.23 s，包含诊断统计的探针总计约 6.10 s、峰值约 547 MiB；5 项原始通道抽样总计约 2.24 s、峰值约 564 MiB。峰值取 Windows 进程 `PeakWorkingSet64` 的 25 ms 轮询观察值，独立进程设 45 s／900 MiB 终止阈值，均未触发。原文件已被先前测试读取，未清空或控制系统缓存，以上是单次探索记录，不是冷启动、release 或 UI 性能承诺。
 
 独立 Python/Pillow 验证器按行解码原文件合成 RLE，耗时约 1.42 s、峰值约 184 MiB。所有 alpha 和不透明 RGB 与候选 PNG 完全一致；半透明位置每个 RGB 通道有 4,736 个原始值差异，候选执行了白色底色去除，仍需 Photoshop 参考确认。缩略图已人工检查可展示完整多画板内容；未有独立 Photoshop 导出参考，不能宣称视觉完全一致。
 
@@ -172,7 +172,7 @@ cargo run --locked -p layerlens-core --example inspect_psd -- .local/psd-samples
 
 本批在 `eb209d3` 加当前未提交修改上执行，完成测量入口、重复资源基线、失败保护和导出限制汇总。正式测量与编译／测试分开运行；早期功能 smoke 与编译重叠，其数值未纳入基线。代码入口为 [measurement.rs](../../../crates/layerlens-core/src/psd/measurement.rs)、[CLI 会话](../../../crates/layerlens-core/examples/inspect_psd/benchmark.rs)和 [Windows 测量脚本](../../../scripts/measure-psd.ps1)。
 
-测量环境：2026-09-17 16:27–16:29（Asia/Shanghai），Windows 11 专业版 10.0.26200 x64、AMD Ryzen 9 7945HX（32 逻辑处理器）、物理内存 34,024,747,008 字节（约 31.69 GiB），PowerShell 5.1.26100.9444、Rust 1.96.0／`x86_64-pc-windows-msvc`。所有正式成功案例使用同一 release 可执行文件，无自定义 Rust flags：
+测量环境：2026-09-17，Windows 11 x64、PowerShell 5.1、Rust 1.96.0／`x86_64-pc-windows-msvc`。所有正式成功案例使用同一 release 可执行文件，无自定义 Rust flags：
 
 - Git 基准：`eb209d39415d07547795bde365c9e7fa5c2c0c45`，`dirtyWorktree=true`。
 - `Cargo.lock` SHA-256：`a602050834bc9981b51d421f278176a458b0a27668e6d8a22f21b592822db696`。
@@ -339,7 +339,7 @@ DIFF、contacts、coming-soon 分别读取到 31／55／12 个文字层、66／1
 
 #### release 性能与释放
 
-正式测量于 2026-09-17 17:38–17:39（Asia/Shanghai）串行执行，与编译／测试分开。Windows 11 专业版 10.0.26200 x64，Ryzen 9 7945HX／32 逻辑处理器，内存 34,024,747,008 字节，PowerShell 5.1.26100.9444，Rust 1.96.0 MSVC。4 次会话均为 `cargo build --locked --release -p layerlens-core --example inspect_psd`，无额外 Rust flags：
+正式测量于 2026-09-17 串行执行，与编译／测试分开。环境为 Windows 11 x64、PowerShell 5.1、Rust 1.96.0 MSVC。4 次会话均为 `cargo build --locked --release -p layerlens-core --example inspect_psd`，无额外 Rust flags：
 
 - 基准 `60c96b89f28fe887655bb7d3d25b6cf27a815c71` 加当前未提交修改。
 - 可执行文件 SHA-256 `006fff8bfd8d63e16a6487b44c701d25a1dc29d4125895ef4af8a0c424dfd18a`。

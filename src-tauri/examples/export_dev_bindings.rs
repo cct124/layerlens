@@ -20,6 +20,8 @@ fn main() -> io::Result<()> {
         UiSnapTarget::decl(&config),
         UiCanvas::decl(&config),
         UiCanvasInspection::decl(&config),
+        UiResourceCount::decl(&config),
+        UiPreviewResources::decl(&config),
         UiTask::decl(&config),
         UiCleanup::decl(&config),
         UiContent::decl(&config),

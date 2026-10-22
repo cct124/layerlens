@@ -66,6 +66,33 @@ impl UiCanvas {
             })
     }
 }
+impl UiPreviewResources {
+    fn counts(&self) -> [&UiResourceCount; 7] {
+        [
+            &self.renderers,
+            &self.stages,
+            &self.images,
+            &self.object_urls,
+            &self.reads,
+            &self.decodes,
+            &self.frames,
+        ]
+    }
+    fn valid(&self) -> bool {
+        self.canvas_elements <= 128
+            && self.canvas_pixels <= 67_108_864
+            && self.counts().iter().all(|c| {
+                c.created <= 1_000_000_000
+                    && c.released <= c.created
+                    && c.live == c.created - c.released
+            })
+    }
+    fn released(&self) -> bool {
+        self.canvas_elements == 0
+            && self.canvas_pixels == 0
+            && self.counts().iter().all(|c| c.live == 0)
+    }
+}
 impl Observations {
     pub(crate) fn subscribe(&self) -> tokio::sync::watch::Receiver<Option<Arc<UiObservation>>> {
         self.latest.subscribe()
@@ -153,6 +180,7 @@ impl Observations {
                     .flatten()
                     .any(|n| !n.is_finite() || *n < 0.0)
             })
+            || !value.preview_resources.valid()
             || value.cleanup.task_ids.len() > 128
             || value.cleanup.rendered_tasks > 128
             || !["pan", "region"].contains(&value.tool.as_str())
@@ -335,7 +363,9 @@ impl UiCondition {
                 engine == "konva"
                     && ["idle", "loading", "ready", "error", "released"].contains(&phase.as_str())
             }
-            Self::Applied { at_least } | Self::ViewRevision { at_least } => {
+            Self::Applied { at_least }
+            | Self::ViewRevision { at_least }
+            | Self::PreviewReleased { at_least } => {
                 number(at_least)?;
                 true
             }
@@ -423,6 +453,16 @@ impl UiCondition {
     }
     fn matches(&self, value: &UiObservation) -> bool {
         match self {
+            Self::PreviewReleased { at_least } => {
+                value.render_lab.is_none()
+                    && value.active_document.is_none()
+                    && value.canvas.is_none()
+                    && value
+                        .core_sequence
+                        .as_ref()
+                        .is_some_and(|s| number(s).ok() >= number(at_least).ok())
+                    && value.preview_resources.released()
+            }
             Self::CanvasModifiers {
                 alt,
                 ctrl,

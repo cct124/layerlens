@@ -1,6 +1,7 @@
 import { nextTick, onMounted, onScopeDispose, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { UiObservation } from '../../shared/api/devGenerated';
+import { previewResourceVersion, readPreviewResources } from './previewResources';
 
 type Projection = Omit<
   UiObservation,
@@ -14,6 +15,7 @@ type Projection = Omit<
   | 'cleanup'
   | 'window'
   | 'renderLab'
+  | 'previewResources'
 > & {
   renderLab?: UiObservation['renderLab'];
   cleanup: Omit<
@@ -123,6 +125,7 @@ export function useDevObservation(project: () => Projection) {
       }
       const value = {
         ...projection,
+        previewResources: readPreviewResources(),
         renderLab: projection.renderLab ?? null,
         cleanup: {
           ...projection.cleanup,
@@ -226,6 +229,7 @@ export function useDevObservation(project: () => Projection) {
     });
     Object.defineProperty(window, '__LAYERLENS_DEV_VIEW__', { value: bridge, configurable: true });
     const unwatch = watch(project, schedule, { deep: true, flush: 'post' });
+    const unwatchResources = watch(previewResourceVersion, schedule, { flush: 'post' });
     const observer = new MutationObserver(schedule);
     observer.observe(document.body, {
       subtree: true,
@@ -271,6 +275,7 @@ export function useDevObservation(project: () => Projection) {
       disposed = true;
       pending = null;
       unwatch();
+      unwatchResources();
       observer.disconnect();
       document.removeEventListener('pointerdown', pointer, true);
       document.removeEventListener('pointermove', pointer, true);

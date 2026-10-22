@@ -116,9 +116,14 @@ jobs:
       - name: Repeat M2 native window focus and shutdown scenarios five times each
         timeout-minutes: 15
         run: npm run test:dev-mcp:m2-window
-      - name: Verify production Konva canvas inspection display and lifecycle
+      - name: Verify production Konva canvas inspection and display
         timeout-minutes: 10
         run: npm run test:dev-mcp:canvas
+      - name: Build release development application preserving production binary
+        run: npm run build:dev-mcp:release
+      - name: Verify release canvas resources with three fixed independent instances
+        timeout-minutes: 10
+        run: npm run test:dev-mcp:canvas-resources
       - name: Build isolated Konva application with reproducible fixtures
         # 普通开发构建已覆盖正式 Konva 工作区，实验验证另行构建。
         run: |

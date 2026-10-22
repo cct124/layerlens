@@ -158,6 +158,9 @@ const report = {
         'test-dev-webview.mjs',
         'dev-mcp-display-webview.mjs',
         'dev-mcp-workspace-canvas.mjs',
+        'dev-mcp-workspace-memory.mjs',
+        'dev-mcp-memory.mjs',
+        'render-statistics.mjs',
         'dev-mcp-m2-webview.mjs',
         'dev-mcp-input-webview.mjs',
         'dev-mcp-cleanup-webview.mjs',
@@ -513,6 +516,8 @@ try {
   assert.equal(info.instanceId, connection.instanceId);
   report.instanceId = info.instanceId;
   report.buildProfile = info.buildProfile;
+  if (options.scenario === 'canvas-memory')
+    assert.equal(report.buildProfile, 'release', '资源验收必须使用 release 开发测试程序');
   const expectedTools =
     isBenchmark || isWorkspaceCanvas || options.scenario.startsWith('window-') ? 20 : 17;
   assert.equal((await rpc('tools/list', {})).tools.length, expectedTools);
@@ -539,6 +544,10 @@ try {
   if (isBenchmark) {
     if (options['render-mode'] === 'native') await click('render:native');
     report.beforeOpenMemory = (await tool('dev_process_metrics', args({}))).value;
+  }
+  if (options.scenario === 'canvas-memory') {
+    report.beforeOpenMemory = (await tool('dev_process_metrics', args({}))).value;
+    report.beforeOpenResources = (await state()).previewResources;
   }
   const openStarted = performance.now();
   await workspace({

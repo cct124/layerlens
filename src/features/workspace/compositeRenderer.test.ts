@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCompositeRenderer, validSurface } from './compositeRenderer';
 import type { CompositeFrame, CompositeState } from './compositeRenderer';
+import { readPreviewResources } from './previewResources';
 
 // 绘图正确性由 MCP 的真实截图验收；此处隔离浏览器资源，固定解码／RAF 交错。
 const resource = vi.hoisted(() => ({ created: 0, destroyed: 0, draws: 0, maxWidth: 0 }));
@@ -195,4 +196,35 @@ it('超预算视口显式失败且不分配 Stage；源清空后无图像或后�
     error: null,
     surface: null,
   });
+});
+
+it('销毁只释放持有资源，迟到 decode 仍计为在途直到真实完成；重复销毁幂等', async () => {
+  const before = readPreviewResources();
+  renderer.update(frame);
+  images[0]!.onload?.();
+  renderer.dispose();
+  renderer.dispose();
+  const closing = readPreviewResources();
+  expect(closing.renderers.live).toBe(before.renderers.live - 1);
+  expect(closing.images.live).toBe(before.images.live);
+  expect(closing.decodes.live).toBe(before.decodes.live + 1);
+  images[0]!.finish();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(readPreviewResources().decodes.live).toBe(before.decodes.live);
+  expect(frames.size).toBe(0);
+});
+
+it('绘制回调和表面所有权随换源及销毁平衡，不能仅以 DOM 消失推断释放', async () => {
+  const before = readPreviewResources();
+  renderer.update(frame);
+  await decode(images[0]!);
+  tick();
+  expect(readPreviewResources().stages.live).toBe(before.stages.live + 1);
+  expect(readPreviewResources().frames.live).toBe(before.frames.live + 1);
+  renderer.update({ ...frame, url: null });
+  renderer.dispose();
+  const after = readPreviewResources();
+  for (const kind of ['stages', 'images', 'frames', 'decodes'] as const)
+    expect(after[kind].live).toBe(before[kind].live);
 });

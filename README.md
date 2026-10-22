@@ -93,7 +93,9 @@ npm run test:dev-mcp:m2     # 独立实例验证基线、三种缩放几何及�
 npm run test:dev-mcp:m2-input # 中键、组合手势和吸附边界各重复 5 次
 npm run test:dev-mcp:m2-cleanup # 128 项清理、过期、恢复及迟到结果各重复 5 次
 npm run test:dev-mcp:m2-window # 窗口控制、真实失焦、菜单焦点及正常退出各重复 5 次
-npm run test:dev-mcp:canvas # 正式 Konva 检查、显示与 20 轮生命周期场景，各 2 个独立实例
+npm run test:dev-mcp:canvas # 正式 Konva 检查与显示，各 2 个独立实例
+npm run build:dev-mcp:release # 先有普通 release；构建后恢复普通 EXE，测试版保存到 target/dev-mcp-release/
+npm run test:dev-mcp:canvas-resources # 固定 3 个 release 实例，各 20 轮及 60 秒自然空闲
 npm run artifacts:dev-mcp   # 生成独立白名单产物副本及清单
 npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；也纳入 npm run check
 ```
@@ -102,7 +104,7 @@ npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；�
 
 套件默认先检查一次普通 release，再执行 5 轮业务／WebView 配对并行测试；允许 `--repeat 2` 至 `20`，不自动重试失败。`--app` 默认 `target/debug/layerlens.exe`，`--release-app` 默认 `target/release/layerlens.exe`；`--environment` 默认读取 `.local/dev-mcp/driver-preparation.json`，仅为测试子进程固定运行时。结果写入 `.local/dev-mcp/stability-*/summary.json`、`summary.md` 和逐次 `runs/` 目录。没有结果、实例重复、超时或退出后残留均不能通过。
 
-正式画布套件串行执行三个场景。2026-10-19 本机显示与检查同步已通过，两个完整 20 轮实例仍超过原定内存增长斜率门槛；门槛保留，不能将本批视为资源验收通过。仅复验输入同步可用 `node scripts/test-dev-stability.mjs --webview-suite canvas-sync --repeat 4`，基线和检查各两个实例；它不替代完整画布套件。实际构建模式、原始失败和证据见 [RENDER-04](devlog/_plan/261019/RENDER-04-Konva正式工作区接入.md)。
+正式画布功能与资源分别运行，均串行。资源入口拒绝 debug，程序实际构建模式来自 `dev_instance`；原 20 轮门槛独立计算，随后 0／10／30／60 秒自然空闲样本仅辅助解释回收，不覆盖失败。每轮记录 WebView 子角色私有提交量、前端资源所有权及耗时；未知角色仍计入总量，不返回完整进程参数。2026-10-19 本机两次斜率失败保留，Checks #31 的 debug／不同运行时和 DPR 通过不改判本机结果。仅复验输入同步可用 `node scripts/test-dev-stability.mjs --webview-suite canvas-sync --repeat 4`，基线和检查各两个实例；它不替代显示或资源套件。实际构建模式、原始失败和本批进展见 [RENDER-04](devlog/_plan/261019/RENDER-04-Konva正式工作区接入.md)。
 
 产物收集默认扫描 `.local/dev-mcp` 下已知回归目录；可用 `-- --source .local/dev-mcp/stability-本次目录` 限定一套结果。默认创建独立 `artifacts-*/files/`，也可用 `--output` 指定尚不存在的目标。只收集报告、日志与指定截图，生成 SHA-256 清单；连接文件、配置、profile、PSD 和驱动不进入副本。CI 在成功／失败后均尝试收集并上传，保留 14 天；本机原始运行目录保留到开发者自行清理。
 
@@ -141,6 +143,12 @@ $devMcpConfig = @{
 npm run tauri -- build --no-bundle -- --locked
 npm run test:dev-mcp:desktop -- --app target/release/layerlens.exe --expect-disabled
 ```
+
+### 通过 SSH 在虚拟机中测试
+
+已有 Windows 虚拟机时，可通过 SSH 连接和传输文件，在客机复用现有开发测试 MCP 与回归脚本。连接配置和密钥保存在仓库外，虚拟机管理由开发者负责。
+
+界面测试须在客机已登录、未锁定的桌面会话中运行；准备对应版本的程序与测试依赖，先核验焦点、截图和 DPR，再执行回归并取回报告。虚拟机性能单独建立基线。
 
 ## Konva 渲染验证
 

@@ -12,7 +12,23 @@ export function recordMemorySample(samples, metrics, rootProcessId, detail) {
       [p.privateBytes, p.workingSetBytes].every((n) => Number.isSafeInteger(n) && n > 0),
     ) &&
     Number.isSafeInteger(total);
-  samples.push({ ...detail, ...metrics, valid, privateBytes: valid ? total : null });
+  const privateBytesByKind = {};
+  for (const p of metrics.processes) {
+    const kind =
+      p.role === 'application'
+        ? 'application'
+        : ['browser', 'renderer', 'gpu', 'utility'].includes(p.webviewKind)
+          ? p.webviewKind
+          : 'unknown';
+    privateBytesByKind[kind] = (privateBytesByKind[kind] ?? 0) + p.privateBytes;
+  }
+  samples.push({
+    ...detail,
+    ...metrics,
+    valid,
+    privateBytes: valid ? total : null,
+    privateBytesByKind: valid ? privateBytesByKind : null,
+  });
   assert(valid, '内存采样无效，完整证据已保留：' + JSON.stringify(metrics.errors));
   return total;
 }

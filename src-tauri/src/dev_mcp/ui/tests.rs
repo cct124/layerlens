@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 fn observation(epoch: u64, revision: u64) -> UiObservation {
     UiObservation {
+        preview_resources: UiPreviewResources::default(),
         render_lab: None,
         instance_id: "instance".into(),
         frontend_id: "11111111-1111-4111-8111-111111111111".into(),
@@ -56,6 +57,72 @@ fn observation(epoch: u64, revision: u64) -> UiObservation {
             controls: vec![],
         },
     }
+}
+#[tokio::test]
+async fn preview_release_requires_current_empty_state_and_real_resource_balance() {
+    let state = Observations::default();
+    let mut view = observation(1, 1);
+    view.preview_resources.decodes = UiResourceCount {
+        created: 1,
+        released: 0,
+        live: 1,
+    };
+    state.publish("instance", view.clone()).unwrap();
+    let mut request = UiWaitRequest {
+        frontend_id: None,
+        timeout_ms: 1,
+        condition: UiCondition::PreviewReleased {
+            at_least: "1".into(),
+        },
+    };
+    assert!(
+        state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .timed_out
+    );
+    view.preview_resources.decodes.released = 1;
+    view.preview_resources.decodes.live = 0;
+    view.view_revision = "2".into();
+    state.publish("instance", view.clone()).unwrap();
+    assert!(
+        state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    request.condition = UiCondition::PreviewReleased {
+        at_least: "2".into(),
+    };
+    assert!(
+        state
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .timed_out
+    );
+    request.condition = UiCondition::PreviewReleased {
+        at_least: "1".into(),
+    };
+    view.preview_resources.canvas_elements = 1;
+    view.view_revision = "3".into();
+    state.publish("instance", view.clone()).unwrap();
+    assert!(
+        state
+            .wait(request, &CancellationToken::new())
+            .await
+            .unwrap()
+            .timed_out
+    );
+    view.preview_resources.canvas_elements = 0;
+    view.preview_resources.decodes.live = 1;
+    view.view_revision = "4".into();
+    assert_eq!(
+        state.publish("instance", view).unwrap_err().code,
+        Code::InvalidInput
+    );
 }
 #[test]
 fn old_pages_out_of_order_reports_and_foreign_instances_cannot_replace_observation() {

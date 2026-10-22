@@ -2,8 +2,7 @@
 import assert from 'node:assert/strict';
 import { captureDisplayEnvironment, displayIssues } from './dev-mcp-render-environment.mjs';
 import { ensureRenderFocus } from './dev-mcp-render-focus.mjs';
-import { recordMemorySample } from './dev-mcp-memory.mjs';
-import { memoryCycleGate } from './render-statistics.mjs';
+import { exerciseWorkspaceMemory } from './dev-mcp-workspace-memory.mjs';
 
 export async function recordWorkspaceEnvironment(context, label, cycle = null, terminal = false) {
   const { report } = context;
@@ -69,7 +68,6 @@ export async function exerciseWorkspaceCanvas(context) {
     screenshot,
     document,
     verifyComposite,
-    checkpoint,
   } = context;
   report.phase = scenario;
   const paint = (doc = document, sceneAtLeast = '0') =>
@@ -279,42 +277,6 @@ export async function exerciseWorkspaceCanvas(context) {
     report.checks.push('25%／100%／200% 实际绘制、独立合成色块截图、原生缩放、重载与标签视图恢复');
   } else {
     assert.equal(scenario, 'canvas-memory');
-    report.memory = [];
-    const ready = [],
-      released = [];
-    for (let cycle = 0; cycle < 20; cycle++) {
-      if (cycle) await workspace({ kind: 'open', path: 'render-simple.psd' });
-      const current = (await waitCore({ kind: 'documentCount', count: 1 })).documents[0];
-      await paint(current);
-      await recordWorkspaceEnvironment(context, 'ready', cycle);
-      ready.push(
-        recordMemorySample(
-          report.memory,
-          (await tool('dev_process_metrics', args({}))).value,
-          report.processId,
-          { label: 'ready', cycle },
-        ),
-      );
-      const result = await workspace({ kind: 'close', documentId: current.id });
-      await waitCore({ kind: 'documentCount', count: 0 });
-      const empty = await wait({ kind: 'applied', atLeast: result.sequence });
-      assert.equal(empty.canvas, null);
-      await recordWorkspaceEnvironment(context, 'released', cycle);
-      released.push(
-        recordMemorySample(
-          report.memory,
-          (await tool('dev_process_metrics', args({}))).value,
-          report.processId,
-          { label: 'released', cycle },
-        ),
-      );
-      await checkpoint();
-    }
-    report.memoryGate = memoryCycleGate(ready, released);
-    await checkpoint();
-    assert(report.memoryGate.passed, JSON.stringify(report.memoryGate));
-    report.checks.push(
-      '正式合成图 20 轮打开／关闭，40 次进程树内存及逐轮实际显示环境；不替代历史实验门槛',
-    );
+    await exerciseWorkspaceMemory(context, paint, recordWorkspaceEnvironment);
   }
 }

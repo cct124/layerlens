@@ -1,5 +1,6 @@
 import Konva from 'konva';
 import type { CanvasView } from './canvasView';
+import { ownPreviewResource } from './previewResources';
 
 /** 一个活动文档只持有一张合成图；URL 的所有权仍属于 usePreview。 */
 export interface CompositeFrame {
@@ -62,14 +63,37 @@ export function createCompositeRenderer(
   let frame: CompositeFrame | null = null;
   const state = emptyCompositeState();
   let disposed = false;
-  let drawFrame: number | null = null;
-  let readyFrame: number | null = null;
+  const finishRenderer = ownPreviewResource('renderers');
+  let finishStage: (() => void) | null = null;
+  let finishImage: (() => void) | null = null;
+  type PendingFrame = { id: number; finish: () => void };
+  let drawFrame: PendingFrame | null = null;
+  let readyFrame: PendingFrame | null = null;
+  function requestFrame(callback: () => void): PendingFrame {
+    const finish = ownPreviewResource('frames');
+    try {
+      return {
+        id: requestAnimationFrame(() => {
+          finish();
+          callback();
+        }),
+        finish,
+      };
+    } catch (cause) {
+      finish();
+      throw cause;
+    }
+  }
   const report = () => {
     if (!disposed) publish({ ...state });
   };
   function cancelFrames() {
-    if (drawFrame !== null) cancelAnimationFrame(drawFrame);
-    if (readyFrame !== null) cancelAnimationFrame(readyFrame);
+    for (const frame of [drawFrame, readyFrame]) {
+      if (frame) {
+        cancelAnimationFrame(frame.id);
+        frame.finish();
+      }
+    }
     drawFrame = readyFrame = null;
   }
   function releaseImage() {
@@ -79,11 +103,15 @@ export function createCompositeRenderer(
       image.removeAttribute('src');
     }
     image = null;
+    finishImage?.();
+    finishImage = null;
     state.decoded = false;
   }
   function releaseSurface() {
     node?.image(undefined);
     stage?.destroy();
+    finishStage?.();
+    finishStage = null;
     stage = layer = node = null;
     state.surface = null;
   }
@@ -108,6 +136,7 @@ export function createCompositeRenderer(
       if (!stage) {
         // 从零尺寸建立，校验之后才分配。禁用命中图；检查选择使用 Rust 图层摘要。
         stage = new Konva.Stage({ container: host, width: 0, height: 0, listening: false });
+        finishStage = ownPreviewResource('stages');
         layer = new Konva.Layer({ listening: false, imageSmoothingEnabled: true });
         node = new Konva.Image({ image, listening: false, perfectDrawEnabled: false });
         layer.add(node);
@@ -144,7 +173,7 @@ export function createCompositeRenderer(
       };
       const generation = state.generation;
       // 下一帧才暴露 ready；缩放／换图／DPR 变化撤销旧代次的确认。
-      readyFrame = requestAnimationFrame(() => {
+      readyFrame = requestFrame(() => {
         readyFrame = null;
         if (!disposed && generation === state.generation) {
           state.paintedGeneration = generation;
@@ -159,7 +188,7 @@ export function createCompositeRenderer(
   }
   function schedule() {
     cancelFrames();
-    drawFrame = requestAnimationFrame(draw);
+    drawFrame = requestFrame(draw);
   }
   function update(next: CompositeFrame) {
     if (disposed) return;
@@ -176,10 +205,13 @@ export function createCompositeRenderer(
       if (next.url) {
         const loading = new Image();
         image = loading;
+        finishImage = ownPreviewResource('images');
         loading.onload = () => {
-          void loading
-            .decode()
-            .then(() => {
+          loading.onload = null;
+          const finishDecode = ownPreviewResource('decodes');
+          void (async () => {
+            try {
+              await loading.decode();
               if (disposed || image !== loading) return;
               if (loading.naturalWidth !== next.width || loading.naturalHeight !== next.height)
                 throw new Error('合成预览尺寸与当前文档不一致。');
@@ -187,10 +219,13 @@ export function createCompositeRenderer(
               loading.onload = loading.onerror = null;
               report();
               schedule();
-            })
-            .catch((cause: unknown) => {
+            } catch (cause: unknown) {
               if (!disposed && image === loading) fail(cause);
-            });
+            } finally {
+              // 销毁后在途 decode 仍计费至实际 settle，不能提前冒充释放。
+              finishDecode();
+            }
+          })();
         };
         loading.onerror = () => {
           if (image === loading) fail(new Error('浏览器无法解码合成预览。'));
@@ -202,11 +237,13 @@ export function createCompositeRenderer(
     report();
   }
   function dispose() {
+    if (disposed) return;
     disposed = true;
     cancelFrames();
     releaseImage();
     releaseSurface();
     frame = null;
+    finishRenderer();
   }
   return { update, dispose };
 }

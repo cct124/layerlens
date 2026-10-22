@@ -11,9 +11,57 @@ pub(super) struct ProcessMemory {
     pub process_id: u32,
     pub parent_id: u32,
     pub role: String,
+    pub webview_kind: Option<WebViewKind>,
     pub start_time_seconds: u64,
     pub working_set_bytes: u64,
     pub private_bytes: u64,
+}
+/// 从本实例已核验后代的受限启动标志识别；不输出命令行、路径或原始参数。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum WebViewKind {
+    Browser,
+    Renderer,
+    Gpu,
+    Utility,
+    Unknown,
+}
+
+#[cfg(windows)]
+fn webview_kind(arguments: &[std::ffi::OsString]) -> WebViewKind {
+    // 无法读取参数不能当成浏览器进程。仅接受明确的 WebView 可执行文件名。
+    if arguments.is_empty()
+        || arguments.len() > 256
+        || std::path::Path::new(&arguments[0])
+            .file_name()
+            .is_none_or(|name| !name.eq_ignore_ascii_case("msedgewebview2.exe"))
+    {
+        return WebViewKind::Unknown;
+    }
+    let mut kind = None;
+    let mut args = arguments.iter().skip(1);
+    while let Some(arg) = args.next() {
+        let Some(arg) = arg.to_str() else {
+            return WebViewKind::Unknown;
+        };
+        let value = if arg == "--type" {
+            Some(args.next().and_then(|a| a.to_str()).unwrap_or(""))
+        } else {
+            arg.strip_prefix("--type=")
+        };
+        if let Some(value) = value {
+            if kind.is_some() {
+                return WebViewKind::Unknown;
+            }
+            kind = Some(match value {
+                "renderer" => WebViewKind::Renderer,
+                "gpu-process" => WebViewKind::Gpu,
+                "utility" => WebViewKind::Utility,
+                _ => WebViewKind::Unknown,
+            });
+        }
+    }
+    kind.unwrap_or(WebViewKind::Browser)
 }
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -117,7 +165,7 @@ fn snapshot() -> Result<ProcessMetrics, WorkspaceError> {
 #[cfg(windows)]
 fn snapshot() -> Result<ProcessMetrics, WorkspaceError> {
     use std::{collections::HashMap, time::Instant};
-    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
     let started = Instant::now();
     let root = Pid::from_u32(std::process::id());
     let mut system = System::new();
@@ -236,7 +284,9 @@ fn snapshot() -> Result<ProcessMetrics, WorkspaceError> {
     measured.refresh_processes_specifics(
         ProcessesToUpdate::Some(&pids),
         true,
-        ProcessRefreshKind::nothing().with_memory(),
+        ProcessRefreshKind::nothing()
+            .with_memory()
+            .with_cmd(UpdateKind::Always),
     );
     let mut processes = Vec::new();
     for pid in pids {
@@ -264,6 +314,7 @@ fn snapshot() -> Result<ProcessMetrics, WorkspaceError> {
                 "webview"
             }
             .into(),
+            webview_kind: (pid != root).then(|| webview_kind(process.cmd())),
             start_time_seconds: process.start_time(),
             working_set_bytes: process.memory(),
             // 锁定的 sysinfo 0.35.1 Windows 实现将 PROCESS_MEMORY_COUNTERS_EX.PrivateUsage
@@ -273,12 +324,52 @@ fn snapshot() -> Result<ProcessMetrics, WorkspaceError> {
     }
     processes.sort_by_key(|p| p.process_id);
     observations.sort_by_key(|o| o.process_id);
-    Ok(ProcessMetrics { root_process_id: root.as_u32(), sample_ms: started.elapsed().as_secs_f64() * 1000.0, processes, errors, observations, note: "Windows 工作集含共享页，跨进程求和可能重复计费；privateBytes 是私有提交量。两阶段身份枚举后读取内存；已确认退出或属于旧父 PID 的候选单列 observations，不计入总和。身份未知仍报错。离散快照不代表峰值或 GPU 显存，创建时间精度为秒。".into() })
+    Ok(ProcessMetrics { root_process_id: root.as_u32(), sample_ms: started.elapsed().as_secs_f64() * 1000.0, processes, errors, observations, note: "Windows 工作集含共享页，跨进程求和可能重复计费；privateBytes 是私有提交量。两阶段身份枚举后读取内存；已确认退出或属于旧父 PID 的候选单列 observations，不计入总和。身份未知仍报错。webviewKind 来自已核验后代的启动标志，仅分类且不返回命令行；未知角色不影响内存计入。离散快照不代表峰值或 GPU 显存，创建时间精度为秒。".into() })
 }
 
 #[cfg(all(test, windows))]
 mod tests {
     use super::{Identity, IdentityCheck, check_identity};
+    #[test]
+    fn roles_require_readable_arguments_and_preserve_unknown_types() {
+        use super::{WebViewKind as K, webview_kind};
+        let classify = |args: &[&str]| {
+            webview_kind(
+                &args
+                    .iter()
+                    .map(std::ffi::OsString::from)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(classify(&[]), K::Unknown);
+        assert_eq!(classify(&["other.exe"]), K::Unknown);
+        assert_eq!(
+            classify(&["msedgewebview2.exe", "--private-value=not-returned"]),
+            K::Browser
+        );
+        assert_eq!(
+            classify(&["msedgewebview2.exe", "--type=renderer"]),
+            K::Renderer
+        );
+        assert_eq!(
+            classify(&["msedgewebview2.exe", "--type", "gpu-process"]),
+            K::Gpu
+        );
+        assert_eq!(
+            classify(&["msedgewebview2.exe", "--type=utility"]),
+            K::Utility
+        );
+        for args in [
+            vec!["--type"],
+            vec!["--type=new-role"],
+            vec!["--type=renderer", "--type=gpu-process"],
+        ] {
+            let mut argv = vec!["msedgewebview2.exe"];
+            argv.extend(args);
+            assert_eq!(classify(&argv), K::Unknown);
+        }
+        assert_eq!(serde_json::to_value(K::Gpu).unwrap(), "gpu");
+    }
     #[test]
     fn identity_checks_distinguish_departure_reuse_and_unreadable_time() {
         let before = Identity {
@@ -365,6 +456,7 @@ mod tests {
             .find(|p| p.process_id == std::process::id())
             .unwrap();
         assert_eq!(own.role, "application");
+        assert_eq!(own.webview_kind, None);
         assert!(own.working_set_bytes > 0 && own.private_bytes > 0);
     }
 }
