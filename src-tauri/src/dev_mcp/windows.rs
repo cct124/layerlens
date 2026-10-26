@@ -55,6 +55,9 @@ struct Events {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WindowState {
+    /// 原生系统诊断独立于 Tauri／WebView 事件计数；不可用时保留原因。
+    #[cfg(windows)]
+    pub native_focus: layerlens_window_probe::FocusObservation,
     pub event_sequence: String,
     pub focus_events: String,
     pub blur_events: String,
@@ -188,6 +191,11 @@ impl Windows {
         let maximized = self.main.is_maximized().map_err(native)?;
         let events = self.events.borrow().clone();
         Ok(WindowState {
+            #[cfg(windows)]
+            native_focus: layerlens_window_probe::observe_focus(
+                self.main.hwnd().map_err(native)?.0 as usize,
+                self.auxiliary.hwnd().map_err(native)?.0 as usize,
+            ),
             event_sequence: events.sequence.to_string(),
             focus_events: events.focused.to_string(),
             blur_events: events.blurred.to_string(),

@@ -194,7 +194,8 @@ export async function exerciseWorkspaceCanvas(context) {
         }),
       )
     ).value;
-    assert(blurred.satisfied);
+    report.inspectionBlur = { before: beforeBlur, dispatch, wait: blurred };
+    assert(blurred.satisfied, JSON.stringify(blurred));
     await wait({ kind: 'windowFocus', focused: false, eventsAfter: beforeBlur.window.blurEvents });
     await ensureRenderFocus(context);
     await action({ kind: 'releaseInputs' });

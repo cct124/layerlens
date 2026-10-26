@@ -13,7 +13,7 @@ dev-mcp = [
   "tauri/unstable",
   "dep:rmcp", "dep:axum", "dep:schemars", "dep:tokio-util",
   "dep:uuid", "dep:base64", "dep:reqwest", "dep:ts-rs", "layerlens-core/schema",
-  "dep:sysinfo", "dep:png", "dep:sha2",
+  "dep:sysinfo", "dep:png", "dep:sha2", "dep:layerlens-window-probe",
   "tokio/net", "tokio/time", "tokio/macros", "tokio/io-util",
   "rmcp/client", "rmcp/transport-streamable-http-client-reqwest",
 ]
@@ -60,3 +60,4 @@ workspace = true
 
 [target.'cfg(windows)'.dependencies]
 sysinfo = { version = "=0.35.1", optional = true, default-features = false, features = ["system"] }
+layerlens-window-probe = { path = "../crates/layerlens-window-probe", optional = true }

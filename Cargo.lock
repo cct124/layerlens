@@ -1811,6 +1811,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "layerlens-core",
+ "layerlens-window-probe",
  "png 0.17.16",
  "reqwest",
  "rmcp",
@@ -1826,6 +1827,16 @@ dependencies = [
  "tokio-util",
  "ts-rs",
  "uuid",
+]
+
+[[package]]
+name = "layerlens-window-probe"
+version = "0.1.0"
+dependencies = [
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

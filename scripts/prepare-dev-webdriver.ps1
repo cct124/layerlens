@@ -1,40 +1,62 @@
-﻿# 按实际安装的 WebView2 版本准备驱动；不安装或更新系统运行时。
+﻿# 按已安装或显式指定的 WebView2 目录准备驱动；不安装或更新系统运行时。
 # 检测依据：https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
 [CmdletBinding()]
 param(
     [string]$OutputRoot = '.local/dev-mcp/webdriver',
-    [string]$ReportPath = '.local/dev-mcp/driver-preparation.json'
+    [string]$ReportPath = '.local/dev-mcp/driver-preparation.json',
+    [string]$RuntimePath
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$output = [IO.Path]::GetFullPath((Join-Path $projectRoot $OutputRoot))
-$reportFile = [IO.Path]::GetFullPath((Join-Path $projectRoot $ReportPath))
+function Resolve-ProjectPath([string]$Value) {
+    if ([IO.Path]::IsPathRooted($Value)) { return [IO.Path]::GetFullPath($Value) }
+    return [IO.Path]::GetFullPath((Join-Path $projectRoot $Value))
+}
+$output = Resolve-ProjectPath $OutputRoot
+$reportFile = Resolve-ProjectPath $ReportPath
 $report = [ordered]@{ formatVersion = 1; passed = $false; phase = 'runtime'; startedAt = [DateTime]::UtcNow.ToString('o') }
 New-Item -ItemType Directory -Force -Path (Split-Path $reportFile -Parent) | Out-Null
 try {
     if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '当前驱动准备只支持 Windows x64。' }
-    $clientId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-    $machineBase = Join-Path ([Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) 'Microsoft/EdgeWebView/Application'
-    $candidates = @(
-        @{ Key = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$clientId"; Base = $machineBase },
-        @{ Key = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$clientId"; Base = "$env:LOCALAPPDATA\Microsoft\EdgeWebView\Application" }
-    )
-    $installed = @(foreach ($candidate in $candidates) {
-        if (Test-Path -LiteralPath $candidate.Key) {
-            $version = Get-ItemPropertyValue -LiteralPath $candidate.Key -Name pv
-            if ($version -match '^\d+\.\d+\.\d+\.\d+$' -and [version]$version -gt [version]'0.0.0.0') {
-                $folder = Join-Path $candidate.Base $version
-                $binary = Join-Path $folder 'msedgewebview2.exe'
-                if (Test-Path -LiteralPath $binary -PathType Leaf) {
-                    [pscustomobject]@{ Version = $version; Folder = $folder; Binary = $binary }
+    if ($PSBoundParameters.ContainsKey('RuntimePath')) {
+        if ([string]::IsNullOrWhiteSpace($RuntimePath)) { throw '指定的 RuntimePath 不能为空。' }
+        $folder = Resolve-ProjectPath $RuntimePath
+        $binary = Join-Path $folder 'msedgewebview2.exe'
+        if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) { throw '指定运行时目录缺少 msedgewebview2.exe；不回退到系统运行时。' }
+        $version = (Get-Item -LiteralPath $binary).VersionInfo.FileVersion
+        if ($version -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw '指定运行时文件缺少有效版本。' }
+        $runtime = [pscustomobject]@{ Version = $version; Folder = $folder; Binary = $binary }
+        $report.runtimeSelection = 'explicitDirectory'
+    } else {
+        $clientId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+        $machineBase = Join-Path ([Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) 'Microsoft/EdgeWebView/Application'
+        $candidates = @(
+            @{ Key = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$clientId"; Base = $machineBase },
+            @{ Key = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$clientId"; Base = "$env:LOCALAPPDATA\Microsoft\EdgeWebView\Application" }
+        )
+        $installed = @(foreach ($candidate in $candidates) {
+            if (Test-Path -LiteralPath $candidate.Key) {
+                $version = Get-ItemPropertyValue -LiteralPath $candidate.Key -Name pv
+                if ($version -match '^\d+\.\d+\.\d+\.\d+$' -and [version]$version -gt [version]'0.0.0.0') {
+                    $folder = Join-Path $candidate.Base $version
+                    $binary = Join-Path $folder 'msedgewebview2.exe'
+                    if (Test-Path -LiteralPath $binary -PathType Leaf) {
+                        [pscustomobject]@{ Version = $version; Folder = $folder; Binary = $binary }
+                    }
                 }
             }
-        }
-    })
-    $runtime = $installed | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1
-    if ($null -eq $runtime) { throw '未找到注册且可读取的 WebView2 Runtime，请先安装运行时。' }
+        })
+        $runtime = $installed | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1
+        if ($null -eq $runtime) { throw '未找到注册且可读取的 WebView2 Runtime，请先安装运行时。' }
+        $report.runtimeSelection = 'installed'
+    }
     if ((Get-Item -LiteralPath $runtime.Binary).VersionInfo.FileVersion -ne $runtime.Version) { throw '运行时注册版本与文件版本不一致。' }
+    $runtimeSignature = Get-AuthenticodeSignature -LiteralPath $runtime.Binary
+    if ($runtimeSignature.Status -ne 'Valid' -or $runtimeSignature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+        throw '运行时必须具有有效的 Microsoft Authenticode 签名。'
+    }
+    $report.runtimeSigner = $runtimeSignature.SignerCertificate.Subject
     $report.runtimeVersion = $runtime.Version
     $report.runtimePath = $runtime.Folder
     $report.runtimeSha256 = (Get-FileHash -LiteralPath $runtime.Binary -Algorithm SHA256).Hash.ToLowerInvariant()

@@ -10,7 +10,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { redact } from './dev-mcp-artifacts.mjs';
-import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
+import { errorDiagnostic, observeProcess } from './dev-mcp-process-monitor.mjs';
 import { exerciseOpenCleanup, exerciseRegionControls } from './dev-mcp-m2-webview.mjs';
 import { exerciseCanvasInput } from './dev-mcp-input-webview.mjs';
 import { exerciseCleanupBoundaries } from './dev-mcp-cleanup-webview.mjs';
@@ -156,6 +156,7 @@ const report = {
     await Promise.all(
       [
         'test-dev-webview.mjs',
+        'dev-mcp-process-monitor.mjs',
         'dev-mcp-display-webview.mjs',
         'dev-mcp-workspace-canvas.mjs',
         'dev-mcp-workspace-memory.mjs',
@@ -203,8 +204,12 @@ let driverLog = '',
   monitor;
 let rpcId = 0,
   mutationId = 0;
-driver.once('exit', () => {
+driver.once('exit', (code, signal) => {
   driverExited = true;
+  report.driverExit = { code, signal, at: new Date().toISOString(), phase: report.phase };
+});
+driver.once('error', (error) => {
+  report.driverError = errorDiagnostic(error);
 });
 const driverExit = new Promise((resolve) => {
   driver.once('error', resolve);
@@ -281,45 +286,6 @@ async function readConnection() {
     });
   }
 }
-function observeProcess(pid) {
-  // 在应用退出前取得句柄；读取该测试实例的真实退出码，不把驱动会话删除当作正常退出。
-  const command =
-    "$ErrorActionPreference='Stop'; $testProcess=[Diagnostics.Process]::GetProcessById(" +
-    pid +
-    "); $null=$testProcess.Handle; Write-Output 'watching'; $testProcess.WaitForExit(); Write-Output $testProcess.ExitCode";
-  const child = spawn('powershell', ['-NoProfile', '-Command', command], {
-    env: windowsPowerShellEnvironment(),
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let stdout = '',
-    stderr = '';
-  const ready = new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.stdout.on('data', (c) => {
-      stdout += c.toString();
-      if (stdout.includes('watching')) resolve();
-    });
-    child.once('close', (code) => {
-      if (!stdout.includes('watching'))
-        reject(new Error('退出监测启动失败：' + code + ' ' + stderr));
-    });
-  });
-  child.stderr.on('data', (c) => {
-    stderr += c.toString();
-  });
-  const exit = new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code) => {
-      const match = stdout.match(/watching\s+(-?\d+)/);
-      if (code === 0 && match) resolve(Number(match[1]));
-      else reject(new Error('退出监测失败：' + stderr));
-    });
-  });
-  ready.catch(() => undefined);
-  exit.catch(() => undefined);
-  return { ready, exit, child };
-}
 async function rpc(method, params, notification = false) {
   const id = notification ? undefined : ++rpcId;
   const action = {
@@ -328,28 +294,37 @@ async function rpc(method, params, notification = false) {
     tool: params?.name,
     requestId: params?.arguments?.clientRequestId,
     phase: report.phase,
+    startedAt: new Date().toISOString(),
   };
   report.actions.push(action);
-  const response = await fetch(connection.endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + connection.token,
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      'MCP-Protocol-Version': '2025-11-25',
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-    signal: AbortSignal.timeout(35000),
-  });
-  action.httpStatus = response.status;
-  assert(response.ok, 'MCP HTTP ' + response.status);
-  if (notification) return;
-  const result = await response.json();
-  assert.equal(result.id, id);
-  assert.equal(result.error, undefined, JSON.stringify(result.error));
-  action.isError = result.result.isError;
-  action.errorCode = result.result.structuredContent?.data?.error?.code;
-  return result.result;
+  const requestStarted = performance.now();
+  try {
+    const response = await fetch(connection.endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + connection.token,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': '2025-11-25',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+      signal: AbortSignal.timeout(35000),
+    });
+    action.httpStatus = response.status;
+    assert(response.ok, 'MCP HTTP ' + response.status);
+    if (notification) return;
+    const result = await response.json();
+    assert.equal(result.id, id);
+    assert.equal(result.error, undefined, JSON.stringify(result.error));
+    action.isError = result.result.isError;
+    action.errorCode = result.result.structuredContent?.data?.error?.code;
+    return result.result;
+  } catch (error) {
+    action.transportError = errorDiagnostic(error);
+    throw error;
+  } finally {
+    action.durationMs = performance.now() - requestStarted;
+  }
 }
 const args = (request, mutate = false) => ({
   instanceId: info.instanceId,
@@ -1015,6 +990,8 @@ try {
   report.phase = 'complete';
 } catch (error) {
   report.error = error.stack ?? String(error);
+  report.errorDetails = errorDiagnostic(error);
+  report.processAtFailure = monitor?.snapshot();
   if (isWorkspaceCanvas && frontend) {
     try {
       report.failureView = await state();
@@ -1063,13 +1040,22 @@ try {
       report.captureError = String(cause);
     }
 } finally {
+  report.processBeforeShutdown = monitor?.snapshot();
   if (!report.passed && info) {
     try {
       await tool('dev_shutdown', args({}));
-      if (monitor) await deadline(monitor.exit, 10000, '失败收尾超时');
     } catch (error) {
       report.shutdownError = String(error);
+      report.shutdownErrorDetails = errorDiagnostic(error);
     }
+  }
+  if (monitor) {
+    try {
+      report.observedExitCode = await deadline(monitor.exit, 10000, '应用退出观测超时');
+    } catch (error) {
+      report.processObservationError = errorDiagnostic(error);
+    }
+    report.processBeforeDriverCleanup = monitor.snapshot();
   }
   if (session)
     try {
@@ -1077,7 +1063,11 @@ try {
     } catch (error) {
       report.driverCleanup = String(error);
     }
-  if (monitor?.child.exitCode === null) monitor.child.kill();
+  report.processAfterDriverCleanup = monitor?.snapshot();
+  if (monitor?.child.exitCode === null) {
+    report.monitorStoppedByRunner = true;
+    monitor.child.kill();
+  }
   if (!driverExited) driver.kill();
   try {
     await deadline(driverExit, 5000, '驱动进程未退出');

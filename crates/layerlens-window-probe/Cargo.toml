@@ -1,0 +1,24 @@
+[package]
+name = "layerlens-window-probe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "开发测试专用的只读 Windows 窗口焦点诊断安全边界"
+
+[dependencies]
+serde.workspace = true
+schemars.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+# 核心和桌面仍继承 workspace 的 forbid；仅下面 windows 模块允许最小 FFI。
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = "warn"

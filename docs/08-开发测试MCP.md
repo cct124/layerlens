@@ -124,6 +124,8 @@ M2 扩展提供 `scroll { x, y, deltaY }` 的真实 W3C wheel 输入：位置以
 
 `prepare:dev-mcp` 按 Microsoft 的[运行时检测规则](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)读取机器／用户注册版本，核对实际程序文件，从 Microsoft 的版本化 URL 获取 x64 EdgeDriver，仅提取预期可执行文件并核对 Authenticode 签名、完整版本与 SHA-256。已有匹配驱动可复用，但仍校验；不安装或升级系统运行时，也不回退到任意旧驱动。准备成功或失败均写入 `.local/dev-mcp/driver-preparation.json`。
 
+显式传入 `-RuntimePath` 时只使用指定的独立运行时目录，跳过注册表自动选择，并校验运行时自身的 Microsoft 签名和文件版本；缺文件、无有效版本或签名失败均停止。`runtimeSelection` 区分 `installed` 与 `explicitDirectory`，`runtimeSigner` 与已有运行时／驱动版本、哈希一起保留。下载和解压 Fixed Version 由测试环境准备，脚本只读取该目录；相对路径以项目根目录解析，也支持绝对路径。`-ReportPath` 可将独立配置与原基线分开，套件通过既有 `--environment` 使用它，不修改系统安装、全局环境或生产程序。
+
 Windows PowerShell 5.1 子进程统一移除继承的 `PSModulePath`，由该版本重建标准模块路径；变量名按 Windows 大小写不敏感规则处理，不修改父进程或用户／系统环境。npm 准备／测量入口经 `run-powershell.mjs` 启动，WebView 退出监测、稳定性进程检查与测量测试复用同一环境函数，避免 CI 的 `pwsh → Node → powershell` 链路丢失哈希、签名等系统命令。真实子进程回归覆盖错误模块路径、参数透传和非零退出码。
 
 稳定性套件读取准备报告，重新核验驱动／运行时指纹，只向测试子进程指定该运行时目录，并移除继承的其他 `WEBVIEW2_*` 覆盖项，避免使用日常 profile 或调试会话。不修改用户／系统环境。Evergreen 版本可能随系统更新变化，因此采用“每套运行固定版本并记录指纹”，不宣称不同 runner 镜像天然相同；版本对应的下载不可用或指纹发生变化时明确失败。
@@ -225,6 +227,12 @@ Windows 的顶层 HWND 焦点查询不包含 WebView2 子窗口。main 的 `focu
 | 显示 | 与目标修订关联的图像解码、绘制准备状态、驱动截图               | 显示准备与被采集画面；不自动证明物理首帧或其他 DPI |
 
 前端序号由实际通知处理路径推进，不能由 MCP 写入“已同步”。纯视图操作使用独立视图代次，不伪造核心版本。大整数序号沿用可无损的线协议表示。跨层采样携带各自版本，不能把分时读取包装成同一原子快照；截图应能关联捕获时的目标与状态。
+
+Windows 的窗口状态新增 `nativeFocus`：顺序读取系统前台窗口及主窗口、辅助窗口、前台 GUI 线程的活动窗口、键盘焦点、鼠标捕获和菜单／移动状态。窗口只归类为 `main`、`mainChild`、`auxiliary`、`auxiliaryChild`、`other` 或 `none`，不输出 HWND、外部进程身份或窗口标题；查询失败返回 `unavailable` 及操作／错误码，不能视为未聚焦。这些诊断不是原子快照，也不替代原生焦点事件和可信 DOM 事件。只读封装位于开发测试专用的 `layerlens-window-probe`，复用锁文件已有的 `windows-sys 0.61.2`；仅最小 Win32 模块允许 FFI，核心与桌面仍保留 `unsafe_code = "forbid"`。
+
+系统前台归属与 WebView 焦点是独立维度，不能仅据 Tauri／DOM 的 `focused=true` 推断窗口位于前台。目前原生 `focus` 等待仍按原有事件和查询判定，`nativeFocus` 仅提供诊断；系统前台及持键／捕获前置条件的强制等待尚待补齐。对应测试失败与后台资源测量须显式保留这一边界，不能计作真实前台验收。
+
+WebView 运行器在失败发生时、进入收尾时及驱动清理前后分别保存应用进程句柄的观测结果，正常与异常退出都记录实际退出码。进入收尾的快照位于失败后的退出请求之前；成功路径则已经验证正常退出。驱动清理后的退出不能补作业务正常退出。MCP 请求记录时间、耗时及有界的网络错误原因链；不展开请求、响应对象或凭据。真实失焦场景保存派发前状态、派发回执和完整等待末态，原超时与失败断言保持不变。
 
 ### 有界等待与错误恢复
 

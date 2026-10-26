@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/layerlens-core", "src-tauri"]
+members = ["crates/layerlens-core", "crates/layerlens-window-probe", "src-tauri"]
 exclude = ["vendor/ag-psd"]
 resolver = "3"
 

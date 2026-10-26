@@ -104,6 +104,15 @@ npm run test:dev-mcp:scripts # 统计、超时、失败与产物边界回归；�
 
 套件默认先检查一次普通 release，再执行 5 轮业务／WebView 配对并行测试；允许 `--repeat 2` 至 `20`，不自动重试失败。`--app` 默认 `target/debug/layerlens.exe`，`--release-app` 默认 `target/release/layerlens.exe`；`--environment` 默认读取 `.local/dev-mcp/driver-preparation.json`，仅为测试子进程固定运行时。结果写入 `.local/dev-mcp/stability-*/summary.json`、`summary.md` 和逐次 `runs/` 目录。没有结果、实例重复、超时或退出后残留均不能通过。
 
+测试独立运行时时，先从微软官方页面下载并解压 Fixed Version，然后将包含 `msedgewebview2.exe` 的目录传给准备入口。它校验运行时和驱动的 Microsoft 签名、完整版本及 SHA-256；路径无效时直接失败，不回退到系统版本。示例中的目录由测试者准备，运行时文件和报告不提交仓库：
+
+```powershell
+npm run prepare:dev-mcp -- -RuntimePath ".local/webview2/fixed-runtime" -ReportPath ".local/dev-mcp/fixed-environment.json"
+node scripts/test-dev-stability.mjs --environment .local/dev-mcp/fixed-environment.json --webview-suite canvas-sync --repeat 4 --app target/dev-mcp-release/layerlens.exe
+```
+
+该方式复用子进程环境隔离，不替换系统运行时，不设置机器／用户级 `WEBVIEW2_*` 变量，也不改变生产构建。运行时对比按版本、指纹与实际显示条件分组；认证故障排查还需另行核对测试环境的安全事件和连接状态，应用功能通过不能代替这一检查。
+
 正式画布功能与资源分别运行，均串行。资源入口拒绝 debug，程序实际构建模式来自 `dev_instance`；原 20 轮门槛独立计算，随后 0／10／30／60 秒自然空闲样本仅辅助解释回收，不覆盖失败。每轮记录 WebView 子角色私有提交量、前端资源所有权及耗时；未知角色仍计入总量，不返回完整进程参数。2026-10-19 本机两次斜率失败保留，Checks #31 的 debug／不同运行时和 DPR 通过不改判本机结果。仅复验输入同步可用 `node scripts/test-dev-stability.mjs --webview-suite canvas-sync --repeat 4`，基线和检查各两个实例；它不替代显示或资源套件。实际构建模式、原始失败和本批进展见 [RENDER-04](devlog/_plan/261019/RENDER-04-Konva正式工作区接入.md)。
 
 产物收集默认扫描 `.local/dev-mcp` 下已知回归目录；可用 `-- --source .local/dev-mcp/stability-本次目录` 限定一套结果。默认创建独立 `artifacts-*/files/`，也可用 `--output` 指定尚不存在的目标。只收集报告、日志与指定截图，生成 SHA-256 清单；连接文件、配置、profile、PSD 和驱动不进入副本。CI 在成功／失败后均尝试收集并上传，保留 14 天；本机原始运行目录保留到开发者自行清理。
