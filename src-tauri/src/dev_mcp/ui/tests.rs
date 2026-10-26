@@ -59,6 +59,53 @@ fn observation(epoch: u64, revision: u64) -> UiObservation {
     }
 }
 #[tokio::test]
+async fn cleanup_focus_requires_same_plan_ready_modal_window_focus_and_delivered_keys() {
+    for stale in 0..5 {
+        let observations = Observations::default();
+        let mut ready = observation(1, 1);
+        ready.cleanup.opened = true;
+        ready.cleanup.phase = Some("ready".into());
+        ready.cleanup.plan_id = Some("1".into());
+        ready.cleanup.focus_inside = true;
+        ready.window.focused = true;
+        ready.input.key_events = "2".into();
+        let mut old = ready.clone();
+        match stale {
+            0 => old.cleanup.plan_id = Some("2".into()),
+            1 => old.cleanup.phase = Some("preparing".into()),
+            2 => old.cleanup.focus_inside = false,
+            3 => old.window.focused = false,
+            _ => old.input.key_events = "1".into(),
+        }
+        observations.publish("instance", old).unwrap();
+        let request = UiWaitRequest {
+            frontend_id: None,
+            timeout_ms: 1,
+            condition: UiCondition::CleanupFocus {
+                plan_id: "1".into(),
+                key_events_at_least: "2".into(),
+            },
+        };
+        assert!(
+            !observations
+                .wait(request.clone(), &CancellationToken::new())
+                .await
+                .unwrap()
+                .satisfied
+        );
+        ready.view_revision = "2".into();
+        observations.publish("instance", ready).unwrap();
+        assert!(
+            observations
+                .wait(request, &CancellationToken::new())
+                .await
+                .unwrap()
+                .satisfied
+        );
+    }
+}
+
+#[tokio::test]
 async fn preview_release_requires_current_empty_state_and_real_resource_balance() {
     let state = Observations::default();
     let mut view = observation(1, 1);
@@ -587,6 +634,60 @@ fn scroll_rejects_outside_modal_unready_and_unbounded_input() {
     view.cleanup.opened = false;
     view.canvas.as_mut().unwrap().image_decoded = false;
     assert!(super::driver::validate_scroll(&view, 10, 20, 1).is_err());
+}
+
+#[tokio::test]
+async fn canvas_input_wait_requires_current_document_counters_ctrl_and_capture_together() {
+    for stale in 0..5 {
+        let state = Observations::default();
+        let mut ready = canvas_observation();
+        ready.active_document = Some(UiDocument {
+            id: "1".into(),
+            revision: "1".into(),
+        });
+        ready.input.key_events = "3".into();
+        ready.input.pointer_events = "4".into();
+        ready.canvas.as_mut().unwrap().inspection.ctrl = true;
+        ready.canvas.as_mut().unwrap().pointer_captured = true;
+        let mut old = ready.clone();
+        match stale {
+            0 => old.canvas.as_mut().unwrap().inspection.ctrl = false,
+            1 => old.canvas.as_mut().unwrap().pointer_captured = false,
+            2 => old.input.key_events = "2".into(),
+            3 => old.input.pointer_events = "3".into(),
+            _ => old.active_document.as_mut().unwrap().revision = "2".into(),
+        }
+        state.publish("instance", old).unwrap();
+        let request = UiWaitRequest {
+            frontend_id: Some(ready.frontend_id.clone()),
+            timeout_ms: 1,
+            condition: UiCondition::CanvasInput {
+                document_id: "1".into(),
+                revision: "1".into(),
+                ctrl: true,
+                alt: false,
+                pointer_captured: true,
+                key_events_at_least: "3".into(),
+                pointer_events_at_least: "4".into(),
+            },
+        };
+        assert!(
+            !state
+                .wait(request.clone(), &CancellationToken::new())
+                .await
+                .unwrap()
+                .satisfied
+        );
+        ready.view_revision = "2".into();
+        state.publish("instance", ready).unwrap();
+        assert!(
+            state
+                .wait(request, &CancellationToken::new())
+                .await
+                .unwrap()
+                .satisfied
+        );
+    }
 }
 
 #[tokio::test]

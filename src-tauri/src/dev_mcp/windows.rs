@@ -30,6 +30,7 @@ impl WindowSize {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowAction {
+    Center {},
     FocusMain {},
     FocusAuxiliary {},
     Minimize {},
@@ -55,9 +56,14 @@ struct Events {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WindowState {
+    /// 当前屏幕工作区；只含几何，不含设备名。屏幕查询无结果时为 None。
+    pub work_area: Option<WindowWorkArea>,
+    pub client_within_work_area: Option<bool>,
     /// 原生系统诊断独立于 Tauri／WebView 事件计数；不可用时保留原因。
     #[cfg(windows)]
     pub native_focus: layerlens_window_probe::FocusObservation,
+    /// 系统前台、活动窗口和键盘焦点共同指向的自有窗口；未知或切换中为 None。
+    pub foreground_ready: Option<FocusTarget>,
     pub event_sequence: String,
     pub focus_events: String,
     pub blur_events: String,
@@ -80,21 +86,98 @@ pub(super) struct WindowState {
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub(super) struct WindowWorkArea {
+    pub x: i32,
+    pub y: i32,
+    pub physical_width: u32,
+    pub physical_height: u32,
+}
+impl WindowWorkArea {
+    fn contains(&self, x: i32, y: i32, width: u32, height: u32) -> bool {
+        i64::from(x) >= i64::from(self.x)
+            && i64::from(y) >= i64::from(self.y)
+            && i64::from(x) + i64::from(width) <= i64::from(self.x) + i64::from(self.physical_width)
+            && i64::from(y) + i64::from(height)
+                <= i64::from(self.y) + i64::from(self.physical_height)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct WindowActionResult {
     pub before: WindowState,
     pub dispatched: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum FocusTarget {
+    Main,
+    Auxiliary,
+}
+
+#[cfg(windows)]
+fn foreground_ready(observation: &layerlens_window_probe::FocusObservation) -> Option<FocusTarget> {
+    use layerlens_window_probe::{DesktopObservation, FocusObservation, WindowTarget};
+    let FocusObservation::Available { snapshot } = observation else {
+        return None;
+    };
+    if !matches!(
+        snapshot.desktop,
+        DesktopObservation::Available {
+            calling_thread_receives_input: true,
+            window_thread_receives_input: true,
+        }
+    ) {
+        return None;
+    }
+    let thread = snapshot.foreground_thread.as_ref()?;
+    if thread.in_menu_mode || thread.in_move_size {
+        return None;
+    }
+    let owner = |target| match target {
+        WindowTarget::Main | WindowTarget::MainChild => Some(FocusTarget::Main),
+        WindowTarget::Auxiliary | WindowTarget::AuxiliaryChild => Some(FocusTarget::Auxiliary),
+        WindowTarget::None | WindowTarget::Other => None,
+    };
+    let target = owner(snapshot.foreground)?;
+    (owner(thread.active) == Some(target) && owner(thread.keyboard_focus) == Some(target))
+        .then_some(target)
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowCondition {
-    Focus { main: bool, auxiliary: bool },
-    State { minimized: bool, maximized: bool },
-    Size { size: WindowSize },
+    WithinWorkArea {},
+    /// 系统前台与键盘焦点就绪，同时核对原生主／辅助窗口状态。
+    Foreground {
+        target: FocusTarget,
+    },
+    Focus {
+        main: bool,
+        auxiliary: bool,
+    },
+    State {
+        minimized: bool,
+        maximized: bool,
+    },
+    Size {
+        size: WindowSize,
+    },
 }
 impl WindowCondition {
     fn matches(&self, state: &WindowState) -> bool {
         match self {
+            Self::WithinWorkArea {} => {
+                state.client_within_work_area == Some(true) && state.visible && !state.minimized
+            }
+            Self::Foreground { target } => {
+                state.foreground_ready == Some(*target)
+                    && state.visible
+                    && !state.minimized
+                    && state.focused == Some(*target == FocusTarget::Main)
+                    && state.auxiliary_focused == (*target == FocusTarget::Auxiliary)
+            }
             Self::Focus { main, auxiliary } => {
                 state.focused == Some(*main) && state.auxiliary_focused == *auxiliary
             }
@@ -185,17 +268,43 @@ impl Windows {
         let scale = self.main.scale_factor().map_err(native)?;
         let size = self.main.inner_size().map_err(native)?;
         let position = self.main.outer_position().map_err(native)?;
+        let client_position = self.main.inner_position().map_err(native)?;
+        let work_area = self.main.current_monitor().map_err(native)?.map(|monitor| {
+            let area = monitor.work_area();
+            WindowWorkArea {
+                x: area.position.x,
+                y: area.position.y,
+                physical_width: area.size.width,
+                physical_height: area.size.height,
+            }
+        });
+        let client_within_work_area = work_area.as_ref().map(|area| {
+            area.contains(
+                client_position.x,
+                client_position.y,
+                size.width,
+                size.height,
+            )
+        });
         let auxiliary_focused = self.auxiliary.is_focused().map_err(native)?;
         let visible = self.main.is_visible().map_err(native)?;
         let minimized = self.main.is_minimized().map_err(native)?;
         let maximized = self.main.is_maximized().map_err(native)?;
         let events = self.events.borrow().clone();
+        #[cfg(windows)]
+        let native_focus = layerlens_window_probe::observe_focus(
+            self.main.hwnd().map_err(native)?.0 as usize,
+            self.auxiliary.hwnd().map_err(native)?.0 as usize,
+        );
         Ok(WindowState {
+            work_area,
+            client_within_work_area,
             #[cfg(windows)]
-            native_focus: layerlens_window_probe::observe_focus(
-                self.main.hwnd().map_err(native)?.0 as usize,
-                self.auxiliary.hwnd().map_err(native)?.0 as usize,
-            ),
+            foreground_ready: foreground_ready(&native_focus),
+            #[cfg(not(windows))]
+            foreground_ready: None,
+            #[cfg(windows)]
+            native_focus,
             event_sequence: events.sequence.to_string(),
             focus_events: events.focused.to_string(),
             blur_events: events.blurred.to_string(),
@@ -231,6 +340,7 @@ impl Windows {
         tokio::task::spawn_blocking(move || {
             let before = this.snapshot()?;
             match action {
+                WindowAction::Center {} => this.main.center().map_err(native)?,
                 WindowAction::FocusMain {} => {
                     this.auxiliary.hide().map_err(native)?;
                     this.main.set_focus().map_err(native)?;
@@ -309,6 +419,144 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[cfg(windows)]
+    fn focus_observation(
+        target: layerlens_window_probe::WindowTarget,
+    ) -> layerlens_window_probe::FocusObservation {
+        use layerlens_window_probe::{
+            DesktopObservation, FocusObservation, FocusSnapshot, GuiThreadSnapshot, WindowTarget,
+        };
+        let thread = GuiThreadSnapshot {
+            active: target,
+            keyboard_focus: target,
+            mouse_capture: WindowTarget::None,
+            menu_owner: WindowTarget::None,
+            in_menu_mode: false,
+            in_move_size: false,
+        };
+        FocusObservation::Available {
+            snapshot: FocusSnapshot {
+                desktop: DesktopObservation::Available {
+                    calling_thread_receives_input: true,
+                    window_thread_receives_input: true,
+                },
+                foreground: target,
+                main_thread: thread.clone(),
+                auxiliary_thread: thread.clone(),
+                foreground_thread: Some(thread),
+            },
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn foreground_requires_owned_foreground_and_matching_keyboard_focus() {
+        use layerlens_window_probe::{FocusObservation, WindowTarget};
+        for (window, expected) in [
+            (WindowTarget::Main, Some(FocusTarget::Main)),
+            (WindowTarget::MainChild, Some(FocusTarget::Main)),
+            (WindowTarget::Auxiliary, Some(FocusTarget::Auxiliary)),
+            (WindowTarget::Other, None),
+            (WindowTarget::None, None),
+        ] {
+            assert_eq!(foreground_ready(&focus_observation(window)), expected);
+        }
+        assert_eq!(
+            foreground_ready(&FocusObservation::Unavailable {
+                operation: "test",
+                error_code: None
+            }),
+            None
+        );
+        for change in 0..7 {
+            let mut observation = focus_observation(WindowTarget::Main);
+            let FocusObservation::Available { snapshot } = &mut observation else {
+                unreachable!()
+            };
+            let thread = snapshot.foreground_thread.as_mut().unwrap();
+            match change {
+                0 => thread.keyboard_focus = WindowTarget::Other,
+                1 => thread.active = WindowTarget::Auxiliary,
+                2 => thread.in_menu_mode = true,
+                3 => thread.in_move_size = true,
+                4 | 5 => {
+                    snapshot.desktop = layerlens_window_probe::DesktopObservation::Available {
+                        calling_thread_receives_input: change != 4,
+                        window_thread_receives_input: change != 5,
+                    }
+                }
+                _ => {
+                    snapshot.desktop = layerlens_window_probe::DesktopObservation::Unavailable {
+                        operation: "test",
+                        error_code: Some(5),
+                    }
+                }
+            }
+            assert_eq!(foreground_ready(&observation), None);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn foreground_wait_rejects_old_focus_events_and_minimized_windows() {
+        let mut state = WindowState {
+            work_area: None,
+            client_within_work_area: None,
+            native_focus: focus_observation(layerlens_window_probe::WindowTarget::Other),
+            foreground_ready: None,
+            event_sequence: "4".into(),
+            focus_events: "2".into(),
+            blur_events: "1".into(),
+            resize_events: "0".into(),
+            move_events: "0".into(),
+            focused: Some(true),
+            auxiliary_focused: false,
+            visible: true,
+            minimized: false,
+            maximized: false,
+            x: 0,
+            y: 0,
+            physical_width: 1280,
+            physical_height: 800,
+            logical_width: 1280.0,
+            logical_height: 800.0,
+            scale_factor: 1.0,
+        };
+        let condition = WindowCondition::Foreground {
+            target: FocusTarget::Main,
+        };
+        assert!(!condition.matches(&state));
+        state.foreground_ready = Some(FocusTarget::Main);
+        assert!(condition.matches(&state));
+        state.focused = None;
+        assert!(!condition.matches(&state));
+        state.focused = Some(true);
+        state.minimized = true;
+        assert!(!condition.matches(&state));
+        assert!(
+            serde_json::from_value::<WindowCondition>(
+                json!({"kind":"foreground","target":"other"})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn work_area_requires_entire_client_including_negative_monitor_coordinates() {
+        let area = WindowWorkArea {
+            x: -1920,
+            y: -100,
+            physical_width: 1920,
+            physical_height: 1080,
+        };
+        assert!(area.contains(-1920, -100, 1920, 1080));
+        assert!(area.contains(-1800, 0, 900, 600));
+        assert!(!area.contains(-1921, -100, 900, 600));
+        assert!(!area.contains(-900, 0, 901, 600));
+        assert!(!area.contains(-900, 0, 900, 981));
+        assert!(!area.contains(i32::MAX, i32::MAX, u32::MAX, u32::MAX));
+    }
+
     #[test]
     fn native_contract_rejects_external_targets_scripts_and_unbounded_sizes() {
         for value in [
@@ -316,6 +564,7 @@ mod tests {
             json!({"kind":"focusAuxiliary","label":"other"}),
             json!({"kind":"resize","width":10000,"height":10000}),
             json!({"kind":"resize","size":"screen"}),
+            json!({"kind":"center","handle":123}),
             json!({"kind":"execute","script":"window.blur()"}),
         ] {
             assert!(serde_json::from_value::<WindowAction>(value).is_err());

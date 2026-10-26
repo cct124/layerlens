@@ -33,10 +33,29 @@ pub struct GuiThreadSnapshot {
     pub in_move_size: bool,
 }
 
+/// 线程桌面是否正在接收系统输入；不返回桌面名称或切换桌面。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum DesktopObservation {
+    Available {
+        calling_thread_receives_input: bool,
+        window_thread_receives_input: bool,
+    },
+    Unavailable {
+        operation: &'static str,
+        error_code: Option<u32>,
+    },
+}
+
 /// 顺序读取的诊断快照，并非跨线程原子快照。
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FocusSnapshot {
+    pub desktop: DesktopObservation,
     pub foreground: WindowTarget,
     pub main_thread: GuiThreadSnapshot,
     pub auxiliary_thread: GuiThreadSnapshot,

@@ -119,6 +119,9 @@ jobs:
       - name: Verify production Konva canvas inspection and display
         timeout-minutes: 10
         run: npm run test:dev-mcp:canvas
+      - name: Verify cleanup modal focus restore and cancellation
+        timeout-minutes: 10
+        run: npm run test:dev-mcp:cleanup-window
       - name: Build release development application preserving production binary
         run: npm run build:dev-mcp:release
       - name: Verify release canvas resources with three fixed independent instances

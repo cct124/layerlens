@@ -328,6 +328,27 @@ impl Observations {
 impl UiCondition {
     fn validate(&self) -> Result<(), WorkspaceError> {
         let valid = match self {
+            Self::CleanupFocus {
+                plan_id,
+                key_events_at_least,
+            } => {
+                number(plan_id)?;
+                number(key_events_at_least)?;
+                true
+            }
+            Self::CanvasInput {
+                document_id,
+                revision,
+                key_events_at_least,
+                pointer_events_at_least,
+                ..
+            } => {
+                number(document_id)?;
+                number(revision)?;
+                number(key_events_at_least)?;
+                number(pointer_events_at_least)?;
+                true
+            }
             Self::CanvasModifiers {
                 key_events_at_least,
                 ..
@@ -462,6 +483,28 @@ impl UiCondition {
                         .as_ref()
                         .is_some_and(|s| number(s).ok() >= number(at_least).ok())
                     && value.preview_resources.released()
+            }
+            Self::CanvasInput {
+                document_id,
+                revision,
+                alt,
+                ctrl,
+                pointer_captured,
+                key_events_at_least,
+                pointer_events_at_least,
+            } => {
+                value
+                    .active_document
+                    .as_ref()
+                    .is_some_and(|d| &d.id == document_id && &d.revision == revision)
+                    && value.canvas.as_ref().is_some_and(|c| {
+                        c.alt == *alt
+                            && c.inspection.ctrl == *ctrl
+                            && c.pointer_captured == *pointer_captured
+                    })
+                    && number(&value.input.key_events).ok() >= number(key_events_at_least).ok()
+                    && number(&value.input.pointer_events).ok()
+                        >= number(pointer_events_at_least).ok()
             }
             Self::CanvasModifiers {
                 alt,
@@ -618,6 +661,17 @@ impl UiCondition {
             }
             Self::Cleanup { phase } => {
                 &value.cleanup.phase == phase && value.cleanup.opened == phase.is_some()
+            }
+            Self::CleanupFocus {
+                plan_id,
+                key_events_at_least,
+            } => {
+                value.cleanup.opened
+                    && value.cleanup.phase.as_deref() == Some("ready")
+                    && value.cleanup.plan_id.as_ref() == Some(plan_id)
+                    && value.cleanup.focus_inside
+                    && value.window.focused
+                    && number(&value.input.key_events).ok() >= number(key_events_at_least).ok()
             }
             Self::Task { task_id, status } => value
                 .tasks

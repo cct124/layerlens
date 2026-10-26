@@ -150,8 +150,8 @@ impl Shared {
         if instance.windows.get().is_some() {
             tools.extend([
                 definition::<Request<Empty>,WindowState>("dev_window_state", "读取本测试实例 main／辅助窗口的焦点事件、尺寸和 DPI；Windows 附带匿名化的原生前台、键盘焦点及鼠标捕获诊断，查询失败单独报告。", true)?,
-                definition::<Request<WindowAction>,WindowActionResult>("dev_window_action", "只操作测试实例自有窗口：焦点转移、最小化、最大化、还原、预设尺寸、正常关闭；需请求 ID。dispatched 后须等待实际状态。", false)?,
-                definition::<Request<WindowWait>,WindowWaitResult>("dev_window_wait", "有界等待原生窗口状态及事件序号；超时保留末态，不占输入名额。", true)?,
+                definition::<Request<WindowAction>,WindowActionResult>("dev_window_action", "只操作测试实例自有窗口：焦点转移、最小化、最大化、还原、预设尺寸、主窗口居中、正常关闭；需请求 ID。dispatched 后须等待实际状态。", false)?,
+                definition::<Request<WindowWait>,WindowWaitResult>("dev_window_wait", "有界等待自有窗口的系统前台／键盘焦点、原生状态及事件序号；foreground 不接受事件层的旧 focused 标志，超时保留末态。", true)?,
             ]);
         }
         host.operations.testing.enable();

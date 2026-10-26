@@ -1,9 +1,13 @@
 //! 只读 Win32 绑定；所有输出缓冲区均由本模块初始化，句柄从不被解引用。
 //! https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getguithreadinfo
 
-use super::{FocusSnapshot, GuiThreadSnapshot, WindowTarget};
+use super::{DesktopObservation, FocusSnapshot, GuiThreadSnapshot, WindowTarget};
 use windows_sys::Win32::{
     Foundation::{GetLastError, HWND},
+    System::{
+        StationsAndDesktops::{GetThreadDesktop, GetUserObjectInformationW, UOI_IO},
+        Threading::GetCurrentThreadId,
+    },
     UI::WindowsAndMessaging::{
         GUI_INMENUMODE, GUI_INMOVESIZE, GUI_POPUPMENUMODE, GUI_SYSTEMMENUMODE, GUITHREADINFO,
         GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, IsChild,
@@ -31,6 +35,53 @@ fn owned_thread(window: HWND) -> Result<u32, ProbeError> {
         return Err(("foreignOwnedWindow", None));
     }
     Ok(thread)
+}
+
+fn desktop_receives_input(thread: u32) -> Result<bool, ProbeError> {
+    // SAFETY: 线程 ID 来自当前线程或已校验自有窗口；返回借用句柄，不关闭它。
+    let desktop = unsafe { GetThreadDesktop(thread) };
+    if desktop.is_null() {
+        return Err(last_error("threadDesktop"));
+    }
+    let mut receives_input: windows_sys::core::BOOL = 0;
+    // SAFETY: UOI_IO 输出 BOOL；缓冲区已初始化、对齐且大小精确。此调用只查询
+    // 桌面是否接收输入，不改变线程所属桌面或系统输入目标。
+    if unsafe {
+        GetUserObjectInformationW(
+            desktop,
+            UOI_IO,
+            (&mut receives_input as *mut windows_sys::core::BOOL).cast(),
+            std::mem::size_of_val(&receives_input) as u32,
+            std::ptr::null_mut(),
+        )
+    } == 0
+    {
+        return Err(last_error("desktopReceivesInput"));
+    }
+    Ok(receives_input != 0)
+}
+
+fn observe_desktop(main_thread: u32) -> DesktopObservation {
+    let result = (|| {
+        // SAFETY: 无参数，仅读取当前线程 ID，不对外返回该标识。
+        let calling_thread = unsafe { GetCurrentThreadId() };
+        Ok((
+            desktop_receives_input(calling_thread)?,
+            desktop_receives_input(main_thread)?,
+        ))
+    })();
+    match result {
+        Ok((calling_thread_receives_input, window_thread_receives_input)) => {
+            DesktopObservation::Available {
+                calling_thread_receives_input,
+                window_thread_receives_input,
+            }
+        }
+        Err((operation, error_code)) => DesktopObservation::Unavailable {
+            operation,
+            error_code,
+        },
+    }
 }
 
 struct OwnedWindows {
@@ -88,6 +139,7 @@ pub(super) fn observe(main: usize, auxiliary: usize) -> Result<FocusSnapshot, Pr
     // SAFETY: 无参数只读查询；返回的句柄只做分类，不访问其内存。
     let foreground = unsafe { GetForegroundWindow() };
     Ok(FocusSnapshot {
+        desktop: observe_desktop(main_thread),
         foreground: windows.target(foreground),
         main_thread: windows.thread(main_thread)?,
         auxiliary_thread: windows.thread(auxiliary_thread)?,

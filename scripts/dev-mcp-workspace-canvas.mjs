@@ -1,19 +1,20 @@
 // 正式 Konva 工作区：所有应用操作通过开发 MCP；预期来自人工样本定义。
 import assert from 'node:assert/strict';
 import { captureDisplayEnvironment, displayIssues } from './dev-mcp-render-environment.mjs';
-import { ensureRenderFocus } from './dev-mcp-render-focus.mjs';
+import { ensureRenderFocus, focusTestWindow } from './dev-mcp-render-focus.mjs';
 import { exerciseWorkspaceMemory } from './dev-mcp-workspace-memory.mjs';
 
 export async function recordWorkspaceEnvironment(context, label, cycle = null, terminal = false) {
   const { report } = context;
   const record = (report.workspaceEnvironment ??= {
+    foregroundTarget: report.memoryForeground ?? 'main',
     samples: [],
     baseline: null,
     terminal: null,
     valid: true,
   });
   const sample = await captureDisplayEnvironment(context);
-  const issues = displayIssues(sample);
+  const issues = displayIssues(sample, null, record.foregroundTarget);
   // 文档关闭会主动撤销 Canvas，属于生命周期变化；原生窗口和焦点仍须保持。
   if (report.scenario === 'canvas-memory' && record.baseline) {
     const signature = (s) => [
@@ -52,7 +53,6 @@ export async function recordWorkspaceEnvironment(context, label, cycle = null, t
 export async function exerciseWorkspaceCanvas(context) {
   const {
     scenario,
-    state,
     core,
     wait,
     waitCore,
@@ -85,6 +85,8 @@ export async function exerciseWorkspaceCanvas(context) {
   await click('command:actual');
   await paint();
   await ensureRenderFocus(context);
+  if (scenario === 'canvas-memory' && report.memoryForeground === 'auxiliary')
+    await focusTestWindow(context, 'auxiliary', { requireEvent: true });
   await recordWorkspaceEnvironment(context, 'start');
   const move = (p) => ({ kind: 'move', ...p });
   const down = (button = 'left') => ({ kind: 'down', button });
@@ -96,6 +98,7 @@ export async function exerciseWorkspaceCanvas(context) {
         kind: 'canvasIdle',
         pointerEventsAtLeast: String(BigInt(result.value.before.input.pointerEvents) + 2n),
       });
+    return result;
   }
   async function pick(x, y) {
     const p = point(await paint(), x, y);
@@ -179,24 +182,62 @@ export async function exerciseWorkspaceCanvas(context) {
     await gesture([move(p), down(), move({ x: p.x + 20, y: p.y + 15 }), move(p), up()]);
     await key('control', 'up');
     await inspect(id('overlap-card'), true);
-    await key('control', 'down');
-    await gesture([move(p), down()], true);
-    const beforeBlur = await state();
+    const ctrlInput = await key('control', 'down');
+    const keyEventsAtLeast = String(BigInt(ctrlInput.value.before.input.keyEvents) + 1n);
+    report.inspectionBlur = { phase: 'modifier-ready' };
+    await wait({ kind: 'canvasModifiers', ctrl: true, alt: false, keyEventsAtLeast });
+    const heldInput = await gesture([move(p), down()], true);
+    report.inspectionBlur.phase = 'pointer-ready';
+    const beforeBlur = await wait({
+      kind: 'canvasInput',
+      documentId: document.id,
+      revision: document.revision,
+      ctrl: true,
+      alt: false,
+      pointerCaptured: true,
+      keyEventsAtLeast,
+      pointerEventsAtLeast: String(BigInt(heldInput.value.before.input.pointerEvents) + 2n),
+    });
+    report.inspectionBlur.before = beforeBlur;
+    const foreground = (
+      await tool(
+        'dev_window_wait',
+        args({
+          condition: { kind: 'foreground', target: 'main' },
+          afterSequence: null,
+          timeoutMs: 10000,
+        }),
+      )
+    ).value;
+    report.inspectionBlur.foreground = foreground;
+    assert(foreground.satisfied, JSON.stringify(foreground));
+    report.inspectionBlur.phase = 'blur';
     const dispatch = (await tool('dev_window_action', args({ kind: 'focusAuxiliary' }, true)))
       .value;
     const blurred = (
       await tool(
         'dev_window_wait',
         args({
-          condition: { kind: 'focus', main: false, auxiliary: true },
+          condition: { kind: 'foreground', target: 'auxiliary' },
           afterSequence: dispatch.before.eventSequence,
           timeoutMs: 10000,
         }),
       )
     ).value;
-    report.inspectionBlur = { before: beforeBlur, dispatch, wait: blurred };
+    Object.assign(report.inspectionBlur, { dispatch, wait: blurred });
     assert(blurred.satisfied, JSON.stringify(blurred));
     await wait({ kind: 'windowFocus', focused: false, eventsAfter: beforeBlur.window.blurEvents });
+    // 必须在恢复焦点或显式释放输入前证明真实 blur 已取消捕获和 Ctrl 检查。
+    report.inspectionBlur.cancelled = await wait({
+      kind: 'canvasInput',
+      documentId: document.id,
+      revision: document.revision,
+      ctrl: false,
+      alt: false,
+      pointerCaptured: false,
+      keyEventsAtLeast: beforeBlur.input.keyEvents,
+      pointerEventsAtLeast: beforeBlur.input.pointerEvents,
+    });
     await ensureRenderFocus(context);
     await action({ kind: 'releaseInputs' });
     view = await inspect(id('overlap-card'), true);

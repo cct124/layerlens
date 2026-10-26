@@ -14,6 +14,8 @@ const runFiles = [
   'fixed-task.png',
   'cleanup-confirmation.png',
   'cleanup-sync-failure.png',
+  'cleanup-window-minimum.png',
+  'cleanup-window-default.png',
   'final-state.png',
   'generic-capture.png',
   'workspace-inspection.png',

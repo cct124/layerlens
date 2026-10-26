@@ -144,6 +144,10 @@ $devMcpConfig = @{
 
 窗口套件 `--webview-suite m2-window` 运行 `window-controls`／`window-blur`／`window-menu`／`window-exit`，必须使用可交互的 Windows 桌面会话。它显式设置 `visible: true` 与 `nativeWindows: true`，额外注册 `dev_window_state`／`dev_window_action`／`dev_window_wait`，共 20 个工具。系统焦点只在本实例主窗口与无 WebView 的辅助窗口间转移；窗口会显示并实际取得焦点，不应同时操作测试窗口。完整契约见[窗口与真实失焦扩展](docs/08-开发测试MCP.md#窗口与真实失焦扩展)。没有相应桌面能力时场景失败，不降级为合成事件或静默跳过。原生位置／尺寸／DPI、前端可信 focus／blur 计数和截图进入报告；正常退出由外部进程句柄、连接回收、源文件哈希及残留扫描确认。系统文件选择器、跨屏 DPI、贴靠和 Alt+F4 仍属独立验收。
 
+真实焦点测试先等待 `foreground`（系统前台及键盘焦点归属）与可信 DOM 状态；持键手势再等 `canvasInput` 的实际 Ctrl／捕获与事件计数，不能把驱动派发成功或旧 `focused` 标志当作就绪。资源对照可用单场景入口 `npm run test:dev-mcp:webview -- --app target/dev-mcp-release/layerlens.exe --driver <匹配驱动路径> --scenario canvas-memory --visible --canvas-memory-focus auxiliary`；默认目标为 `main`。两组都逐轮校验预期前台，仍使用原 20 轮门槛和 60 秒自然空闲观察。
+
+启用原生窗口的场景在加载样本前统一预检输入桌面、系统前台及原生／前端显示一致性，并要求客户区完整位于当前屏幕工作区。单场景可追加 `--window-size minimum|default|renderLab` 与 `--expect-dpr <实际期望值>`；前者调用已有受限窗口动作，后者仅作断言，不模拟 DPI。报告 `preflight` 保存预期、实际值、阶段及失败末态，前置失败标为 `environment-precondition`。`npm run test:dev-mcp:cleanup-window` 串行运行三个清理模态窗口实例，验证失焦恢复、Tab、Esc／按钮取消与再次确认。
+
 业务操作结果与附带 `userSelection` 观测分别校验。附带观测因有界后台忙碌返回 `unavailable: { code: "BUSY", ... }` 时写入报告，后续明确状态断言继续执行；不能据此重做已接受变更，也不能容忍未知错误或缺失观测。
 
 需要前端热更新时使用 `npm run dev:mcp -- -- --locked -- --dev-mcp-config $devMcpConfigPath`；仅运行 `dev:mcp` 不启用监听。普通发行构建未编入开发工具，使用以下命令验证它拒绝开发参数：
@@ -157,7 +161,7 @@ npm run test:dev-mcp:desktop -- --app target/release/layerlens.exe --expect-disa
 
 已有 Windows 虚拟机时，可通过 SSH 连接和传输文件，在客机复用现有开发测试 MCP 与回归脚本。连接配置和密钥保存在仓库外，虚拟机管理由开发者负责。
 
-界面测试须在客机已登录、未锁定的桌面会话中运行；准备对应版本的程序与测试依赖，先核验焦点、截图和 DPR，再执行回归并取回报告。虚拟机性能单独建立基线。
+界面测试须在客机已登录、未锁定且实际接收系统输入的桌面中运行；由测试 MCP 核验输入桌面、系统前台、截图和 DPR 后执行回归并取回报告，不能仅凭会话列表“运行中”判定就绪。连接方式改变后重新记录显示条件；虚拟机性能单独建立基线。
 
 ## Konva 渲染验证
 

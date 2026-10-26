@@ -338,6 +338,16 @@ pub(crate) struct InputResult {
     deny_unknown_fields
 )]
 pub(crate) enum UiCondition {
+    /// 同一真实投影中同时确认当前文档、可信事件计数、修饰键及 DOM 指针捕获。
+    CanvasInput {
+        document_id: String,
+        revision: String,
+        alt: bool,
+        ctrl: bool,
+        pointer_captured: bool,
+        key_events_at_least: String,
+        pointer_events_at_least: String,
+    },
     /// 等待空工作区真实释放应用拥有的前端预览资源，不执行 GC。
     PreviewReleased {
         at_least: String,
@@ -402,6 +412,11 @@ pub(crate) enum UiCondition {
     },
     Cleanup {
         phase: Option<String>,
+    },
+    /// 当前清理计划就绪且真实窗口焦点位于模态内，输入已投影。
+    CleanupFocus {
+        plan_id: String,
+        key_events_at_least: String,
     },
     CleanupSync {
         failed: bool,

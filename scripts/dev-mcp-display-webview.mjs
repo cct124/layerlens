@@ -64,7 +64,7 @@ export async function exerciseDisplayEnvironment(context) {
     await tool(
       'dev_window_wait',
       args({
-        condition: { kind: 'focus', main: false, auxiliary: true },
+        condition: { kind: 'foreground', target: 'auxiliary' },
         afterSequence: dispatch.before.eventSequence,
         timeoutMs: 10000,
       }),

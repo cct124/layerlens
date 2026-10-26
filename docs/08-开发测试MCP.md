@@ -173,11 +173,11 @@ CI 的收集与上传步骤使用 `always()`，测试准备或运行失败后仍
 
 `nativeWindows` 默认为 `false`；只有显式 `true`、`visible: true` 且配置有效 `webDriverUrl` 的隔离实例启用。启动时持有 `main` 和一个固定标签、无 WebView 的焦点辅助窗口；不接收窗口句柄、任意标签、外部进程或屏幕输入。锁定的 Tauri 2.11.5 将无 WebView `WindowBuilder` 放在 `unstable` feature 下，因此仅 `dev-mcp` 构建启用该 feature，没有新增依赖或生产 IPC 权限。辅助窗口不授予业务能力，主窗口销毁后通过正常 close 关闭辅助窗口，随后沿用既有服务／核心退出流程。
 
-| 工具                | 契约                                                                                                                                                                                                                                                                                    |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dev_window_state`  | 读取原生焦点、辅助窗口焦点、可见／最小化／最大化、物理位置和客户区尺寸、逻辑尺寸及当前 scaleFactor；附事件序号与 main 的 focus／blur／resize／move 计数                                                                                                                                 |
-| `dev_window_action` | 带请求 ID，接受 `focusMain`、`focusAuxiliary`、`minimize`、`maximize`、`restore`、`resize { size: minimum、default 或 renderLab }`、`close`。尺寸预设为 900×600／1280×800／1280×900 逻辑像素；restore 同时解除最小化与最大化。返回操作前状态和 dispatched，不宣称事件已到达或应用已退出 |
-| `dev_window_wait`   | `condition` 为 `focus { main, auxiliary }`、`state { minimized, maximized }` 或 `size { size }`；可带 `afterSequence` 要求新原生事件，`timeoutMs` 为 1–30000。事件唤醒并每至多 50 ms 补查未必触发 resize 的最小化状态，超时保留实际末态，退出立即终止等待                               |
+| 工具                | 契约                                                                                                                                                                                                                                                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev_window_state`  | 读取原生／辅助窗口焦点、系统前台与输入桌面、可见／最小化／最大化、物理位置和客户区尺寸、逻辑尺寸及 scaleFactor；附工作区 `workArea`、`clientWithinWorkArea` 和 focus／blur／resize／move 计数                                                                                                                          |
+| `dev_window_action` | 带请求 ID，接受 `focusMain`、`focusAuxiliary`、`minimize`、`maximize`、`restore`、`center`、`resize { size: minimum、default 或 renderLab }`、`close`。尺寸预设为 900×600／1280×800／1280×900 逻辑像素；restore 解除最小化与最大化，center 仅居中自有主窗口。返回操作前状态和 dispatched，不宣称事件已到达或应用已退出 |
+| `dev_window_wait`   | `condition` 为 `foreground { target: main 或 auxiliary }`、`focus { main, auxiliary }`、`state { minimized, maximized }`、`size { size }` 或 `withinWorkArea`；可带 `afterSequence` 要求新原生事件，`timeoutMs` 为 1–30000。事件唤醒并每至多 50 ms 补查原生状态，超时保留实际末态，退出立即终止等待                    |
 
 窗口变更与 WebDriver 输入／截图共用一个执行锁，等待复用既有四个等待名额。外层实例／会话校验、变更回执、未知字段拒绝和有界响应沿用原协议；未启用时不注册这三个工具。`dev_ui_action` 新增 `titlebarDoubleClick`（仅窗口测试实例，通过 W3C 双击真实空白标题栏）及 `movePointer { x, y }`（仅已解码画布内，无按键）。窗口按钮使用固定语义目标 `window:minimize`／`window:maximize`／`window:close`。
 
@@ -190,6 +190,8 @@ Windows 的顶层 HWND 焦点查询不包含 WebView2 子窗口。main 的 `focu
 `test:dev-mcp:m2-window` 在新实例中执行四类场景各 5 次：最小／默认／最大化／还原、双击和最小化恢复；新建／移动／调整草稿与中键平移真实失焦后取消、迟到松键不提交；菜单失焦收起及恢复后键盘作用域；固定任务内容和预览交付在途时点击关闭按钮，由外部运行器验证退出码 0、无归属进程残留及源 PSD 哈希不变。退出可能中断驱动响应，报告保留该诊断，独立的进程和文件断言决定结果。CI 运行该入口并保留关键窗口 PNG；未提供可交互桌面的环境明确失败。当前 scaleFactor 观测不等于多 DPI／跨屏验收，标题栏系统拖动、文件选择器、贴靠和 Alt+F4 仍保留独立专项。
 
 ### 清理测试扩展
+
+`cleanup-window` 使用原生窗口和现有清理服务，在最小／默认尺寸验证同一清理计划的失焦／恢复、Tab 焦点、Esc／按钮取消无副作用及重新确认。`cleanupFocus { planId, keyEventsAtLeast }` 仅在该计划 ready、模态打开、真实窗口聚焦、DOM 活动元素位于模态内且可信键盘计数已到达时满足；旧计划或后台窗口不能提前通过。套件 `test:dev-mcp:cleanup-window` 固定三个独立实例并串行执行，关键模态截图加入既有收集白名单。
 
 `dev_prepare_tasks` 接受 `{ snapshotId, count, namePrefix }`，数量为 1–128，前缀为 1–240 UTF-8 字节且不能全为空白。以固定快照串行调用真实任务创建服务，只占一条开发变更回执；不修改核心任务容量、终态或已有回执。返回 `status: complete | partial | failed`、请求数量、已创建任务 ID 和首个错误；任务 ID 数量同时是失败项的零基下标，其后没有执行。重试相同外层请求返回同一结果，不补做部分失败，不自动回滚已创建任务。
 
@@ -230,7 +232,13 @@ Windows 的顶层 HWND 焦点查询不包含 WebView2 子窗口。main 的 `focu
 
 Windows 的窗口状态新增 `nativeFocus`：顺序读取系统前台窗口及主窗口、辅助窗口、前台 GUI 线程的活动窗口、键盘焦点、鼠标捕获和菜单／移动状态。窗口只归类为 `main`、`mainChild`、`auxiliary`、`auxiliaryChild`、`other` 或 `none`，不输出 HWND、外部进程身份或窗口标题；查询失败返回 `unavailable` 及操作／错误码，不能视为未聚焦。这些诊断不是原子快照，也不替代原生焦点事件和可信 DOM 事件。只读封装位于开发测试专用的 `layerlens-window-probe`，复用锁文件已有的 `windows-sys 0.61.2`；仅最小 Win32 模块允许 FFI，核心与桌面仍保留 `unsafe_code = "forbid"`。
 
-系统前台归属与 WebView 焦点是独立维度，不能仅据 Tauri／DOM 的 `focused=true` 推断窗口位于前台。目前原生 `focus` 等待仍按原有事件和查询判定，`nativeFocus` 仅提供诊断；系统前台及持键／捕获前置条件的强制等待尚待补齐。对应测试失败与后台资源测量须显式保留这一边界，不能计作真实前台验收。
+系统前台归属与 WebView 焦点是独立维度，不能仅据 Tauri／DOM 的 `focused=true` 推断窗口位于前台。`foregroundReady` 仅在系统前台、前台线程的 active／keyboard focus 都归属于同一自有窗口及其子窗口，且没有系统菜单／移动缩放模式时为 `main` 或 `auxiliary`，其余及查询不可用时为 `null`。`foreground` 等待进一步要求主窗口可见、未最小化，以及主／辅助窗口焦点标志与目标一致。旧 `focus` 条件兼容保留；新的真实失焦和显示环境测试必须使用 `foreground`，并分别等待可信 DOM 状态，不能拿旧事件标志提前返回。前台读取是分时采样，不宣称连续或原子监控。
+
+`nativeFocus.snapshot.desktop` 通过 Win32 `GetThreadDesktop`／`GetUserObjectInformationW(UOI_IO)` 只读判断调用线程与主窗口线程的桌面是否接收系统输入，分别返回布尔值；查询失败单独保留操作和错误码。不输出桌面名称、会话身份或外部窗口信息，不切换桌面。`foregroundReady` 还要求两项均为 true；仅有登录会话或可截图的 WebView 不代表输入桌面已就绪。
+
+`dev_window_state` 同时返回 `workArea`（物理坐标及宽高，不含设备名称）和 `clientWithinWorkArea`。使用 Tauri 的当前屏幕工作区及实际客户区位置／尺寸，找不到屏幕时为 null；不能用“窗口存在且可截图”代替完整可见。显示环境门禁要求客户区完整位于工作区，负坐标屏幕按同一物理空间比较。
+
+原生窗口场景在握手后、加载 PSD 前执行统一预检。顺序为输入桌面 → 前台 → 可选窗口预设及前端同步 → 主窗口居中与完整工作区等待 → 稳定显示条件。`dev_window_action` 的 `center` 只调用本实例主窗口的 Tauri 居中，不能指定外部窗口或坐标；`dev_window_wait` 的 `withinWorkArea` 等待客户区完整位于工作区、可见且未最小化。单场景 `--window-size` 接受已有三种尺寸，`--expect-dpr` 接受 (0,8] 的有限值，仅断言真实 DPR，不写浏览器模拟值。`preflight` 保存阶段、预期、原始观测、动作回执和失败末态；失败保留 `environment-precondition` 分类，仍执行正常退出和报告收集，不自动修复环境后重试。未启用原生窗口的旧业务／隐藏 WebView 场景保持原契约；不据此宣称真实焦点验收。
 
 WebView 运行器在失败发生时、进入收尾时及驱动清理前后分别保存应用进程句柄的观测结果，正常与异常退出都记录实际退出码。进入收尾的快照位于失败后的退出请求之前；成功路径则已经验证正常退出。驱动清理后的退出不能补作业务正常退出。MCP 请求记录时间、耗时及有界的网络错误原因链；不展开请求、响应对象或凭据。真实失焦场景保存派发前状态、派发回执和完整等待末态，原超时与失败断言保持不变。
 
@@ -284,6 +292,7 @@ Konva 脚本以两次原生观测夹住前端观测，保存原生窗口尺寸�
 
 - `canvasPaint` 等待固定 `documentId`／`revision` 和至少 `sceneAtLeast` 的完整绘制，可用于滚轮、布局及重载后的同步。
 - `canvasModifiers` 同时等待 `alt`／`ctrl` 实际状态及 `keyEventsAtLeast`。可信按键计数在捕获时增加，不能单独证明后续组件处理已完成；禁止用任意 `viewRevision` 变化替代指定输入完成。
+- `canvasInput` 在同份前端投影内等待 `documentId`／`revision`、`ctrl`／`alt`、实际 DOM `pointerCaptured`、`keyEventsAtLeast` 和 `pointerEventsAtLeast`。持键／保留按下回执之后先等此条件，再核对系统前台并派发真实焦点转移；失焦后的取消断言必须早于焦点恢复和 `releaseInputs`。
 - `inspection` 等待固定文档修订、`selectedLayerId`（可空）、`autoSelect`、`ctrl`；要求完整摘要、请求结束，核心选中项与实际树行、实际属性标题一致。候选只报告数量，`precision` 首批固定为 `bounds`，不传完整私有图层名称或像素。
 - `canvas:auto`／`canvas:next` 是新增语义输入目标；Ctrl、普通点击／组合手势、真实失焦、原生尺寸调整继续复用现有受限工具，不能通过观测桥修改状态。
 - `fillLayerSearch` 经固定搜索输入框发送真实按键，只接收单行且不超过 256 UTF-8 字节的文本；`layerFilter` 等待实际过滤是否启用，报告不包含搜索原文。`layer:<id>:toggle` 只操作组的折叠按钮，用于验证树视图变化不影响画布候选。
@@ -291,6 +300,8 @@ Konva 脚本以两次原生观测夹住前端观测，保存原生窗口尺寸�
 `test:dev-mcp:canvas` 串行运行 `canvas-inspection`、`canvas-display`，默认各两个独立进程。覆盖默认开关、重叠与隐藏／透明边界、Ctrl 和任务独立、失焦取消，25%／100%／200% 合成图色块、窗口重排、重载和标签视图。截图通过开发 MCP 获取，由独立预期色块校验；不等于完整 Photoshop 保真。`canvas-sync` 仅将基线与检查各运行两次，用于输入同步修复后的定向复验，不代替显示或资源场景。
 
 `test:dev-mcp:canvas-resources` 使用 `canvas-resources` 套件，三个独立 release 实例，各固定 20 轮打开／关闭；`canvas-memory` 本身拒绝 debug。`build:dev-mcp:release` 复用 Cargo 缓存并在成功／失败后恢复已有普通 release，测试 EXE 独立保存在 `target/dev-mcp-release/`，CI 复用相同入口。每轮保存耗时、原时机的 40 次内存及资源观测，之后在 0／10／30／60 秒保存自然空闲曲线；原门槛先计算并保留，空闲回落不能改判循环失败，无强制 GC。
+
+单场景入口支持 `--canvas-memory-focus main|auxiliary`，默认 `main`；`auxiliary` 仅允许用于 `canvas-memory`。对照先在主窗口完成初始化，再将系统前台交给无 WebView 的本实例辅助窗口，主窗口仍可见。报告保存预期目标、转移回执及每轮前后原生／前端观测；任何 `other`、不可用、目标不符或焦点历史变化均失败。跨实例比较应固定程序、运行时、样本、DPR、窗口／视口及轮数，分组报告前台条件；过去缺少这些前提的数据只作历史诊断。
 
 `previewResources` 在无活动 Canvas 时仍报告：绘制器、Stage、Image、Blob URL、预览读取、decode 和应用 RAF 各自的 created／released／live；来自真实取得／释放路径，不保留被观测对象。异步读取／decode 直到实际完成才释放计数，组件销毁不提前归零。另记录 DOM 中正式 Canvas 数量和后备像素数，不代表所有离屏表面、JS 堆、浏览器缓存或显存。`previewReleased {atLeast}` 同时要求核心序号满足、无活动文档／Canvas、所有应用拥有资源及 DOM 表面归零；格式不一致的计数拒绝。观测仅供诊断，资源门槛仍使用 OS 私有提交量。
 

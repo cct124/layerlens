@@ -1,5 +1,6 @@
 // 清理边界通过真实 MCP、WebView 输入和命名检查点验证；没有固定休眠或组件状态写入。
 import assert from 'node:assert/strict';
+import { focusTestWindow } from './dev-mcp-render-focus.mjs';
 
 export async function exerciseCleanupBoundaries(context) {
   const {
@@ -96,7 +97,84 @@ export async function exerciseCleanupBoundaries(context) {
   }
   report.phase = scenario;
   const snapshotId = await select();
-  if (scenario === 'cleanup-max') {
+  if (scenario === 'cleanup-window') {
+    const ids = await prepare(snapshotId, 2);
+    await refresh();
+    await wait({ kind: 'taskCount', count: 2 });
+    const fixed = await core();
+    report.cleanupWindow = [];
+    for (const size of ['minimum', 'default']) {
+      const initial = await preflight();
+      const planId = initial.cleanup.planId;
+      const focused = (keyEventsAtLeast = initial.input.keyEvents) =>
+        wait({ kind: 'cleanupFocus', planId, keyEventsAtLeast });
+      await focused();
+      await tool('dev_window_action', args({ kind: 'resize', size }, true));
+      const resized = (
+        await tool(
+          'dev_window_wait',
+          args({
+            condition: { kind: 'size', size },
+            afterSequence: null,
+            timeoutMs: 10000,
+          }),
+        )
+      ).value;
+      assert(resized.satisfied);
+      await wait({
+        kind: 'display',
+        width: Math.round(resized.lastState.logicalWidth),
+        height: Math.round(resized.lastState.logicalHeight),
+        devicePixelRatio: resized.lastState.scaleFactor,
+        afterRevision: null,
+      });
+      await focusTestWindow(context, 'auxiliary', { requireEvent: true });
+      const blurred = await wait({ kind: 'cleanup', phase: 'ready' });
+      assert.equal(blurred.window.focused, false);
+      assert.equal(blurred.cleanup.planId, planId);
+      assert.deepEqual(blurred.cleanup.taskIds, initial.cleanup.taskIds);
+      await focusTestWindow(context, 'main', { requireEvent: true });
+      const recovered = await focused();
+      const tabs = [];
+      for (let index = 0; index < 4; index++) {
+        const input = await key('tab');
+        tabs.push(await focused(String(BigInt(input.value.before.input.keyEvents) + 2n)));
+      }
+      assert.deepEqual((await core()).selection, fixed.selection);
+      assert.equal((await core()).cleanup.revision, fixed.cleanup.revision);
+      assert.deepEqual(
+        (await state()).tasks.map((t) => t.status),
+        ['active', 'active'],
+      );
+      await screenshot('cleanup-window-' + size + '.png');
+      if (size === 'minimum') await key('escape');
+      else await click('cleanup:cancel');
+      const cancelled = await wait({ kind: 'cleanup', phase: null });
+      assert.deepEqual((await core()).selection, fixed.selection);
+      assert.equal((await core()).cleanup.revision, fixed.cleanup.revision);
+      assert.deepEqual(
+        cancelled.tasks.map((t) => t.status),
+        ['active', 'active'],
+      );
+      report.cleanupWindow.push({
+        size,
+        planId,
+        native: resized.lastState,
+        blurred,
+        recovered,
+        tabs,
+        cancelled,
+      });
+    }
+    await preflight();
+    await click('cleanup:confirm');
+    await wait({ kind: 'cleanupSync', failed: false });
+    invalidated(await wait({ kind: 'selectionIdle' }), ids);
+    await waitCore({ kind: 'resourcesReleased' });
+    report.checks.push(
+      '清理模态在两档真实尺寸中失焦／恢复保持计划，Tab 焦点留在模态内，Esc／按钮取消无副作用，再次确认正常清理',
+    );
+  } else if (scenario === 'cleanup-max') {
     const ids = await prepare(snapshotId, 128);
     await refresh();
     await wait({ kind: 'taskCount', count: 32 });

@@ -17,6 +17,8 @@ function fixture() {
     moveEvents: '0',
     focused: true,
     auxiliaryFocused: false,
+    foregroundReady: 'main',
+    clientWithinWorkArea: true,
     visible: true,
     minimized: false,
     x: 20,
@@ -69,6 +71,25 @@ test('尺寸／DPR／焦点即使恢复，历史变化仍拒绝', () => {
     if (kind === 'resize') next.nativeBefore.resizeEvents = next.nativeAfter.resizeEvents = '2';
     assert(displayIssues(next, base).length > 0, kind);
   }
+});
+
+test('系统前台未知不能以旧 focused 放行，辅助前台资源对照须显式指定', () => {
+  const missing = fixture();
+  const clipped = fixture();
+  clipped.nativeAfter.clientWithinWorkArea = false;
+  assert(displayIssues(clipped).includes('client-outside-work-area'));
+  missing.nativeBefore.foregroundReady = missing.nativeAfter.foregroundReady = null;
+  assert(displayIssues(missing).includes('native-foreground-not-ready'));
+  const background = fixture();
+  for (const native of [background.nativeBefore, background.nativeAfter]) {
+    native.foregroundReady = 'auxiliary';
+    native.focused = false;
+    native.auxiliaryFocused = true;
+  }
+  background.ui.window.focused = false;
+  assert(displayIssues(background).includes('native-foreground-not-ready'));
+  assert.deepEqual(displayIssues(background, null, 'auxiliary'), []);
+  assert.notDeepEqual(displaySignature(background), displaySignature(fixture()));
 });
 test('当前 DPR 漂移、旧 backing store、缺失／未知和不一致原生观测均拒绝', () => {
   const changed = fixture();

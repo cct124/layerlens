@@ -30,6 +30,7 @@ assert(
     'm2-input',
     'm2-cleanup',
     'm2-window',
+    'cleanup-window',
     'render-lab',
     'workspace-canvas',
     'canvas-sync',
@@ -39,21 +40,23 @@ assert(
 const scenarios =
   values['webview-suite'] === 'canvas-resources'
     ? ['canvas-memory']
-    : values['webview-suite'] === 'canvas-sync'
-      ? ['baseline', 'canvas-inspection']
-      : values['webview-suite'] === 'workspace-canvas'
-        ? ['canvas-inspection', 'canvas-display']
-        : values['webview-suite'] === 'm2'
-          ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
-          : values['webview-suite'] === 'm2-input'
-            ? ['input-pan', 'input-chord', 'input-snapping']
-            : values['webview-suite'] === 'm2-cleanup'
-              ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
-              : values['webview-suite'] === 'm2-window'
-                ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
-                : values['webview-suite'] === 'render-lab'
-                  ? ['render-lab']
-                  : ['baseline'];
+    : values['webview-suite'] === 'cleanup-window'
+      ? ['cleanup-window']
+      : values['webview-suite'] === 'canvas-sync'
+        ? ['baseline', 'canvas-inspection']
+        : values['webview-suite'] === 'workspace-canvas'
+          ? ['canvas-inspection', 'canvas-display']
+          : values['webview-suite'] === 'm2'
+            ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
+            : values['webview-suite'] === 'm2-input'
+              ? ['input-pan', 'input-chord', 'input-snapping']
+              : values['webview-suite'] === 'm2-cleanup'
+                ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
+                : values['webview-suite'] === 'm2-window'
+                  ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
+                  : values['webview-suite'] === 'render-lab'
+                    ? ['render-lab']
+                    : ['baseline'];
 assert(
   repeats >= scenarios.length && repeats % scenarios.length === 0,
   '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',
@@ -70,6 +73,7 @@ const report = {
   startedAt: new Date().toISOString(),
   repeats,
   concurrency: [
+    'cleanup-window',
     'm2-window',
     'render-lab',
     'workspace-canvas',
@@ -159,6 +163,8 @@ async function execute(kind, iteration) {
     await writeFile(path.join(run, 'runner.log'), outcome.output, { flag: 'wx' });
     const data = JSON.parse(await readFile(path.join(run, 'report.json'), 'utf8'));
     result.phase = data.phase ?? (data.passed ? 'complete' : 'business');
+    result.failureCategory = data.failureCategory;
+    result.preflight = data.preflight;
     result.instanceId = data.instanceId;
     result.scenarioDurationMs = data.durationMs;
     result.checks = data.checks;

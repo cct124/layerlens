@@ -74,10 +74,12 @@ export function displaySignature(snapshot) {
     physicalWidth: n.physicalWidth,
     physicalHeight: n.physicalHeight,
     scaleFactor: n.scaleFactor,
+    foreground: n.foregroundReady ?? 'unavailable',
   };
 }
 
-export function displayIssues(current, baseline = null) {
+export function displayIssues(current, baseline = null, foregroundTarget = 'main') {
+  assert(['main', 'auxiliary'].includes(foregroundTarget));
   const issues = [];
   const ui = current.ui,
     w = ui?.window,
@@ -86,8 +88,13 @@ export function displayIssues(current, baseline = null) {
   if (current.errors.length || !w || !n || !before) return ['environment-unavailable'];
   if (!equal(before, n)) issues.push('native-changed-during-capture');
   if (!w.visible || !n.visible || n.minimized) issues.push('window-not-visible');
-  if (w.focused !== true || n.focused !== true || n.auxiliaryFocused !== false)
+  if (before.clientWithinWorkArea !== true || n.clientWithinWorkArea !== true)
+    issues.push('client-outside-work-area');
+  const focused = foregroundTarget === 'main';
+  if (w.focused !== focused || n.focused !== focused || n.auxiliaryFocused !== !focused)
     issues.push('window-not-focused');
+  if (n.foregroundReady !== foregroundTarget || before.foregroundReady !== foregroundTarget)
+    issues.push('native-foreground-not-ready');
   if (
     ![
       w.width,

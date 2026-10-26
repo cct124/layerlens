@@ -23,6 +23,7 @@ import { captureTiled } from './dev-mcp-capture.mjs';
 import { checkDevPython, runDevPython } from './dev-python.mjs';
 import { createDisplayGuard } from './dev-mcp-render-environment.mjs';
 import { exerciseDisplayEnvironment } from './dev-mcp-display-webview.mjs';
+import { preflightOptions, prepareTestWindow } from './dev-mcp-preflight.mjs';
 import {
   exerciseWorkspaceCanvas,
   recordWorkspaceEnvironment,
@@ -35,6 +36,9 @@ const { values: options } = parseArgs({
     visible: { type: 'boolean', default: false },
     'output-root': { type: 'string' },
     scenario: { type: 'string', default: 'baseline' },
+    'canvas-memory-focus': { type: 'string', default: 'main' },
+    'window-size': { type: 'string' },
+    'expect-dpr': { type: 'string' },
     'sample-root': { type: 'string' },
     sample: { type: 'string' },
     'render-mode': { type: 'string', default: 'shared' },
@@ -43,6 +47,12 @@ const { values: options } = parseArgs({
   },
 });
 assert.equal(process.platform, 'win32', '当前真实 WebView 回归仅验证 Windows。');
+const expectedDisplay = preflightOptions(options);
+assert(['main', 'auxiliary'].includes(options['canvas-memory-focus']));
+assert(
+  options.scenario === 'canvas-memory' || options['canvas-memory-focus'] === 'main',
+  '辅助窗口前台仅用于资源对照。',
+);
 assert(
   [
     'baseline',
@@ -59,6 +69,7 @@ assert(
     'cleanup-expiry',
     'cleanup-recovery',
     'cleanup-late',
+    'cleanup-window',
     'input-pan',
     'input-chord',
     'input-snapping',
@@ -84,6 +95,15 @@ await mkdir(runs);
 const isBenchmark = options.scenario === 'render-benchmark';
 const isRender = options.scenario.startsWith('render-');
 const isWorkspaceCanvas = options.scenario.startsWith('canvas-');
+const nativeWindows =
+  isBenchmark ||
+  isWorkspaceCanvas ||
+  options.scenario.startsWith('window-') ||
+  options.scenario === 'cleanup-window';
+assert(
+  nativeWindows || (expectedDisplay.size === null && expectedDisplay.dpr === null),
+  '显式显示条件仅用于原生窗口场景。',
+);
 assert(!options['sample-root'] || isBenchmark);
 assert(!options.sample || isBenchmark);
 assert(
@@ -131,6 +151,8 @@ const report = {
   python,
   evidence: 'webview-webdriver-mcp',
   scenario: options.scenario,
+  memoryForeground:
+    options.scenario === 'canvas-memory' ? options['canvas-memory-focus'] : undefined,
   passed: false,
   phase: 'driver-start',
   checks: [],
@@ -157,6 +179,8 @@ const report = {
       [
         'test-dev-webview.mjs',
         'dev-mcp-process-monitor.mjs',
+        'dev-mcp-render-focus.mjs',
+        'dev-mcp-preflight.mjs',
         'dev-mcp-display-webview.mjs',
         'dev-mcp-workspace-canvas.mjs',
         'dev-mcp-workspace-memory.mjs',
@@ -450,13 +474,9 @@ try {
     JSON.stringify({
       sampleRoot,
       runRoot: runs,
-      visible:
-        options.visible ||
-        isBenchmark ||
-        isWorkspaceCanvas ||
-        options.scenario.startsWith('window-'),
+      visible: options.visible || nativeWindows,
       webDriverUrl: endpoint,
-      nativeWindows: isBenchmark || isWorkspaceCanvas || options.scenario.startsWith('window-'),
+      nativeWindows,
       renderLab: isRender,
       largeRender: options['render-large'],
     }),
@@ -493,8 +513,7 @@ try {
   report.buildProfile = info.buildProfile;
   if (options.scenario === 'canvas-memory')
     assert.equal(report.buildProfile, 'release', '资源验收必须使用 release 开发测试程序');
-  const expectedTools =
-    isBenchmark || isWorkspaceCanvas || options.scenario.startsWith('window-') ? 20 : 17;
+  const expectedTools = nativeWindows ? 20 : 17;
   assert.equal((await rpc('tools/list', {})).tools.length, expectedTools);
   let view = await wait({ kind: 'ready' });
   frontend = view.frontendId;
@@ -503,6 +522,7 @@ try {
   if (isBenchmark) display = createDisplayGuard({ state, tool, args }, report);
   assert.equal(report.driver.browserVersion, launched.capabilities.browserVersion);
   assert.equal(report.driver.driverVersion.split(' ')[0], launched.capabilities.browserVersion);
+  if (nativeWindows) await prepareTestWindow({ state, tool, args, wait, report }, expectedDisplay);
   // 固定的只读事件诊断，不生成输入、不更改组件或核心状态。
   await wd('/session/' + session + '/execute/sync', {
     script: `
@@ -989,6 +1009,8 @@ try {
   report.passed = true;
   report.phase = 'complete';
 } catch (error) {
+  report.failureCategory =
+    report.preflight && !report.preflight.passed ? 'environment-precondition' : 'scenario';
   report.error = error.stack ?? String(error);
   report.errorDetails = errorDiagnostic(error);
   report.processAtFailure = monitor?.snapshot();

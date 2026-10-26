@@ -1,5 +1,6 @@
 // 窗口行为经开发 MCP 调用真实系统 API；UI 行为经 WebDriver。每次失焦都核对两层事件。
 import assert from 'node:assert/strict';
+import { focusTestWindow } from './dev-mcp-render-focus.mjs';
 
 export async function exerciseWindows(context) {
   const {
@@ -32,21 +33,11 @@ export async function exerciseWindows(context) {
     return result.lastState;
   }
   async function focus(main, requireEvent = true) {
-    const before = await state();
-    const input = await native({ kind: main ? 'focusMain' : 'focusAuxiliary' });
-    const window = await nativeWait(
-      { kind: 'focus', main, auxiliary: !main },
-      requireEvent ? input.before.eventSequence : null,
-    );
-    const view = await wait({
-      kind: 'windowFocus',
-      focused: main,
-      eventsAfter: requireEvent
-        ? main
-          ? before.window.focusEvents
-          : before.window.blurEvents
-        : null,
-    });
+    const {
+      view,
+      window,
+      dispatch: input,
+    } = await focusTestWindow(context, main ? 'main' : 'auxiliary', { requireEvent });
     if (requireEvent)
       assert(
         BigInt(main ? window.focusEvents : window.blurEvents) >
@@ -187,7 +178,7 @@ export async function exerciseWindows(context) {
       await focus(true, false);
       const before = await state();
       const start = point(before, x, y);
-      await action({
+      const input = await action({
         kind: 'canvasGesture',
         hold: true,
         steps: [
@@ -196,8 +187,17 @@ export async function exerciseWindows(context) {
           { kind: 'move', x: start.x + 19, y: start.y + 13 },
         ],
       });
-      const held = button === 'left' ? await wait({ kind: 'draft', active: true }) : await state();
-      assert.equal(held.canvas.pointerCaptured, true);
+      const held = await wait({
+        kind: 'canvasInput',
+        documentId: document.id,
+        revision: document.revision,
+        ctrl: false,
+        alt: false,
+        pointerCaptured: true,
+        keyEventsAtLeast: input.value.before.input.keyEvents,
+        pointerEventsAtLeast: String(BigInt(input.value.before.input.pointerEvents) + 2n),
+      });
+      if (button === 'left') await wait({ kind: 'draft', active: true });
       if (button === 'middle') assert.equal(held.canvas.panning, true);
       await focus(false);
       const cancelled = await wait({
