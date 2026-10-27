@@ -19,7 +19,7 @@ import { exerciseRenderLab } from './dev-mcp-render-webview.mjs';
 import { exerciseRenderBenchmark } from './dev-mcp-render-benchmark.mjs';
 import { exerciseRenderAcceptance } from './dev-mcp-render-acceptance.mjs';
 import { exerciseRenderProject } from './dev-mcp-render-project.mjs';
-import { captureTiled } from './dev-mcp-capture.mjs';
+import { captureTiled, assertCaptureDimensions } from './dev-mcp-capture.mjs';
 import { checkDevPython, runDevPython } from './dev-python.mjs';
 import { createDisplayGuard } from './dev-mcp-render-environment.mjs';
 import { exerciseDisplayEnvironment } from './dev-mcp-display-webview.mjs';
@@ -39,6 +39,7 @@ const { values: options } = parseArgs({
     'canvas-memory-focus': { type: 'string', default: 'main' },
     'window-size': { type: 'string' },
     'expect-dpr': { type: 'string' },
+    'start-monitor': { type: 'string' },
     'sample-root': { type: 'string' },
     sample: { type: 'string' },
     'render-mode': { type: 'string', default: 'shared' },
@@ -70,6 +71,7 @@ assert(
     'cleanup-recovery',
     'cleanup-late',
     'cleanup-window',
+    'cleanup-window-max',
     'input-pan',
     'input-chord',
     'input-snapping',
@@ -77,6 +79,11 @@ assert(
     'window-blur',
     'window-menu',
     'window-exit',
+    'window-alt-f4',
+    'window-system',
+    'window-picker',
+    'window-cross-monitor',
+    'window-topology',
   ].includes(options.scenario),
 );
 assert(
@@ -99,9 +106,12 @@ const nativeWindows =
   isBenchmark ||
   isWorkspaceCanvas ||
   options.scenario.startsWith('window-') ||
-  options.scenario === 'cleanup-window';
+  ['cleanup-window', 'cleanup-window-max'].includes(options.scenario);
 assert(
-  nativeWindows || (expectedDisplay.size === null && expectedDisplay.dpr === null),
+  nativeWindows ||
+    (expectedDisplay.size === null &&
+      expectedDisplay.dpr === null &&
+      expectedDisplay.monitor === null),
   '显式显示条件仅用于原生窗口场景。',
 );
 assert(!options['sample-root'] || isBenchmark);
@@ -447,10 +457,12 @@ async function screenshot(name, tiled = options['render-large']) {
   const png = Buffer.from(result.content.find((c) => c.type === 'image').data, 'base64');
   assert.equal(png.readUInt32BE(16), data.width);
   assert.equal(png.readUInt32BE(20), data.height);
-  assert(data.width >= 900 && data.height >= 600);
   await writeFile(path.join(run, name), png, { flag: 'wx' });
   report.images.push({
     name,
+    width: data.width,
+    height: data.height,
+    window: data.before.window,
     before: data.before.viewRevision,
     after: data.after.viewRevision,
     unchanged: data.unchanged,
@@ -465,6 +477,7 @@ async function screenshot(name, tiled = options['render-large']) {
         }
       : {}),
   });
+  assertCaptureDimensions(data);
 }
 try {
   endpoint = 'http://127.0.0.1:' + (await port);
@@ -991,7 +1004,9 @@ try {
   if (report.windowResult?.closeWindow) {
     // 关闭导致 WebDriver 断连时保留原因；是否正常退出只由外部进程句柄判定。
     try {
-      await click('window:close');
+      if (report.windowResult.systemClose)
+        await tool('dev_window_action', args({ kind: 'systemShortcut', shortcut: 'altF4' }, true));
+      else await click('window:close');
     } catch (error) {
       report.closeResponseError = String(error);
     }
@@ -1014,6 +1029,13 @@ try {
   report.error = error.stack ?? String(error);
   report.errorDetails = errorDiagnostic(error);
   report.processAtFailure = monitor?.snapshot();
+  if (nativeWindows && frontend) {
+    try {
+      report.failureNative = (await tool('dev_window_state', args({}))).value;
+    } catch (cause) {
+      report.failureNativeError = String(cause);
+    }
+  }
   if (isWorkspaceCanvas && frontend) {
     try {
       report.failureView = await state();

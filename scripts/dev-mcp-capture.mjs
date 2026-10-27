@@ -4,6 +4,37 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { runDevPython } from './dev-python.mjs';
 import path from 'node:path';
 
+/** 截图必须匹配捕获前后真实 CSS 视口与 DPR；不假定跨屏转换后仍是启动尺寸。 */
+export function assertCaptureDimensions(data) {
+  assert(
+    Number.isInteger(data.width) &&
+      data.width > 0 &&
+      Number.isInteger(data.height) &&
+      data.height > 0,
+  );
+  for (const { window: view } of [data.before, data.after]) {
+    assert(
+      Number.isFinite(view.devicePixelRatio) &&
+        view.devicePixelRatio > 0 &&
+        view.devicePixelRatio <= 8,
+    );
+    assert(
+      Number.isFinite(view.width) &&
+        view.width > 0 &&
+        Number.isFinite(view.height) &&
+        view.height > 0,
+    );
+    assert(
+      Math.abs(data.width - Math.round(view.width * view.devicePixelRatio)) <= 1,
+      '截图宽度与真实视口／DPR 不一致',
+    );
+    assert(
+      Math.abs(data.height - Math.round(view.height * view.devicePixelRatio)) <= 1,
+      '截图高度与真实视口／DPR 不一致',
+    );
+  }
+}
+
 export async function captureTiled({ rpc, args, frontend, run, root, name }) {
   const call = (operation) =>
     rpc('tools/call', {

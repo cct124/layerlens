@@ -25,6 +25,11 @@ export async function exerciseWindows(context) {
   report.windowSamples = [];
   const native = async (request) => (await tool('dev_window_action', args(request, true))).value;
   const nativeState = async () => (await tool('dev_window_state', args({}))).value;
+  if (scenario === 'window-topology') {
+    report.displayTopology = await nativeState();
+    report.checks.push('真实显示拓扑、工作区及输入桌面已观测');
+    return { closeWindow: false };
+  }
   async function nativeWait(condition, afterSequence = null) {
     const result = (
       await tool('dev_window_wait', args({ condition, afterSequence, timeoutMs: 10000 }))
@@ -80,11 +85,17 @@ export async function exerciseWindows(context) {
     assert.equal(current.selection.scope.snapshotId, fixed.snapshotId);
   }
   async function layout(window, name) {
-    const view = await wait({
+    let view = await wait({
       kind: 'windowLayout',
       width: Math.round(window.logicalWidth),
       height: Math.round(window.logicalHeight),
       maximized: window.maximized,
+    });
+    view = await wait({
+      kind: 'canvasPaint',
+      documentId: document.id,
+      revision: document.revision,
+      sceneAtLeast: view.canvas.sceneRevision,
     });
     assert.equal(view.window.devicePixelRatio, window.scaleFactor);
     const title = view.window.titlebar;
@@ -265,8 +276,119 @@ export async function exerciseWindows(context) {
     report.checks.push(
       '失焦关闭菜单，恢复后 Alt 访问键、方向键与 Esc 正常；输入框隔离 V／M／Esc，画布快捷键恢复且固定任务保留',
     );
+  } else if (scenario === 'window-system' || scenario === 'window-cross-monitor') {
+    await native({ kind: 'restore' });
+    await native({ kind: 'resize', size: 'minimum' });
+    await nativeWait({ kind: 'size', size: 'minimum' });
+    await native({ kind: 'center' });
+    await nativeWait({ kind: 'withinWorkArea' });
+    await focus(true, false);
+    const before = await nativeState();
+    if (scenario === 'window-system') {
+      await native({ kind: 'dragTitlebar', destination: { kind: 'offset' } });
+      await nativeWait(
+        {
+          kind: 'position',
+          x: Math.round(before.x + 48 * before.scaleFactor),
+          y: Math.round(before.y + 32 * before.scaleFactor),
+          tolerance: 3,
+        },
+        before.eventSequence,
+      );
+      await layout(await nativeState(), 'dragged');
+      for (const [shortcut, side] of [
+        ['snapLeft', 'left'],
+        ['snapRight', 'right'],
+      ]) {
+        await native({ kind: 'systemShortcut', shortcut });
+        await nativeWait({ kind: 'snapped', side });
+        await layout(await nativeState(), 'snap-' + side);
+        await native({ kind: 'restore' });
+        await native({ kind: 'resize', size: 'minimum' });
+        await native({ kind: 'center' });
+        await focus(true, false);
+      }
+      await native({ kind: 'dragTitlebar', destination: { kind: 'topEdge' } });
+      await nativeWait({ kind: 'state', minimized: false, maximized: true });
+      await layout(await nativeState(), 'drag-maximized');
+      await native({ kind: 'restore' });
+      await native({ kind: 'resize', size: 'minimum' });
+      await native({ kind: 'center' });
+      report.checks.push('真实系统标题栏拖动、Win+方向键贴靠及顶部拖动最大化，固定选区／任务不变');
+    } else {
+      const first = before.monitors.find((m) => m.current),
+        other = before.monitors.find((m) => !m.current);
+      assert(first && other, '真实跨屏测试需要至少两个可用显示器');
+      report.monitorTransitions = [];
+      for (const target of [other, first]) {
+        const prior = await nativeState();
+        await native({
+          kind: 'dragTitlebar',
+          destination: { kind: 'monitor', index: target.index },
+        });
+        const arrived = await nativeWait(
+          { kind: 'monitor', index: target.index },
+          prior.eventSequence,
+        );
+        await nativeWait({ kind: 'scaleFactor', value: target.scaleFactor });
+        await native({ kind: 'center' });
+        await nativeWait({ kind: 'withinWorkArea' });
+        const view = await layout(await nativeState(), 'monitor-' + target.index);
+        assert(
+          Math.abs(view.window.width - before.logicalWidth) <= 1 &&
+            Math.abs(view.window.height - before.logicalHeight) <= 1,
+          '跨屏后的逻辑尺寸只允许原生像素取整误差',
+        );
+        report.monitorTransitions.push({ target, arrived, view });
+      }
+      report.checks.push('真实跨屏来回拖动、原生／前端 DPI 和布局同步，固定选区／任务不变');
+    }
+  } else if (scenario === 'window-picker') {
+    report.filePicker = [];
+    const opening = await core();
+    await click('menu:file');
+    await wait({ kind: 'menu', menu: 'file' });
+    await click('command:open');
+    report.filePicker.push({ opened: await nativeWait({ kind: 'filePicker', opened: true }) });
+    const invalid = await tool(
+      'dev_window_action',
+      args({ kind: 'chooseSample', sample: '../outside.psd' }, true),
+      true,
+    );
+    assert(invalid.error);
+    assert.equal((await nativeState()).filePicker.opened, true);
+    await native({ kind: 'cancelFilePicker' });
+    await nativeWait({ kind: 'filePicker', opened: false });
+    await nativeWait({ kind: 'foreground', target: 'main' });
+    await wait({ kind: 'filePickerIdle' });
+    assert.deepEqual((await core()).documents, opening.documents);
+    await unchanged();
+    await click('menu:file');
+    await wait({ kind: 'menu', menu: 'file' });
+    await click('command:open');
+    await nativeWait({ kind: 'filePicker', opened: true });
+    await native({ kind: 'chooseSample', sample: 'bitmap-rle.psd' });
+    await nativeWait({ kind: 'filePicker', opened: false });
+    await nativeWait({ kind: 'foreground', target: 'main' });
+    await wait({ kind: 'filePickerIdle' });
+    const opened = await context.waitCore({ kind: 'documentCount', count: 2 });
+    const added = opened.documents.find((d) => d.id !== document.id);
+    assert(added);
+    const shown = await wait({
+      kind: 'imageReady',
+      documentId: added.id,
+      revision: added.revision,
+    });
+    assert.equal(shown.canvas.documentWidth, 4);
+    assert.equal(shown.canvas.documentHeight, 3);
+    assert.deepEqual(shown.tasks, fixed.tasks);
+    report.filePicker.push({ opened, shown });
+    await screenshot('window-picker-opened.png');
+    report.checks.push(
+      '真实系统文件选择器打开／取消保持状态，越界样本拒绝，再次选取样本完成真实桌面加载',
+    );
   } else {
-    assert.equal(scenario, 'window-exit');
+    assert(['window-exit', 'window-alt-f4'].includes(scenario));
     const arm = async (checkpoint) =>
       (
         await tool(
@@ -296,7 +418,7 @@ export async function exerciseWindows(context) {
     await screenshot('window-exit.png');
     report.checks.push('固定任务内容交付及预览交付检查点均已到达，正常关闭前有真实在途操作');
     // 外部运行器收集最后状态后点击真实关闭按钮，再独立等待退出。
-    return { closeWindow: true };
+    return { closeWindow: true, systemClose: scenario === 'window-alt-f4' };
   }
   return { closeWindow: false };
 }

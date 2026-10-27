@@ -4,14 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "开发测试专用的只读 Windows 窗口焦点诊断安全边界"
+description = "开发测试专用的 Windows 窗口观测与受限系统交互安全边界"
 
 [dependencies]
 serde.workspace = true
 schemars.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_StationsAndDesktops", "Win32_System_Threading"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_StationsAndDesktops", "Win32_System_Threading"] }
+windows = { version = "=0.61.3", features = ["Win32_UI_Accessibility", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant"] }
 
 [dev-dependencies]
 serde_json.workspace = true

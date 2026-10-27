@@ -16,7 +16,9 @@ export type UiPreviewResources = { renderers: UiResourceCount, stages: UiResourc
 
 export type UiTask = { id: string, status: string, snapshotId: string, };
 
-export type UiCleanup = { opened: boolean, phase: string | null, planId: string | null, taskIds: Array<string>, syncing: boolean, syncError: boolean, pending: boolean, renderedTasks: number, scrollable: boolean, scrolledToEnd: boolean, focusInside: boolean, };
+export type UiCleanupLayout = { dialogInsideViewport: boolean, firstTaskVisible: boolean, lastTaskVisible: boolean, controlsVisible: boolean, scrolledToStart: boolean, };
+
+export type UiCleanup = { layout: UiCleanupLayout, opened: boolean, phase: string | null, planId: string | null, taskIds: Array<string>, syncing: boolean, syncError: boolean, pending: boolean, renderedTasks: number, scrollable: boolean, scrolledToEnd: boolean, focusInside: boolean, };
 
 export type UiContent = { taskId: string | null, snapshotId: string, ready: boolean, };
 
@@ -24,7 +26,7 @@ export type UiInputEvidence = { pointerEvents: string, keyEvents: string, lastKe
 
 export type UiWindowControl = { target: string, label: string, rect: UiRect, disabled: boolean, };
 
-export type UiWindow = {
+export type UiWindow = { filePickerPending: boolean,
 /**
  * 当前挂载内实际 DPR、窗口／画布视口或可见性发生变化的代次；恢复原尺寸也递增。
  */

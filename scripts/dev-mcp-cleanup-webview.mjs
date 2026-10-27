@@ -97,10 +97,16 @@ export async function exerciseCleanupBoundaries(context) {
   }
   report.phase = scenario;
   const snapshotId = await select();
-  if (scenario === 'cleanup-window') {
-    const ids = await prepare(snapshotId, 2);
+  if (scenario === 'cleanup-window' || scenario === 'cleanup-window-max') {
+    const count = scenario === 'cleanup-window-max' ? 128 : 2;
+    const ids = await prepare(snapshotId, count);
     await refresh();
-    await wait({ kind: 'taskCount', count: 2 });
+    await wait({ kind: 'taskCount', count: Math.min(count, 32) });
+    for (let loaded = 64; loaded <= count; loaded += 32) {
+      await click('task:more');
+      await wait({ kind: 'taskCount', count: loaded });
+      await wait({ kind: 'selectionIdle' });
+    }
     const fixed = await core();
     report.cleanupWindow = [];
     for (const size of ['minimum', 'default']) {
@@ -135,6 +141,37 @@ export async function exerciseCleanupBoundaries(context) {
       assert.deepEqual(blurred.cleanup.taskIds, initial.cleanup.taskIds);
       await focusTestWindow(context, 'main', { requireEvent: true });
       const recovered = await focused();
+      assert.deepEqual([...recovered.cleanup.taskIds].sort(), [...ids].sort());
+      const layout = [];
+      if (count === 128) {
+        await click('cleanup:tasks');
+        for (const [keyName, target] of [
+          ['end', 'end'],
+          ['home', 'start'],
+        ]) {
+          const receipt = await key(keyName);
+          const observed = await wait({
+            kind: 'cleanupLayout',
+            planId,
+            taskCount: count,
+            target,
+            keyEventsAtLeast: String(BigInt(receipt.value.before.input.keyEvents) + 2n),
+          });
+          layout.push({ target, observed });
+          await screenshot('cleanup-list-' + size + '-' + target + '.png');
+        }
+        const receipt = await key('tab');
+        layout.push({
+          target: 'controls',
+          observed: await wait({
+            kind: 'cleanupLayout',
+            planId,
+            taskCount: count,
+            target: 'controls',
+            keyEventsAtLeast: String(BigInt(receipt.value.before.input.keyEvents) + 2n),
+          }),
+        });
+      }
       const tabs = [];
       for (let index = 0; index < 4; index++) {
         const input = await key('tab');
@@ -144,7 +181,7 @@ export async function exerciseCleanupBoundaries(context) {
       assert.equal((await core()).cleanup.revision, fixed.cleanup.revision);
       assert.deepEqual(
         (await state()).tasks.map((t) => t.status),
-        ['active', 'active'],
+        Array(count).fill('active'),
       );
       await screenshot('cleanup-window-' + size + '.png');
       if (size === 'minimum') await key('escape');
@@ -154,7 +191,7 @@ export async function exerciseCleanupBoundaries(context) {
       assert.equal((await core()).cleanup.revision, fixed.cleanup.revision);
       assert.deepEqual(
         cancelled.tasks.map((t) => t.status),
-        ['active', 'active'],
+        Array(count).fill('active'),
       );
       report.cleanupWindow.push({
         size,
@@ -163,6 +200,7 @@ export async function exerciseCleanupBoundaries(context) {
         blurred,
         recovered,
         tabs,
+        layout,
         cancelled,
       });
     }

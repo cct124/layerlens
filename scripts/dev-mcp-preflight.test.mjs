@@ -68,14 +68,18 @@ function fixture() {
 }
 
 test('预定显示条件拒绝无效尺寸、非有限及超限 DPR，不提供设备模拟', () => {
-  assert.deepEqual(preflightOptions({}), { size: null, dpr: null });
+  assert.deepEqual(preflightOptions({}), { size: null, dpr: null, monitor: null });
   assert.deepEqual(preflightOptions({ 'window-size': 'minimum', 'expect-dpr': '1.5' }), {
     size: 'minimum',
     dpr: 1.5,
+    monitor: null,
   });
   for (const value of ['', '0', '-1', 'Infinity', 'NaN', '9'])
     assert.throws(() => preflightOptions({ 'expect-dpr': value }));
   assert.throws(() => preflightOptions({ 'window-size': 'arbitrary' }));
+  for (const value of ['', '-1', '16', '0.5', '01'])
+    assert.throws(() => preflightOptions({ 'start-monitor': value }));
+  assert.equal(preflightOptions({ 'start-monitor': '1' }).monitor, 1);
 });
 
 test('输入桌面不接收输入或查询不可用时，在任何窗口动作前失败并保存末态', async () => {

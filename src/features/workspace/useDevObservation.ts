@@ -2,6 +2,7 @@ import { nextTick, onMounted, onScopeDispose, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { UiObservation } from '../../shared/api/devGenerated';
 import { previewResourceVersion, readPreviewResources } from './previewResources';
+import { observeCleanupLayout } from './devCleanupLayout';
 
 type Projection = Omit<
   UiObservation,
@@ -20,7 +21,7 @@ type Projection = Omit<
   renderLab?: UiObservation['renderLab'];
   cleanup: Omit<
     UiObservation['cleanup'],
-    'renderedTasks' | 'scrollable' | 'scrolledToEnd' | 'focusInside'
+    'renderedTasks' | 'scrollable' | 'scrolledToEnd' | 'focusInside' | 'layout'
   >;
 };
 declare global {
@@ -129,6 +130,7 @@ export function useDevObservation(project: () => Projection) {
         renderLab: projection.renderLab ?? null,
         cleanup: {
           ...projection.cleanup,
+          layout: observeCleanupLayout(dialog),
           renderedTasks: list?.children.length ?? 0,
           scrollable: !!list && list.scrollHeight > list.clientHeight,
           scrolledToEnd: !!list && list.scrollTop + list.clientHeight >= list.scrollHeight - 1,
@@ -141,6 +143,7 @@ export function useDevObservation(project: () => Projection) {
             : null,
         input: { pointerEvents: pointers.toString(), keyEvents: keys.toString(), lastKey },
         window: {
+          filePickerPending: !!document.querySelector('.app-header .menu-status'),
           displayRevision: displayRevision.toString(),
           visible: document.visibilityState !== 'hidden',
           canvasViewport,

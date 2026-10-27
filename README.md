@@ -148,6 +148,10 @@ $devMcpConfig = @{
 
 启用原生窗口的场景在加载样本前统一预检输入桌面、系统前台及原生／前端显示一致性，并要求客户区完整位于当前屏幕工作区。单场景可追加 `--window-size minimum|default|renderLab` 与 `--expect-dpr <实际期望值>`；前者调用已有受限窗口动作，后者仅作断言，不模拟 DPI。报告 `preflight` 保存预期、实际值、阶段及失败末态，前置失败标为 `environment-precondition`。`npm run test:dev-mcp:cleanup-window` 串行运行三个清理模态窗口实例，验证失焦恢复、Tab、Esc／按钮取消与再次确认。
 
+清理模态套件进一步覆盖 128 项任务的首尾滚动可见性与按钮可达性，原两任务场景仍可单独运行。`npm run test:dev-mcp:system-window` 验证受限系统拖动／贴靠、原生文件选择器和 Alt+F4；`npm run test:dev-mcp:cross-monitor` 需要至少两个真实显示器。操作限定本实例窗口和样本根，仍由测试 MCP 派发与观测。Windows CI 使用 `scripts/prepare-dev-display.ps1` 准备足够的真实显示模式并在结束后恢复；普通本机运行默认拒绝改显示模式，必须显式指定 `-AllowLocalDisplayChange`，不在业务失败后自动改环境或重试。模式准备／恢复报告列入产物白名单，原始系统恢复数据不上传。
+
+单场景 `--start-monitor <索引>` 可在加载样本前通过真实标题拖动移至已观测的显示器，再等待原生与前端 DPI 同步；索引仅对当前拓扑有效，不持久保存设备身份。可与 `--expect-dpr` 组合测试实际不同缩放，不修改宿主机缩放、不伪造显示器。
+
 业务操作结果与附带 `userSelection` 观测分别校验。附带观测因有界后台忙碌返回 `unavailable: { code: "BUSY", ... }` 时写入报告，后续明确状态断言继续执行；不能据此重做已接受变更，也不能容忍未知错误或缺失观测。
 
 需要前端热更新时使用 `npm run dev:mcp -- -- --locked -- --dev-mcp-config $devMcpConfigPath`；仅运行 `dev:mcp` 不启用监听。普通发行构建未编入开发工具，使用以下命令验证它拒绝开发参数：

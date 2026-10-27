@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue';
 import type { useCleanup } from './useCleanup';
+import { cycleCleanupFocus } from './cleanupFocus';
 const props = defineProps<{ model: ReturnType<typeof useCleanup> }>();
 const dialog = ref<HTMLDialogElement | null>(null);
 const viewError = ref<string | null>(null);
@@ -34,7 +35,7 @@ onBeforeUnmount(() => {
     aria-labelledby="cleanup-title"
     aria-describedby="cleanup-description"
     @cancel.prevent="model.cancel"
-    @keydown.stop
+    @keydown.stop="cycleCleanupFocus($event, dialog)"
   >
     <h2 id="cleanup-title" tabindex="-1" autofocus>清理文档资源</h2>
     <p id="cleanup-description">

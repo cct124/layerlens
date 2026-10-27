@@ -150,7 +150,7 @@ impl Shared {
         if instance.windows.get().is_some() {
             tools.extend([
                 definition::<Request<Empty>,WindowState>("dev_window_state", "读取本测试实例 main／辅助窗口的焦点事件、尺寸和 DPI；Windows 附带匿名化的原生前台、键盘焦点及鼠标捕获诊断，查询失败单独报告。", true)?,
-                definition::<Request<WindowAction>,WindowActionResult>("dev_window_action", "只操作测试实例自有窗口：焦点转移、最小化、最大化、还原、预设尺寸、主窗口居中、正常关闭；需请求 ID。dispatched 后须等待实际状态。", false)?,
+                definition::<Request<WindowAction>,WindowActionResult>("dev_window_action", "只操作测试实例自有窗口：焦点、尺寸、居中、固定系统快捷键、受限标题拖动和样本文件选择器；需请求 ID。dispatched 后须等待实际状态。", false)?,
                 definition::<Request<WindowWait>,WindowWaitResult>("dev_window_wait", "有界等待自有窗口的系统前台／键盘焦点、原生状态及事件序号；foreground 不接受事件层的旧 focused 标志，超时保留末态。", true)?,
             ]);
         }
@@ -324,14 +324,26 @@ impl ServerHandler for Handler {
                         _ => {
                             let args: Request<WindowAction> = shared.parse(arguments)?;
                             let input = args.request.clone();
-                            let ui = shared.ui.as_ref().ok_or_else(|| {
+                            let ui = shared.ui.clone().ok_or_else(|| {
                                 McpError::invalid_params("未配置 WebDriver。", None)
                             })?;
+                            let instance = shared.instance.clone();
                             match ui.acquire() {
                                 Ok(guard) => {
                                     match shared.mutation("window_action", &args, async move {
                                         let _guard = guard;
-                                        windows.action(input).await.and_then(value)
+                                        let region = if matches!(
+                                            &input,
+                                            WindowAction::DragTitlebar { .. }
+                                        ) {
+                                            Some(ui.titlebar_region().await?)
+                                        } else {
+                                            None
+                                        };
+                                        windows
+                                            .action(input, instance, region)
+                                            .await
+                                            .and_then(value)
                                     }) {
                                         Ok(wait) => wait.await,
                                         Err(error) => Err(error),

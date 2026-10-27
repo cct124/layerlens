@@ -171,13 +171,13 @@ CI 的收集与上传步骤使用 `always()`，测试准备或运行失败后仍
 
 ### 窗口与真实失焦扩展
 
-`nativeWindows` 默认为 `false`；只有显式 `true`、`visible: true` 且配置有效 `webDriverUrl` 的隔离实例启用。启动时持有 `main` 和一个固定标签、无 WebView 的焦点辅助窗口；不接收窗口句柄、任意标签、外部进程或屏幕输入。锁定的 Tauri 2.11.5 将无 WebView `WindowBuilder` 放在 `unstable` feature 下，因此仅 `dev-mcp` 构建启用该 feature，没有新增依赖或生产 IPC 权限。辅助窗口不授予业务能力，主窗口销毁后通过正常 close 关闭辅助窗口，随后沿用既有服务／核心退出流程。
+`nativeWindows` 默认为 `false`；只有显式 `true`、`visible: true` 且配置有效 `webDriverUrl` 的隔离实例启用。启动时持有 `main` 和一个固定标签、无 WebView 的焦点辅助窗口；不接收外部窗口句柄、任意标签、进程、脚本或键序列。锁定的 Tauri 2.11.5 将无 WebView `WindowBuilder` 放在 `unstable` feature 下，因此仅 `dev-mcp` 构建启用该 feature，没有增加生产 IPC 权限。辅助窗口不授予业务能力，主窗口销毁后通过正常 close 关闭辅助窗口，随后沿用既有服务／核心退出流程。
 
-| 工具                | 契约                                                                                                                                                                                                                                                                                                                   |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dev_window_state`  | 读取原生／辅助窗口焦点、系统前台与输入桌面、可见／最小化／最大化、物理位置和客户区尺寸、逻辑尺寸及 scaleFactor；附工作区 `workArea`、`clientWithinWorkArea` 和 focus／blur／resize／move 计数                                                                                                                          |
-| `dev_window_action` | 带请求 ID，接受 `focusMain`、`focusAuxiliary`、`minimize`、`maximize`、`restore`、`center`、`resize { size: minimum、default 或 renderLab }`、`close`。尺寸预设为 900×600／1280×800／1280×900 逻辑像素；restore 解除最小化与最大化，center 仅居中自有主窗口。返回操作前状态和 dispatched，不宣称事件已到达或应用已退出 |
-| `dev_window_wait`   | `condition` 为 `foreground { target: main 或 auxiliary }`、`focus { main, auxiliary }`、`state { minimized, maximized }`、`size { size }` 或 `withinWorkArea`；可带 `afterSequence` 要求新原生事件，`timeoutMs` 为 1–30000。事件唤醒并每至多 50 ms 补查原生状态，超时保留实际末态，退出立即终止等待                    |
+| 工具                | 契约                                                                                                                                                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dev_window_state`  | 读取原生／辅助窗口焦点、系统前台与输入桌面、可见／最小化／最大化、位置、客户区尺寸、scaleFactor、工作区及事件计数；附匿名 `monitors` 和自有 `filePicker` 状态                                                                                                                        |
+| `dev_window_action` | 带请求 ID，接受 `focusMain`、`focusAuxiliary`、`minimize`、`maximize`、`restore`、`center`、`resize { size: minimum、default 或 renderLab }`、`close` 及下文受限系统动作。尺寸预设为 900×600／1280×800／1280×900 逻辑像素；返回操作前状态和 dispatched，不宣称事件已到达或应用已退出 |
+| `dev_window_wait`   | 等待 `foreground`、`focus`、`state`、`size`、`withinWorkArea` 及下文系统专项条件；可带 `afterSequence` 要求新原生事件，`timeoutMs` 为 1–30000。事件唤醒并每至多 50 ms 补查原生状态，超时保留实际末态，退出立即终止等待                                                               |
 
 窗口变更与 WebDriver 输入／截图共用一个执行锁，等待复用既有四个等待名额。外层实例／会话校验、变更回执、未知字段拒绝和有界响应沿用原协议；未启用时不注册这三个工具。`dev_ui_action` 新增 `titlebarDoubleClick`（仅窗口测试实例，通过 W3C 双击真实空白标题栏）及 `movePointer { x, y }`（仅已解码画布内，无按键）。窗口按钮使用固定语义目标 `window:minimize`／`window:maximize`／`window:close`。
 
@@ -189,9 +189,23 @@ Windows 的顶层 HWND 焦点查询不包含 WebView2 子窗口。main 的 `focu
 
 `test:dev-mcp:m2-window` 在新实例中执行四类场景各 5 次：最小／默认／最大化／还原、双击和最小化恢复；新建／移动／调整草稿与中键平移真实失焦后取消、迟到松键不提交；菜单失焦收起及恢复后键盘作用域；固定任务内容和预览交付在途时点击关闭按钮，由外部运行器验证退出码 0、无归属进程残留及源 PSD 哈希不变。退出可能中断驱动响应，报告保留该诊断，独立的进程和文件断言决定结果。CI 运行该入口并保留关键窗口 PNG；未提供可交互桌面的环境明确失败。当前 scaleFactor 观测不等于多 DPI／跨屏验收，标题栏系统拖动、文件选择器、贴靠和 Alt+F4 仍保留独立专项。
 
+### 受限系统交互
+
+系统专项新增 `systemShortcut { shortcut: altF4 | snapLeft | snapRight }`、`dragTitlebar { destination: { kind: offset | topEdge } | { kind: monitor, index } }`、`chooseSample { sample }` 和 `cancelFilePicker`，沿用 `dev_window_action` 的身份／幂等及串行锁。固定快捷键通过 Windows SendInput 派发；标题拖动起点来自只读 WebDriver 的真实拖动区，终点只允许固定偏移、当前屏幕顶部或另一显示器的内部位置。派发前验证自有前台、键盘焦点、输入桌面及无其他按键／捕获，拖动还等待系统移动模式并每步核对前台；失败释放本次输入，不发送任意外部操作。
+
+原生文件选择器由真实 `command:open` 点击触发，该语义目标仅对 nativeWindows 实例开放。观测只报告自有弹窗的 opened／foreground，不返回标题或路径。选择样本复用规范路径、样本根和 PSD 扩展校验；UI Automation 仅在此弹窗内定位文件名控件、设置焦点及读取输入结果，实际文本与确认由键盘输入完成，不调用业务 open 冒充文件选择。`filePickerIdle` 等待前端“选择文件中”消失且窗口聚焦，原生弹窗关闭不能替代前端完成。
+
+Windows 产品入口在选择器返回后恢复所属 WebView 的键盘焦点，取消与选中文件复用同一路径。场景不额外派发 `focusMain` 补救，而是等待自有前台、输入焦点及 `filePickerIdle`，再检查取消无副作用或新文档实际加载。原生场景失败时另存 `failureNative`，查询失败保留原因，不覆盖最初失败。
+
+`dev_window_state.monitors` 最多 16 项，只含当前拓扑索引、工作区、scaleFactor 与 current 标记，不含设备标识。索引不是持久身份。新增等待 `filePicker { opened }`、`monitor { index }`、`position { x, y, tolerance }`、`scaleFactor { value }` 和 `snapped { side: left | right }`；位置容差不超过 16 物理像素，DPR 为 (0,8]。`test:dev-mcp:system-window` 串行运行三类场景各三次；`test:dev-mcp:cross-monitor` 要求真实多屏，不能用一个加宽视口替代。不同系统 DPI、窗口位置及 Canvas 后备像素分别核对，截图按捕获前后真实视口×DPR 验证，不按启动尺寸推断。
+
+系统封装复用锁文件已有 `windows-sys 0.61.2` 和 `windows 0.61.3`，后者新增为测试封装直接依赖，只启用 UI Automation／COM 所需功能，无版本升级。均为 Microsoft 官方绑定、MIT／Apache-2.0，仅 Windows 开发测试编入；COM 引用与公寓在阻塞线程内释放，接口超时有界。普通核心／桌面继续禁止 unsafe，普通包不引入此测试封装。
+
 ### 清理测试扩展
 
 `cleanup-window` 使用原生窗口和现有清理服务，在最小／默认尺寸验证同一清理计划的失焦／恢复、Tab 焦点、Esc／按钮取消无副作用及重新确认。`cleanupFocus { planId, keyEventsAtLeast }` 仅在该计划 ready、模态打开、真实窗口聚焦、DOM 活动元素位于模态内且可信键盘计数已到达时满足；旧计划或后台窗口不能提前通过。套件 `test:dev-mcp:cleanup-window` 固定三个独立实例并串行执行，关键模态截图加入既有收集白名单。
+
+该套件现运行 `cleanup-window-max`，将同一流程扩展至 128 个任务和四页终态。`cleanup.layout` 读取模态、首尾任务与按钮的真实几何及列表／模态双层裁切；`cleanupLayout { planId, taskCount, target: start | end | controls, keyEventsAtLeast }` 同时核对计划、任务数、焦点和输入计数，不能以 DOM 节点存在或 scrollTop 到底代替可见。原两任务单场景保留。产品清理弹窗显式循环末端 Tab／首端 Shift+Tab，避免 WebView 将焦点交还宿主；Esc 和中间控件保留原行为。
 
 `dev_prepare_tasks` 接受 `{ snapshotId, count, namePrefix }`，数量为 1–128，前缀为 1–240 UTF-8 字节且不能全为空白。以固定快照串行调用真实任务创建服务，只占一条开发变更回执；不修改核心任务容量、终态或已有回执。返回 `status: complete | partial | failed`、请求数量、已创建任务 ID 和首个错误；任务 ID 数量同时是失败项的零基下标，其后没有执行。重试相同外层请求返回同一结果，不补做部分失败，不自动回滚已创建任务。
 

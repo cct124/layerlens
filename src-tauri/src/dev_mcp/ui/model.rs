@@ -82,6 +82,7 @@ pub(crate) struct UiTask {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiCleanup {
+    pub layout: UiCleanupLayout,
     pub opened: bool,
     pub phase: Option<String>,
     pub plan_id: Option<String>,
@@ -93,6 +94,17 @@ pub(crate) struct UiCleanup {
     pub scrollable: bool,
     pub scrolled_to_end: bool,
     pub focus_inside: bool,
+}
+
+/// 实际 DOM 几何与滚动裁切；存在节点不等于用户能够看到。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiCleanupLayout {
+    pub dialog_inside_viewport: bool,
+    pub first_task_visible: bool,
+    pub last_task_visible: bool,
+    pub controls_visible: bool,
+    pub scrolled_to_start: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -123,6 +135,7 @@ pub(crate) struct UiWindowControl {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiWindow {
+    pub file_picker_pending: bool,
     /// 当前挂载内实际 DPR、窗口／画布视口或可见性发生变化的代次；恢复原尺寸也递增。
     pub display_revision: String,
     pub visible: bool,
@@ -338,6 +351,7 @@ pub(crate) struct InputResult {
     deny_unknown_fields
 )]
 pub(crate) enum UiCondition {
+    FilePickerIdle {},
     /// 同一真实投影中同时确认当前文档、可信事件计数、修饰键及 DOM 指针捕获。
     CanvasInput {
         document_id: String,
@@ -418,6 +432,12 @@ pub(crate) enum UiCondition {
         plan_id: String,
         key_events_at_least: String,
     },
+    CleanupLayout {
+        plan_id: String,
+        task_count: u32,
+        target: CleanupLayoutTarget,
+        key_events_at_least: String,
+    },
     CleanupSync {
         failed: bool,
     },
@@ -456,6 +476,13 @@ pub(crate) enum UiCondition {
         device_pixel_ratio: f64,
         after_revision: Option<String>,
     },
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum CleanupLayoutTarget {
+    Start,
+    End,
+    Controls,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

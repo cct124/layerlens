@@ -7,9 +7,17 @@ import { ensureRenderFocus } from './dev-mcp-render-focus.mjs';
 export function preflightOptions(options) {
   const size = options['window-size'] ?? null;
   const dpr = options['expect-dpr'] === undefined ? null : Number(options['expect-dpr']);
+  const monitor = options['start-monitor'] === undefined ? null : Number(options['start-monitor']);
   assert(size === null || ['minimum', 'default', 'renderLab'].includes(size));
   assert(dpr === null || (Number.isFinite(dpr) && dpr > 0 && dpr <= 8));
-  return { size, dpr };
+  assert(
+    monitor === null ||
+      (Number.isInteger(monitor) &&
+        monitor >= 0 &&
+        monitor < 16 &&
+        String(monitor) === options['start-monitor']),
+  );
+  return { size, dpr, monitor };
 }
 
 /** 每项 GUI 实例仅执行一次；错误携带阶段和实际末态，不能改判成业务失败。 */
@@ -52,6 +60,54 @@ export async function prepareTestWindow(context, expected) {
         devicePixelRatio: resized.lastState.scaleFactor,
         afterRevision: null,
       });
+    }
+    if (expected.monitor !== null && expected.monitor !== undefined) {
+      record.stage = 'monitor';
+      const native = (await tool('dev_window_state', args({}))).value;
+      const target = native.monitors.find((m) => m.index === expected.monitor);
+      assert(target, '预定显示器不存在');
+      if (!target.current) {
+        record.monitor = (
+          await tool(
+            'dev_window_action',
+            args(
+              { kind: 'dragTitlebar', destination: { kind: 'monitor', index: target.index } },
+              true,
+            ),
+          )
+        ).value;
+        record.monitorWait = (
+          await tool(
+            'dev_window_wait',
+            args({
+              condition: { kind: 'monitor', index: target.index },
+              afterSequence: native.eventSequence,
+              timeoutMs: 10000,
+            }),
+          )
+        ).value;
+        assert(record.monitorWait.satisfied, '窗口未实际到达目标显示器');
+        const scaled = (
+          await tool(
+            'dev_window_wait',
+            args({
+              condition: { kind: 'scaleFactor', value: target.scaleFactor },
+              afterSequence: null,
+              timeoutMs: 10000,
+            }),
+          )
+        ).value;
+        assert(scaled.satisfied, '目标显示器原生 DPI 未同步');
+        record.monitorScaleWait = scaled;
+        const current = scaled.lastState;
+        await wait({
+          kind: 'display',
+          width: Math.round(current.logicalWidth),
+          height: Math.round(current.logicalHeight),
+          devicePixelRatio: current.scaleFactor,
+          afterRevision: null,
+        });
+      }
     }
     record.stage = 'placement';
     record.center = (await tool('dev_window_action', args({ kind: 'center' }, true))).value;

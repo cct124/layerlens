@@ -9,6 +9,7 @@ use std::{sync::Arc, time::Duration};
 use tauri::{LogicalSize, WindowEvent};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
+mod system;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,16 @@ impl WindowSize {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowAction {
+    SystemShortcut {
+        shortcut: SystemShortcut,
+    },
+    DragTitlebar {
+        destination: DragDestination,
+    },
+    ChooseSample {
+        sample: String,
+    },
+    CancelFilePicker {},
     Center {},
     FocusMain {},
     FocusAuxiliary {},
@@ -41,6 +52,22 @@ pub(super) enum WindowAction {
     },
     /// 正常 close 请求；实际退出由外部运行器持有进程句柄验证。
     Close {},
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum SystemShortcut {
+    AltF4,
+    SnapLeft,
+    SnapRight,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(super) enum DragDestination {
+    Offset {},
+    TopEdge {},
+    Monitor { index: u32 },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -56,6 +83,9 @@ struct Events {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WindowState {
+    /// 当前可用显示器的匿名几何；index 只在本次拓扑中使用，不输出设备标识。
+    pub monitors: Vec<WindowMonitor>,
+    pub file_picker: FilePickerState,
     /// 当前屏幕工作区；只含几何，不含设备名。屏幕查询无结果时为 None。
     pub work_area: Option<WindowWorkArea>,
     pub client_within_work_area: Option<bool>,
@@ -82,6 +112,22 @@ pub(super) struct WindowState {
     pub logical_width: f64,
     pub logical_height: f64,
     pub scale_factor: f64,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WindowMonitor {
+    pub index: u32,
+    pub current: bool,
+    pub work_area: WindowWorkArea,
+    pub scale_factor: f64,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct FilePickerState {
+    pub opened: bool,
+    pub foreground: bool,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
@@ -148,6 +194,23 @@ fn foreground_ready(observation: &layerlens_window_probe::FocusObservation) -> O
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowCondition {
+    FilePicker {
+        opened: bool,
+    },
+    Monitor {
+        index: u32,
+    },
+    Position {
+        x: i32,
+        y: i32,
+        tolerance: u32,
+    },
+    ScaleFactor {
+        value: f64,
+    },
+    Snapped {
+        side: SnapSide,
+    },
     WithinWorkArea {},
     /// 系统前台与键盘焦点就绪，同时核对原生主／辅助窗口状态。
     Foreground {
@@ -165,9 +228,44 @@ pub(super) enum WindowCondition {
         size: WindowSize,
     },
 }
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum SnapSide {
+    Left,
+    Right,
+}
 impl WindowCondition {
     fn matches(&self, state: &WindowState) -> bool {
         match self {
+            Self::FilePicker { opened } => {
+                state.file_picker.opened == *opened && (!opened || state.file_picker.foreground)
+            }
+            Self::Monitor { index } => state
+                .monitors
+                .iter()
+                .any(|m| m.index == *index && m.current),
+            Self::Position { x, y, tolerance } => {
+                (i64::from(state.x) - i64::from(*x)).abs() <= i64::from(*tolerance)
+                    && (i64::from(state.y) - i64::from(*y)).abs() <= i64::from(*tolerance)
+            }
+            Self::ScaleFactor { value } => (state.scale_factor - value).abs() < 0.000001,
+            Self::Snapped { side } => state.work_area.as_ref().is_some_and(|area| {
+                let edge = match side {
+                    SnapSide::Left => i64::from(state.x) - i64::from(area.x),
+                    SnapSide::Right => {
+                        i64::from(state.x) + i64::from(state.physical_width)
+                            - i64::from(area.x)
+                            - i64::from(area.physical_width)
+                    }
+                };
+                !state.minimized
+                    && !state.maximized
+                    && edge.abs() <= 16
+                    && (i64::from(state.y) - i64::from(area.y)).abs() <= 16
+                    && state.physical_width < area.physical_width * 9 / 10
+                    && (i64::from(state.physical_height) - i64::from(area.physical_height)).abs()
+                        <= 32
+            }),
             Self::WithinWorkArea {} => {
                 state.client_within_work_area == Some(true) && state.visible && !state.minimized
             }
@@ -215,7 +313,7 @@ pub(crate) struct Windows {
     auxiliary: tauri::Window,
     events: watch::Sender<Events>,
 }
-fn native(error: tauri::Error) -> WorkspaceError {
+fn native(error: impl std::fmt::Display) -> WorkspaceError {
     crate::workspace::error(Code::Internal, format!("测试实例窗口操作失败：{error}"))
 }
 impl Windows {
@@ -278,6 +376,34 @@ impl Windows {
                 physical_height: area.size.height,
             }
         });
+        let monitors = self.main.available_monitors().map_err(native)?;
+        if monitors.len() > 16 {
+            return Err(error(Code::ResourceLimit, "显示器数量超过测试观测上限。"));
+        }
+        let monitors = monitors
+            .into_iter()
+            .enumerate()
+            .map(|(index, monitor)| {
+                let area = monitor.work_area();
+                WindowMonitor {
+                    index: index as u32,
+                    current: work_area.as_ref().is_some_and(|a| {
+                        a.x == area.position.x
+                            && a.y == area.position.y
+                            && a.physical_width == area.size.width
+                            && a.physical_height == area.size.height
+                    }),
+                    work_area: WindowWorkArea {
+                        x: area.position.x,
+                        y: area.position.y,
+                        physical_width: area.size.width,
+                        physical_height: area.size.height,
+                    },
+                    scale_factor: monitor.scale_factor(),
+                }
+            })
+            .collect();
+        let file_picker = self.file_picker_state()?;
         let client_within_work_area = work_area.as_ref().map(|area| {
             area.contains(
                 client_position.x,
@@ -297,6 +423,8 @@ impl Windows {
             self.auxiliary.hwnd().map_err(native)?.0 as usize,
         );
         Ok(WindowState {
+            monitors,
+            file_picker,
             work_area,
             client_within_work_area,
             #[cfg(windows)]
@@ -335,11 +463,19 @@ impl Windows {
     pub(super) async fn action(
         self: &Arc<Self>,
         action: WindowAction,
+        instance: Arc<super::config::Instance>,
+        drag_region: Option<super::ui::model::UiRect>,
     ) -> Result<WindowActionResult, WorkspaceError> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || {
             let before = this.snapshot()?;
             match action {
+                action @ (WindowAction::SystemShortcut { .. }
+                | WindowAction::DragTitlebar { .. }
+                | WindowAction::ChooseSample { .. }
+                | WindowAction::CancelFilePicker {}) => {
+                    this.system_action(&before, action, &instance, drag_region)?
+                }
                 WindowAction::Center {} => this.main.center().map_err(native)?,
                 WindowAction::FocusMain {} => {
                     this.auxiliary.hide().map_err(native)?;
@@ -381,6 +517,14 @@ impl Windows {
     ) -> Result<WindowWaitResult, WorkspaceError> {
         if !(1..=30_000).contains(&request.timeout_ms) {
             return Err(error(Code::InvalidInput, "窗口等待须为 1–30000 ms。"));
+        }
+        if matches!(request.condition,WindowCondition::Position { tolerance,.. } if tolerance>16)
+            || matches!(request.condition,WindowCondition::ScaleFactor { value } if !value.is_finite() || value<=0.0 || value>8.0)
+        {
+            return Err(error(
+                Code::InvalidInput,
+                "位置容差须不超过 16 物理像素；DPR 须为 (0,8]。",
+            ));
         }
         let after = request
             .after_sequence
@@ -500,6 +644,11 @@ mod tests {
     #[test]
     fn foreground_wait_rejects_old_focus_events_and_minimized_windows() {
         let mut state = WindowState {
+            monitors: vec![],
+            file_picker: FilePickerState {
+                opened: false,
+                foreground: false,
+            },
             work_area: None,
             client_within_work_area: None,
             native_focus: focus_observation(layerlens_window_probe::WindowTarget::Other),
@@ -565,6 +714,9 @@ mod tests {
             json!({"kind":"resize","width":10000,"height":10000}),
             json!({"kind":"resize","size":"screen"}),
             json!({"kind":"center","handle":123}),
+            json!({"kind":"systemShortcut","shortcut":"launchShell"}),
+            json!({"kind":"dragTitlebar","destination":{"kind":"offset","x":0}}),
+            json!({"kind":"chooseSample","sample":"sample.psd","windowHandle":123}),
             json!({"kind":"execute","script":"window.blur()"}),
         ] {
             assert!(serde_json::from_value::<WindowAction>(value).is_err());
@@ -574,5 +726,11 @@ mod tests {
                 .is_ok()
         );
         assert!(serde_json::from_value::<WindowAction>(json!({"kind":"close"})).is_ok());
+        assert!(
+            serde_json::from_value::<WindowAction>(
+                json!({"kind":"systemShortcut","shortcut":"altF4"})
+            )
+            .is_ok()
+        );
     }
 }

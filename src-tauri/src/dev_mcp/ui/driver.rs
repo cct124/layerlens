@@ -229,6 +229,23 @@ impl Driver {
         *self.session.lock().unwrap_or_else(|p| p.into_inner()) = Some(info.clone());
         Ok(info)
     }
+    pub(crate) async fn titlebar_region(&self) -> Result<UiRect, WorkspaceError> {
+        let before = self.probe_session(&self.session()?).await?;
+        if !self.instance.native_windows
+            || before.cleanup.opened
+            || self.held.load(Ordering::Acquire)
+        {
+            return Err(error(
+                Code::Busy,
+                "标题栏系统输入需要原生实例、无模态且没有保留手势。",
+            ));
+        }
+        let element = self.element("window:drag").await?;
+        let value = self
+            .session_command(Method::GET, &format!("element/{element}/rect"), None)
+            .await?;
+        serde_json::from_value(value).map_err(|_| error(Code::InvalidInput, "标题栏真实边界无效。"))
+    }
     async fn element(&self, target: &str) -> Result<String, WorkspaceError> {
         let found = self
             .session_command(
@@ -305,12 +322,7 @@ impl Driver {
                 }]}))).await?;
             }
             UiAction::Click { target } => {
-                if target.starts_with("window:") && !self.instance.native_windows {
-                    return Err(error(
-                        Code::InvalidInput,
-                        "窗口控件输入需 nativeWindows 实例。",
-                    ));
-                }
+                targets::validate_native_target(&target, self.instance.native_windows)?;
                 let element = self.element(&target).await?;
                 self.session_command(
                     Method::POST,

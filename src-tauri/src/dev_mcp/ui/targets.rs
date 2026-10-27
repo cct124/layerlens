@@ -27,6 +27,7 @@ pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
         "menu:file",
         "menu:view",
         "menu:window",
+        "command:open",
         "command:reload",
         "command:close",
         "command:cleanup",
@@ -79,5 +80,20 @@ pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
             WorkspaceErrorCode::InvalidInput,
             "未知界面目标；只接受已实现的语义标识。",
         ))
+    }
+}
+
+/// 系统弹窗与窗口控件必须显式启用 nativeWindows，不能从隐藏旧场景触发。
+pub(super) fn validate_native_target(
+    target: &str,
+    native_windows: bool,
+) -> Result<(), WorkspaceError> {
+    if !native_windows && (target.starts_with("window:") || target == "command:open") {
+        Err(error(
+            WorkspaceErrorCode::InvalidInput,
+            "系统窗口输入需 nativeWindows 实例。",
+        ))
+    } else {
+        Ok(())
     }
 }

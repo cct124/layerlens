@@ -328,6 +328,16 @@ impl Observations {
 impl UiCondition {
     fn validate(&self) -> Result<(), WorkspaceError> {
         let valid = match self {
+            Self::CleanupLayout {
+                plan_id,
+                task_count,
+                key_events_at_least,
+                ..
+            } => {
+                number(plan_id)?;
+                number(key_events_at_least)?;
+                (1..=128).contains(task_count)
+            }
             Self::CleanupFocus {
                 plan_id,
                 key_events_at_least,
@@ -659,8 +669,33 @@ impl UiCondition {
                         .as_ref()
                         .is_some_and(|c| !c.panning && !c.pointer_captured && c.draft.is_none())
             }
+            Self::FilePickerIdle {} => !value.window.file_picker_pending && value.window.focused,
             Self::Cleanup { phase } => {
                 &value.cleanup.phase == phase && value.cleanup.opened == phase.is_some()
+            }
+            Self::CleanupLayout {
+                plan_id,
+                task_count,
+                target,
+                key_events_at_least,
+            } => {
+                let c = &value.cleanup;
+                c.opened
+                    && c.phase.as_deref() == Some("ready")
+                    && c.plan_id.as_ref() == Some(plan_id)
+                    && c.task_ids.len() == *task_count as usize
+                    && c.rendered_tasks == *task_count
+                    && c.focus_inside
+                    && value.window.focused
+                    && c.layout.dialog_inside_viewport
+                    && number(&value.input.key_events).ok() >= number(key_events_at_least).ok()
+                    && match target {
+                        CleanupLayoutTarget::Start => {
+                            c.layout.scrolled_to_start && c.layout.first_task_visible
+                        }
+                        CleanupLayoutTarget::End => c.scrolled_to_end && c.layout.last_task_visible,
+                        CleanupLayoutTarget::Controls => c.layout.controls_visible,
+                    }
             }
             Self::CleanupFocus {
                 plan_id,

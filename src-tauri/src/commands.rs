@@ -128,6 +128,18 @@ pub(crate) async fn choose_psd_files<R: tauri::Runtime>(
     let files = receiver
         .await
         .map_err(|_| error(WorkspaceErrorCode::Internal, "文件选择器未返回结果。"))?;
+    #[cfg(windows)]
+    {
+        // Windows 选择器把输入还给父窗口后，WebView2 子视图可能仍失焦。
+        // 仅恢复该视图的键盘焦点，不重新激活顶层窗口或借用测试入口。
+        let webview: &tauri::Webview<R> = window.as_ref();
+        webview.set_focus().map_err(|cause| {
+            error(
+                WorkspaceErrorCode::Internal,
+                format!("文件选择器关闭后无法恢复工作区焦点：{cause}"),
+            )
+        })?;
+    }
     files
         .unwrap_or_default()
         .into_iter()

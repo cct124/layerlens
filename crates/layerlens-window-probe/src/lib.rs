@@ -1,5 +1,6 @@
-//! 开发测试专用的只读窗口诊断。只分类当前进程自有窗口及其子窗口，
-//! 不返回原始 HWND、外部进程身份或窗口文字，也不修改焦点／捕获状态。
+//! 开发测试专用的窗口诊断与受限系统输入。只操作当前进程自有窗口，
+//! 不返回原始 HWND、外部进程身份或窗口文字。观测接口始终只读；
+//! 系统输入单独要求真实前台、输入桌面及无遗留按键。
 //! Win32 FFI 集中在独立模块，桌面与核心继续禁止 unsafe。
 
 use schemars::JsonSchema;
@@ -8,6 +9,8 @@ use serde::Serialize;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod windows;
+
+pub mod system;
 
 /// 一次系统查询中的窗口归属；Other 不携带外部窗口的身份。
 #[derive(Debug, Clone, Copy, Serialize, JsonSchema, PartialEq, Eq)]

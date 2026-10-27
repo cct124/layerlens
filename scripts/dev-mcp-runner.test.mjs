@@ -5,6 +5,26 @@ import path from 'node:path';
 import test from 'node:test';
 import { collectArtifacts, redact, summarize } from './dev-mcp-artifacts.mjs';
 import { checkSelectionObservation, isolatedEnvironment, runProcess } from './dev-mcp-runner.mjs';
+import { assertCaptureDimensions } from './dev-mcp-capture.mjs';
+
+test('跨屏截图按实际视口与 DPR 验证，拒绝旧 DPR、裁切及空尺寸', () => {
+  const before = { window: { width: 899, height: 600, devicePixelRatio: 1 } };
+  const data = { width: 899, height: 600, before, after: structuredClone(before) };
+  assertCaptureDimensions(data);
+  for (const dimension of ['width', 'height']) {
+    const broken = structuredClone(data);
+    broken[dimension] -= 5;
+    assert.throws(() => assertCaptureDimensions(broken));
+  }
+  const changed = structuredClone(data);
+  changed.after.window.devicePixelRatio = 1.5;
+  assert.throws(() => assertCaptureDimensions(changed));
+  const empty = structuredClone(data);
+  empty.width = 0;
+  assert.throws(() => assertCaptureDimensions(empty));
+  const high = { window: { width: 1280, height: 800, devicePixelRatio: 1.5 } };
+  assertCaptureDimensions({ width: 1920, height: 1200, before: high, after: high });
+});
 
 test('操作成功时附带观测可忙碌降级，但跨会话、缺失与其他错误仍失败', () => {
   assert.equal(checkSelectionObservation({ sessionId: 'session' }, 'session'), null);
@@ -84,6 +104,15 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
     JSON.stringify({ token: 'credential' }),
   );
   await writeFile(path.join(run, 'config.json'), 'DO NOT UPLOAD');
+  await writeFile(path.join(source, 'display-original.xml'), 'DO NOT UPLOAD');
+  await writeFile(
+    path.join(source, 'display-prepare.json'),
+    JSON.stringify({ Passed: true, RegistryUpdated: false }),
+  );
+  await writeFile(
+    path.join(source, 'display-restore.json'),
+    JSON.stringify({ Passed: true, RegistryUpdated: false }),
+  );
   await writeFile(path.join(run, 'msedgedriver.exe'), 'DO NOT UPLOAD');
   await writeFile(
     path.join(run, 'report.json'),
@@ -100,7 +129,9 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   const output = path.join(directory, 'output');
   const manifest = await collectArtifacts(source, output);
   assert.deepEqual(manifest.errors, []);
-  assert.equal(manifest.files.length, 6);
+  assert.equal(manifest.files.length, 8);
+  assert(manifest.files.some((entry) => entry.path === 'display-prepare.json'));
+  assert(!manifest.files.some((entry) => entry.path.endsWith('.xml')));
   assert(manifest.files.some((entry) => entry.path.endsWith('/generic-capture.png')));
   assert(manifest.files.some((entry) => entry.path.endsWith('/window-minimum.png')));
   assert(manifest.files.every((entry) => !/instances|config|exe/.test(entry.path)));

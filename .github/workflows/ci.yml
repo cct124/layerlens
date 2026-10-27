@@ -101,6 +101,9 @@ jobs:
         run: npm run tauri -- build --no-bundle -- --locked
       - name: Build development test application
         run: npm run build:dev-mcp
+      - name: Prepare an interactive display large enough for native window tests
+        id: display
+        run: powershell.exe -NoProfile -File scripts/prepare-dev-display.ps1 -Mode prepare
       - name: Repeat isolated business and WebView scenarios
         timeout-minutes: 15
         run: npm run test:dev-mcp:stability -- --repeat 5
@@ -136,6 +139,13 @@ jobs:
       - name: Verify real display environment observations
         timeout-minutes: 5
         run: npm run test:konva -- --workload environment --cases path-100 --repeat 1
+      - name: Restore the original test display mode
+        if: always() && steps.display.outcome != 'skipped'
+        run: |
+          if (Test-Path .local/dev-mcp/display-original.xml) {
+            powershell.exe -NoProfile -File scripts/prepare-dev-display.ps1 -Mode restore
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Collect bounded diagnostic artifacts
         if: always() && steps.driver.outcome != 'skipped'
         run: npm run artifacts:dev-mcp -- --output .local/dev-mcp/ci-artifacts

@@ -22,6 +22,7 @@ fn observation(epoch: u64, revision: u64) -> UiObservation {
         menu: None,
         focus: None,
         cleanup: UiCleanup {
+            layout: UiCleanupLayout::default(),
             opened: false,
             phase: None,
             plan_id: None,
@@ -44,6 +45,7 @@ fn observation(epoch: u64, revision: u64) -> UiObservation {
             last_key: None,
         },
         window: UiWindow {
+            file_picker_pending: false,
             display_revision: "1".into(),
             visible: true,
             canvas_viewport: None,
@@ -94,6 +96,63 @@ async fn cleanup_focus_requires_same_plan_ready_modal_window_focus_and_delivered
                 .satisfied
         );
         ready.view_revision = "2".into();
+        observations.publish("instance", ready).unwrap();
+        assert!(
+            observations
+                .wait(request, &CancellationToken::new())
+                .await
+                .unwrap()
+                .satisfied
+        );
+    }
+}
+
+#[tokio::test]
+async fn cleanup_layout_requires_current_plan_real_visibility_and_key_delivery() {
+    for defect in 0..8 {
+        let observations = Observations::default();
+        let mut ready = observation(1, 2);
+        ready.window.focused = true;
+        ready.cleanup.opened = true;
+        ready.cleanup.phase = Some("ready".into());
+        ready.cleanup.plan_id = Some("8".into());
+        ready.cleanup.task_ids = vec!["1".into(), "2".into()];
+        ready.cleanup.rendered_tasks = 2;
+        ready.cleanup.focus_inside = true;
+        ready.cleanup.scrolled_to_end = true;
+        ready.cleanup.layout.dialog_inside_viewport = true;
+        ready.cleanup.layout.last_task_visible = true;
+        ready.input.key_events = "4".into();
+        let mut old = ready.clone();
+        old.view_revision = "1".into();
+        match defect {
+            0 => old.cleanup.plan_id = Some("7".into()),
+            1 => old.cleanup.layout.last_task_visible = false,
+            2 => old.cleanup.layout.dialog_inside_viewport = false,
+            3 => old.cleanup.rendered_tasks = 1,
+            4 => old.cleanup.scrolled_to_end = false,
+            5 => old.input.key_events = "2".into(),
+            6 => old.window.focused = false,
+            _ => old.cleanup.focus_inside = false,
+        }
+        observations.publish("instance", old).unwrap();
+        let request = UiWaitRequest {
+            frontend_id: None,
+            condition: UiCondition::CleanupLayout {
+                plan_id: "8".into(),
+                task_count: 2,
+                target: CleanupLayoutTarget::End,
+                key_events_at_least: "4".into(),
+            },
+            timeout_ms: 1,
+        };
+        assert!(
+            !observations
+                .wait(request.clone(), &CancellationToken::new())
+                .await
+                .unwrap()
+                .satisfied
+        );
         observations.publish("instance", ready).unwrap();
         assert!(
             observations
@@ -273,6 +332,7 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
         "render:source-layers",
         "render:fit",
         "render:focus",
+        "command:open",
     ] {
         assert!(targets::selector(valid).is_ok());
     }
@@ -282,7 +342,6 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
         "task:1:delete",
         "task:1:view,body",
         "handle:script",
-        "command:open",
         "render:script",
         "render:leafer",
         "render:konva",
@@ -297,6 +356,57 @@ fn observation_size_numbers_and_semantic_targets_are_validated() {
             serde_json::json!({"kind":"click","target":"canvas","script":"bad"})
         )
         .is_err()
+    );
+}
+
+#[test]
+fn native_picker_and_window_targets_require_explicit_native_instance() {
+    for target in ["command:open", "window:close", "window:drag"] {
+        assert!(targets::validate_native_target(target, false).is_err());
+        assert!(targets::validate_native_target(target, true).is_ok());
+    }
+    assert!(targets::validate_native_target("menu:file", false).is_ok());
+}
+
+#[tokio::test]
+async fn picker_idle_wait_requires_frontend_completion_and_window_focus() {
+    let observations = Observations::default();
+    let mut view = observation(1, 1);
+    view.window.file_picker_pending = true;
+    view.window.focused = true;
+    observations.publish("instance", view.clone()).unwrap();
+    let request = UiWaitRequest {
+        frontend_id: None,
+        condition: UiCondition::FilePickerIdle {},
+        timeout_ms: 1,
+    };
+    assert!(
+        !observations
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    view.view_revision = "2".into();
+    view.window.file_picker_pending = false;
+    view.window.focused = false;
+    observations.publish("instance", view.clone()).unwrap();
+    assert!(
+        !observations
+            .wait(request.clone(), &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
+    );
+    view.view_revision = "3".into();
+    view.window.focused = true;
+    observations.publish("instance", view).unwrap();
+    assert!(
+        observations
+            .wait(request, &CancellationToken::new())
+            .await
+            .unwrap()
+            .satisfied
     );
 }
 

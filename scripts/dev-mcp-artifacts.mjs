@@ -16,6 +16,9 @@ const runFiles = [
   'cleanup-sync-failure.png',
   'cleanup-window-minimum.png',
   'cleanup-window-default.png',
+  ...['minimum', 'default'].flatMap((size) =>
+    ['start', 'end'].map((edge) => 'cleanup-list-' + size + '-' + edge + '.png'),
+  ),
   'final-state.png',
   'generic-capture.png',
   'workspace-inspection.png',
@@ -31,6 +34,12 @@ const runFiles = [
   'window-blur.png',
   'window-menu.png',
   'window-exit.png',
+  'window-dragged.png',
+  'window-snap-left.png',
+  'window-snap-right.png',
+  'window-drag-maximized.png',
+  'window-picker-opened.png',
+  ...Array.from({ length: 16 }, (_, index) => 'window-monitor-' + index + '.png'),
   'render-comparison.png', // 只读收集历史证据；当前运行器不再生成多引擎对比。
   'visual-reference.json',
   'render-reference.png',
@@ -165,6 +174,8 @@ export async function collectArtifacts(source, destination, { runs } = {}) {
   try {
     await safeDirectory(root);
     await copy(root, 'driver-preparation.json');
+    await copy(root, 'display-prepare.json');
+    await copy(root, 'display-restore.json');
     await visitRuns(root);
     if (suiteName.test(path.basename(root))) {
       for (const name of ['summary.json', 'summary.md', 'environment.json', 'project-visual.json'])

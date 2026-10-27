@@ -28,6 +28,8 @@
     "test:dev-mcp:m2-cleanup": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-cleanup",
     "test:dev-mcp:m2-window": "node scripts/test-dev-stability.mjs --repeat 20 --webview-suite m2-window",
     "test:dev-mcp:cleanup-window": "node scripts/test-dev-stability.mjs --repeat 3 --webview-suite cleanup-window",
+    "test:dev-mcp:system-window": "node scripts/test-dev-stability.mjs --repeat 9 --webview-suite system-window",
+    "test:dev-mcp:cross-monitor": "node scripts/test-dev-stability.mjs --repeat 3 --webview-suite cross-monitor",
     "test:dev-mcp:canvas": "node scripts/test-dev-stability.mjs --repeat 4 --webview-suite workspace-canvas",
     "test:dev-mcp:canvas-resources": "node scripts/test-dev-stability.mjs --repeat 3 --webview-suite canvas-resources --app target/dev-mcp-release/layerlens.exe",
     "test:dev-mcp:scripts": "node --test scripts/dev-mcp-runner.test.mjs scripts/dev-mcp-runtime.test.mjs scripts/dev-mcp-process-monitor.test.mjs scripts/windows-powershell.test.mjs scripts/render-statistics.test.mjs scripts/render-focus.test.mjs scripts/dev-mcp-preflight.test.mjs scripts/dev-mcp-memory.test.mjs scripts/render-environment.test.mjs scripts/workspace-memory.test.mjs",

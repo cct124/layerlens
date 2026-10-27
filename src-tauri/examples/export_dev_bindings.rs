@@ -23,6 +23,7 @@ fn main() -> io::Result<()> {
         UiResourceCount::decl(&config),
         UiPreviewResources::decl(&config),
         UiTask::decl(&config),
+        UiCleanupLayout::decl(&config),
         UiCleanup::decl(&config),
         UiContent::decl(&config),
         UiInputEvidence::decl(&config),

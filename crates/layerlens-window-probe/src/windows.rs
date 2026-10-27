@@ -21,7 +21,7 @@ fn last_error(operation: &'static str) -> ProbeError {
     (operation, Some(unsafe { GetLastError() }))
 }
 
-fn owned_thread(window: HWND) -> Result<u32, ProbeError> {
+pub(super) fn owned_thread(window: HWND) -> Result<u32, ProbeError> {
     if window.is_null() {
         return Err(("missingOwnedWindow", None));
     }
@@ -37,7 +37,7 @@ fn owned_thread(window: HWND) -> Result<u32, ProbeError> {
     Ok(thread)
 }
 
-fn desktop_receives_input(thread: u32) -> Result<bool, ProbeError> {
+pub(super) fn desktop_receives_input(thread: u32) -> Result<bool, ProbeError> {
     // SAFETY: 线程 ID 来自当前线程或已校验自有窗口；返回借用句柄，不关闭它。
     let desktop = unsafe { GetThreadDesktop(thread) };
     if desktop.is_null() {
