@@ -17,6 +17,33 @@ pub enum SystemShortcut {
     SnapRight,
 }
 
+/// 原生窗口边框的八个固定方向，不接受任意屏幕坐标。
+#[derive(Debug, Clone, Copy)]
+pub enum ResizeEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+impl ResizeEdge {
+    pub(super) fn axes(self) -> (i32, i32) {
+        match self {
+            Self::Left => (-1, 0),
+            Self::Right => (1, 0),
+            Self::Top => (0, -1),
+            Self::Bottom => (0, 1),
+            Self::TopLeft => (-1, -1),
+            Self::TopRight => (1, -1),
+            Self::BottomLeft => (-1, 1),
+            Self::BottomRight => (1, 1),
+        }
+    }
+}
+
 /// 物理桌面坐标，由适配层从自有窗口与受限目标计算。
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
@@ -91,6 +118,23 @@ pub fn drag(main: usize, start: Point, end: Point) -> Result<(), SystemError> {
     }
 }
 
+/// 从经真实命中测试确认的自有窗口边框拖动；正距离向外、负距离向内，单位为物理像素。
+/// 距离非零且绝对值不超过 512；派发后仍须等待实际几何和前端状态。
+pub fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(), SystemError> {
+    if distance == 0 || !(-512..=512).contains(&distance) {
+        return Err(("invalidResizeDistance", None).into());
+    }
+    #[cfg(windows)]
+    {
+        implementation::resize(main, edge, distance)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (main, edge);
+        Err(("unsupportedPlatform", None).into())
+    }
+}
+
 /// 用真实键盘输入选择已由调用方验证属于样本根的单个路径。
 /// 不改写业务状态，也不调用文件打开服务替代系统选择器。
 pub fn choose_file(main: usize, path: &str) -> Result<(), SystemError> {
@@ -135,6 +179,16 @@ mod tests {
             assert!(drag(main, Point { x: 0, y: 0 }, Point { x: 10, y: 10 }).is_err());
             assert!(choose_file(main, "sample.psd").is_err());
             assert!(cancel_file_picker(main).is_err());
+            assert!(resize(main, ResizeEdge::BottomRight, 48).is_err());
+        }
+    }
+    #[test]
+    fn resizing_rejects_zero_and_unbounded_distance() {
+        for distance in [i32::MIN, -513, 0, 513, i32::MAX] {
+            assert_eq!(
+                resize(0, ResizeEdge::Left, distance).unwrap_err().operation,
+                "invalidResizeDistance"
+            );
         }
     }
     #[test]

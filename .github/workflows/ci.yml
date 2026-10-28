@@ -125,6 +125,10 @@ jobs:
       - name: Verify cleanup modal focus restore and cancellation
         timeout-minutes: 10
         run: npm run test:dev-mcp:cleanup-window
+      - name: Verify system picker shortcuts and native border resizing
+        id: system_windows
+        timeout-minutes: 10
+        run: npm run test:dev-mcp:system-window -- --output-root .local/dev-mcp-system
       - name: Build release development application preserving production binary
         run: npm run build:dev-mcp:release
       - name: Verify release canvas resources with three fixed independent instances
@@ -152,8 +156,20 @@ jobs:
       - name: Add stability summary
         if: always() && steps.driver.outcome != 'skipped'
         run: |
-          Get-ChildItem -Path .local/dev-mcp/stability-*/summary.md -ErrorAction SilentlyContinue |
+          Get-ChildItem -Path .local/dev-mcp/stability-*/summary.md,.local/dev-mcp-system/stability-*/summary.md -ErrorAction SilentlyContinue |
             ForEach-Object { Get-Content -LiteralPath $_.FullName | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+      - name: Collect system window diagnostics separately
+        if: always() && steps.system_windows.outcome != 'skipped' && steps.system_windows.outcome != ''
+        run: npm run artifacts:dev-mcp -- --source .local/dev-mcp-system --output .local/dev-mcp-system-artifacts
+      - name: Retain system window reports and screenshots
+        if: always() && steps.system_windows.outcome != 'skipped' && steps.system_windows.outcome != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: layerlens-system-windows-${{ github.run_attempt }}
+          path: .local/dev-mcp-system-artifacts/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
       - name: Retain development reports and screenshots
         if: always() && steps.driver.outcome != 'skipped'
         uses: actions/upload-artifact@v4

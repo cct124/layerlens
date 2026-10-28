@@ -31,6 +31,10 @@ impl WindowSize {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowAction {
+    ResizeEdge {
+        edge: ResizeEdge,
+        direction: ResizeDirection,
+    },
     SystemShortcut {
         shortcut: SystemShortcut,
     },
@@ -60,6 +64,24 @@ pub(super) enum SystemShortcut {
     AltF4,
     SnapLeft,
     SnapRight,
+}
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum ResizeEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum ResizeDirection {
+    Outward,
+    Inward,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -194,6 +216,10 @@ fn foreground_ready(observation: &layerlens_window_probe::FocusObservation) -> O
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowCondition {
+    ClientSize {
+        width: u32,
+        height: u32,
+    },
     FilePicker {
         opened: bool,
     },
@@ -237,6 +263,13 @@ pub(super) enum SnapSide {
 impl WindowCondition {
     fn matches(&self, state: &WindowState) -> bool {
         match self {
+            Self::ClientSize { width, height } => {
+                state.visible
+                    && !state.minimized
+                    && !state.maximized
+                    && state.physical_width.abs_diff(*width) <= 2
+                    && state.physical_height.abs_diff(*height) <= 2
+            }
             Self::FilePicker { opened } => {
                 state.file_picker.opened == *opened && (!opened || state.file_picker.foreground)
             }
@@ -471,6 +504,7 @@ impl Windows {
             let before = this.snapshot()?;
             match action {
                 action @ (WindowAction::SystemShortcut { .. }
+                | WindowAction::ResizeEdge { .. }
                 | WindowAction::DragTitlebar { .. }
                 | WindowAction::ChooseSample { .. }
                 | WindowAction::CancelFilePicker {}) => {
@@ -520,10 +554,11 @@ impl Windows {
         }
         if matches!(request.condition,WindowCondition::Position { tolerance,.. } if tolerance>16)
             || matches!(request.condition,WindowCondition::ScaleFactor { value } if !value.is_finite() || value<=0.0 || value>8.0)
+            || matches!(request.condition,WindowCondition::ClientSize { width,height } if !(1..=16384).contains(&width) || !(1..=16384).contains(&height))
         {
             return Err(error(
                 Code::InvalidInput,
-                "位置容差须不超过 16 物理像素；DPR 须为 (0,8]。",
+                "位置容差须不超过 16 物理像素；DPR 须为 (0,8]；客户区尺寸须为 1–16384 物理像素。",
             ));
         }
         let after = request
@@ -641,9 +676,8 @@ mod tests {
     }
 
     #[cfg(windows)]
-    #[test]
-    fn foreground_wait_rejects_old_focus_events_and_minimized_windows() {
-        let mut state = WindowState {
+    fn window_state() -> WindowState {
+        WindowState {
             monitors: vec![],
             file_picker: FilePickerState {
                 opened: false,
@@ -670,7 +704,47 @@ mod tests {
             logical_width: 1280.0,
             logical_height: 800.0,
             scale_factor: 1.0,
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn client_size_wait_requires_physical_dimensions_and_visible_normal_window() {
+        let condition = WindowCondition::ClientSize {
+            width: 1280,
+            height: 800,
         };
+        let mut state = window_state();
+        // 逻辑尺寸相同不代表物理尺寸相同，等待必须使用原生客户区。
+        state.scale_factor = 2.0;
+        state.physical_width = 2560;
+        state.physical_height = 1600;
+        assert!(!condition.matches(&state));
+        state.physical_width = 1282;
+        state.physical_height = 798;
+        assert!(condition.matches(&state));
+        state.physical_width = 1283;
+        assert!(!condition.matches(&state));
+        state.physical_width = 1280;
+        state.physical_height = 803;
+        assert!(!condition.matches(&state));
+        state.physical_height = 800;
+        for (visible, minimized, maximized) in [
+            (false, false, false),
+            (true, true, false),
+            (true, false, true),
+        ] {
+            state.visible = visible;
+            state.minimized = minimized;
+            state.maximized = maximized;
+            assert!(!condition.matches(&state));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn foreground_wait_rejects_old_focus_events_and_minimized_windows() {
+        let mut state = window_state();
         let condition = WindowCondition::Foreground {
             target: FocusTarget::Main,
         };
@@ -713,6 +787,8 @@ mod tests {
             json!({"kind":"focusAuxiliary","label":"other"}),
             json!({"kind":"resize","width":10000,"height":10000}),
             json!({"kind":"resize","size":"screen"}),
+            json!({"kind":"resizeEdge","edge":"left","direction":"outward","distance":9000}),
+            json!({"kind":"resizeEdge","edge":"outside","direction":"inward"}),
             json!({"kind":"center","handle":123}),
             json!({"kind":"systemShortcut","shortcut":"launchShell"}),
             json!({"kind":"dragTitlebar","destination":{"kind":"offset","x":0}}),
@@ -726,6 +802,12 @@ mod tests {
                 .is_ok()
         );
         assert!(serde_json::from_value::<WindowAction>(json!({"kind":"close"})).is_ok());
+        assert!(
+            serde_json::from_value::<WindowAction>(
+                json!({"kind":"resizeEdge","edge":"topLeft","direction":"inward"})
+            )
+            .is_ok()
+        );
         assert!(
             serde_json::from_value::<WindowAction>(
                 json!({"kind":"systemShortcut","shortcut":"altF4"})

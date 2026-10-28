@@ -81,6 +81,7 @@ assert(
     'window-exit',
     'window-alt-f4',
     'window-system',
+    'window-resize',
     'window-picker',
     'window-cross-monitor',
     'window-topology',

@@ -1,6 +1,8 @@
 // 窗口行为经开发 MCP 调用真实系统 API；UI 行为经 WebDriver。每次失焦都核对两层事件。
 import assert from 'node:assert/strict';
 import { focusTestWindow } from './dev-mcp-render-focus.mjs';
+import { exerciseWindowResize } from './dev-mcp-window-resize.mjs';
+import { placeTestWindow } from './dev-mcp-preflight.mjs';
 
 export async function exerciseWindows(context) {
   const {
@@ -84,7 +86,7 @@ export async function exerciseWindows(context) {
     assert.equal(current.selection.selectionRevision, fixed.selectionRevision);
     assert.equal(current.selection.scope.snapshotId, fixed.snapshotId);
   }
-  async function layout(window, name) {
+  async function layout(window, name, capture = true) {
     let view = await wait({
       kind: 'windowLayout',
       width: Math.round(window.logicalWidth),
@@ -120,13 +122,14 @@ export async function exerciseWindows(context) {
     assert(viewport.y + viewport.height <= view.window.height + 1);
     await unchanged(view);
     report.windowSamples.push({ operation: name, window, view });
-    await screenshot('window-' + name + '.png');
+    if (capture) await screenshot('window-' + name + '.png');
     return view;
   }
   if (scenario === 'window-controls') {
     for (const size of ['minimum', 'default']) {
       await native({ kind: 'resize', size });
-      await layout(await nativeWait({ kind: 'size', size }), size);
+      await nativeWait({ kind: 'size', size });
+      await layout(await placeTestWindow(context), size);
     }
     await click('window:maximize');
     await layout(
@@ -276,6 +279,8 @@ export async function exerciseWindows(context) {
     report.checks.push(
       '失焦关闭菜单，恢复后 Alt 访问键、方向键与 Esc 正常；输入框隔离 V／M／Esc，画布快捷键恢复且固定任务保留',
     );
+  } else if (scenario === 'window-resize') {
+    await exerciseWindowResize({ ...context, native, nativeWait, nativeState, layout });
   } else if (scenario === 'window-system' || scenario === 'window-cross-monitor') {
     await native({ kind: 'restore' });
     await native({ kind: 'resize', size: 'minimum' });

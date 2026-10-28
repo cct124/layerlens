@@ -43,6 +43,41 @@ impl Windows {
             use layerlens_window_probe::system as input;
             let handle = self.main.hwnd().map_err(native)?.0 as usize;
             match action {
+                WindowAction::ResizeEdge { edge, direction } => {
+                    if before.file_picker.opened
+                        || before.minimized
+                        || before.maximized
+                        || before.foreground_ready != Some(FocusTarget::Main)
+                        || !before.scale_factor.is_finite()
+                        || before.scale_factor <= 0.0
+                        || before.scale_factor > 8.0
+                    {
+                        return Err(error(
+                            Code::InvalidInput,
+                            "边缘调整只允许自有前台普通窗口。",
+                        ));
+                    }
+                    let edge = match edge {
+                        ResizeEdge::Left => input::ResizeEdge::Left,
+                        ResizeEdge::Right => input::ResizeEdge::Right,
+                        ResizeEdge::Top => input::ResizeEdge::Top,
+                        ResizeEdge::Bottom => input::ResizeEdge::Bottom,
+                        ResizeEdge::TopLeft => input::ResizeEdge::TopLeft,
+                        ResizeEdge::TopRight => input::ResizeEdge::TopRight,
+                        ResizeEdge::BottomLeft => input::ResizeEdge::BottomLeft,
+                        ResizeEdge::BottomRight => input::ResizeEdge::BottomRight,
+                    };
+                    let sign = match direction {
+                        ResizeDirection::Outward => 1,
+                        ResizeDirection::Inward => -1,
+                    };
+                    input::resize(
+                        handle,
+                        edge,
+                        (48.0 * before.scale_factor).round() as i32 * sign,
+                    )
+                    .map_err(native)
+                }
                 WindowAction::SystemShortcut { shortcut } => {
                     let key = match shortcut {
                         SystemShortcut::AltF4 => input::SystemShortcut::AltF4,

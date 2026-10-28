@@ -122,6 +122,15 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   await writeFile(path.join(run, 'failure.png'), Buffer.from([137, 80, 78, 71]));
   await writeFile(path.join(run, 'window-minimum.png'), Buffer.from([137, 80, 78, 71]));
   await writeFile(path.join(run, 'generic-capture.png'), Buffer.from([137, 80, 78, 71]));
+  const edgeImages = [
+    'window-edge-minimum-before.png',
+    'window-edge-minimum-after.png',
+    'window-edge-default-before.png',
+    'window-edge-default-after.png',
+  ];
+  for (const name of edgeImages)
+    await writeFile(path.join(run, name), Buffer.from([137, 80, 78, 71]));
+  await writeFile(path.join(run, 'window-edge-private.png'), 'DO NOT UPLOAD');
   await writeFile(
     path.join(source, 'stability-abc', 'summary.json'),
     JSON.stringify({ status: 'failed' }),
@@ -129,7 +138,10 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   const output = path.join(directory, 'output');
   const manifest = await collectArtifacts(source, output);
   assert.deepEqual(manifest.errors, []);
-  assert.equal(manifest.files.length, 8);
+  assert.equal(manifest.files.length, 12);
+  for (const name of edgeImages)
+    assert(manifest.files.some((entry) => entry.path.endsWith('/' + name)));
+  assert(!manifest.files.some((entry) => entry.path.endsWith('/window-edge-private.png')));
   assert(manifest.files.some((entry) => entry.path === 'display-prepare.json'));
   assert(!manifest.files.some((entry) => entry.path.endsWith('.xml')));
   assert(manifest.files.some((entry) => entry.path.endsWith('/generic-capture.png')));
@@ -150,7 +162,7 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
     path.join(directory, 'single'),
   );
   assert.deepEqual(single.errors, []);
-  assert.equal(single.files.length, 6);
+  assert.equal(single.files.length, 10);
 });
 
 test('来源目录联接不能导出外部文件，空产物明确报错', async (t) => {

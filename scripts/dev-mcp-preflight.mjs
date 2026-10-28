@@ -20,6 +20,20 @@ export function preflightOptions(options) {
   return { size, dpr, monitor };
 }
 
+/** 每次预设尺寸变化后重新安置窗口；设置位置不能替代实际工作区包含关系。 */
+export async function placeTestWindow(context, record = {}) {
+  const { tool, args } = context;
+  record.center = (await tool('dev_window_action', args({ kind: 'center' }, true))).value;
+  record.placementWait = (
+    await tool(
+      'dev_window_wait',
+      args({ condition: { kind: 'withinWorkArea' }, afterSequence: null, timeoutMs: 10000 }),
+    )
+  ).value;
+  assert(record.placementWait.satisfied, '客户区无法完整放入当前屏幕工作区。');
+  return record.placementWait.lastState;
+}
+
 /** 每项 GUI 实例仅执行一次；错误携带阶段和实际末态，不能改判成业务失败。 */
 export async function prepareTestWindow(context, expected) {
   const { report, state, tool, args, wait } = context;
@@ -110,18 +124,7 @@ export async function prepareTestWindow(context, expected) {
       }
     }
     record.stage = 'placement';
-    record.center = (await tool('dev_window_action', args({ kind: 'center' }, true))).value;
-    record.placementWait = (
-      await tool(
-        'dev_window_wait',
-        args({
-          condition: { kind: 'withinWorkArea' },
-          afterSequence: null,
-          timeoutMs: 10000,
-        }),
-      )
-    ).value;
-    assert(record.placementWait.satisfied, '客户区无法完整放入当前屏幕工作区。');
+    await placeTestWindow(context, record);
     record.stage = 'display';
     record.display = await captureDisplayEnvironment(context);
     record.issues = displayIssues(record.display);

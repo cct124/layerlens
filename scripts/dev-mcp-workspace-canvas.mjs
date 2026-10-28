@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { captureDisplayEnvironment, displayIssues } from './dev-mcp-render-environment.mjs';
 import { ensureRenderFocus, focusTestWindow } from './dev-mcp-render-focus.mjs';
 import { exerciseWorkspaceMemory } from './dev-mcp-workspace-memory.mjs';
+import { placeTestWindow } from './dev-mcp-preflight.mjs';
 
 export async function recordWorkspaceEnvironment(context, label, cycle = null, terminal = false) {
   const { report } = context;
@@ -292,6 +293,7 @@ export async function exerciseWorkspaceCanvas(context) {
         )
       ).value;
       assert(result.satisfied);
+      await placeTestWindow(context);
       await wait({
         kind: 'display',
         width: Math.round(result.lastState.logicalWidth),

@@ -16,6 +16,7 @@ const { values } = parseArgs({
     environment: { type: 'string', default: '.local/dev-mcp/driver-preparation.json' },
     app: { type: 'string', default: 'target/debug/layerlens.exe' },
     'release-app': { type: 'string', default: 'target/release/layerlens.exe' },
+    'output-root': { type: 'string', default: '.local/dev-mcp' },
     repeat: { type: 'string', default: '5' },
     'webview-suite': { type: 'string', default: 'baseline' },
   },
@@ -43,7 +44,7 @@ const scenarios =
   values['webview-suite'] === 'canvas-resources'
     ? ['canvas-memory']
     : values['webview-suite'] === 'system-window'
-      ? ['window-system', 'window-picker', 'window-alt-f4']
+      ? ['window-system', 'window-picker', 'window-alt-f4', 'window-resize']
       : values['webview-suite'] === 'cross-monitor'
         ? ['window-cross-monitor']
         : values['webview-suite'] === 'cleanup-window'
@@ -67,7 +68,7 @@ assert(
   repeats >= scenarios.length && repeats % scenarios.length === 0,
   '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',
 );
-const base = path.join(root, '.local/dev-mcp');
+const base = path.resolve(root, values['output-root']);
 await mkdir(base, { recursive: true });
 const directory = await mkdtemp(path.join(base, 'stability-'));
 const runs = path.join(directory, 'runs');

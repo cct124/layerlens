@@ -1,10 +1,13 @@
 //! 自有窗口的 Win32 输入与 UI Automation；所有 FFI 指针在本模块内验证。
 //! SendInput 不保证送达，调用者必须继续等待实际窗口／业务状态。
-use super::{FilePickerState, Point, SystemError, SystemShortcut};
+use super::{FilePickerState, Point, ResizeEdge, SystemError, SystemShortcut};
 use crate::windows::{desktop_receives_input, owned_thread};
-use std::time::{Duration, Instant};
+use std::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 use windows_sys::Win32::{
-    Foundation::{GetLastError, HWND, POINT},
+    Foundation::{GetLastError, HWND, POINT, RECT},
     System::Threading::GetCurrentThreadId,
     UI::{Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
 };
@@ -181,19 +184,58 @@ fn absolute(point: Point) -> Result<Point, SystemError> {
             GetSystemMetrics(SM_CYVIRTUALSCREEN),
         )
     };
-    let dx = i64::from(point.x) - i64::from(x);
-    let dy = i64::from(point.y) - i64::from(y);
-    if w < 2 || h < 2 || dx < 0 || dy < 0 || dx >= i64::from(w) || dy >= i64::from(h) {
-        return Err(("pointOutsideVirtualDesktop", None).into());
-    }
     Ok(Point {
-        x: (dx * 65535 / i64::from(w - 1)) as i32,
-        y: (dy * 65535 / i64::from(h - 1)) as i32,
+        x: absolute_axis(point.x, x, w)?,
+        y: absolute_axis(point.y, y, h)?,
     })
 }
+
+fn absolute_axis(coordinate: i32, origin: i32, extent: i32) -> Result<i32, SystemError> {
+    let offset = i64::from(coordinate) - i64::from(origin);
+    if !(2..=65536).contains(&extent) || offset < 0 || offset >= i64::from(extent) {
+        return Err(("pointOutsideVirtualDesktop", None).into());
+    }
+    // SendInput 用 65536 个区间映射桌面；定位像素中心，避免落在一像素边框之外。
+    Ok(((2 * offset + 1) * 65536 / (2 * i64::from(extent))) as i32)
+}
+static LAST_DRAG_RELEASE: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn independent_click_delay(
+    elapsed: Duration,
+    double_click_ms: u32,
+) -> Result<Duration, SystemError> {
+    // GetDoubleClickTime 的公开上限为 5000ms；不修改系统设置或放宽输入等待预算。
+    if double_click_ms > 5000 {
+        return Err(("invalidDoubleClickTime", None).into());
+    }
+    Ok(Duration::from_millis(u64::from(double_click_ms) + 1).saturating_sub(elapsed))
+}
+
 pub(super) fn drag(main: usize, start: Point, end: Point) -> Result<(), SystemError> {
+    drag_to(main, start, end, None)
+}
+
+fn drag_to(
+    main: usize,
+    start: Point,
+    end: Point,
+    expected_border: Option<u32>,
+) -> Result<(), SystemError> {
     let main = main as HWND;
     check_input(main)?;
+    let last_release = *LAST_DRAG_RELEASE
+        .lock()
+        .map_err(|_| SystemError::from(("dragTimingUnavailable", None)))?;
+    if let Some(last_release) = last_release {
+        // SAFETY: 无参数的只读系统查询；只分隔本实例的独立拖动，不改变双击设置。
+        let delay =
+            independent_click_delay(last_release.elapsed(), unsafe { GetDoubleClickTime() })?;
+        // 同一边缘连续按下可能成为 WM_NCLBUTTONDBLCLK。按实际系统阈值等待，锁外执行。
+        if !delay.is_zero() {
+            std::thread::sleep(delay);
+        }
+        check_input(main)?;
+    }
     let start_absolute = absolute(start)?;
     let end_absolute = absolute(end)?;
     // SAFETY: WindowFromPoint 只读取输入命中窗口；IsChild 不解引用系统句柄。
@@ -204,15 +246,35 @@ pub(super) fn drag(main: usize, start: Point, end: Point) -> Result<(), SystemEr
         })
     };
     if hit != main && unsafe { IsChild(main, hit) } == 0 {
-        return Err(("titlebarPointNotOwned", None).into());
+        return Err(("dragPointNotOwned", None).into());
     }
     let move_flags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
+    // 先投递移动并读取真实落点，再验证将接收按下的窗口；父窗口的命中不能代表 WebView 子窗口。
+    send(&[mouse(start_absolute, move_flags)])?;
+    let deadline = Instant::now() + Duration::from_millis(250);
+    loop {
+        let mut cursor = POINT::default();
+        // SAFETY: 初始化且有效的可写 POINT，仅查询实际指针坐标。
+        if unsafe { GetCursorPos(&mut cursor) } == 0 {
+            return Err(error("dragCursorPosition"));
+        }
+        if cursor.x == start.x && cursor.y == start.y {
+            break;
+        }
+        if Instant::now() >= deadline {
+            return Err(("dragCursorNotAtStart", None).into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    check_input(main)?;
+    if let Some(expected) = expected_border
+        && !border_hit(main, start, expected)?
+    {
+        return Err(("resizeBorderChanged", None).into());
+    }
     let up = mouse(Point { x: 0, y: 0 }, MOUSEEVENTF_LEFTUP);
     let result = (|| {
-        send(&[
-            mouse(start_absolute, move_flags),
-            mouse(Point { x: 0, y: 0 }, MOUSEEVENTF_LEFTDOWN),
-        ])?;
+        send(&[mouse(Point { x: 0, y: 0 }, MOUSEEVENTF_LEFTDOWN)])?;
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
             let mut state = GUITHREADINFO {
@@ -246,8 +308,189 @@ pub(super) fn drag(main: usize, start: Point, end: Point) -> Result<(), SystemEr
         }
         Ok(())
     })();
-    release(&[up])?;
+    let released = release(&[up]);
+    *LAST_DRAG_RELEASE
+        .lock()
+        .map_err(|_| SystemError::from(("dragTimingUnavailable", None)))? = Some(Instant::now());
+    released?;
     result
+}
+
+fn resize_point(rect: &RECT, edge: ResizeEdge, inset: i32) -> Result<Point, SystemError> {
+    let width = i64::from(rect.right) - i64::from(rect.left);
+    let height = i64::from(rect.bottom) - i64::from(rect.top);
+    if inset < 0 || width <= i64::from(inset) * 2 || height <= i64::from(inset) * 2 {
+        return Err(("invalidResizeBounds", None).into());
+    }
+    let (dx, dy) = edge.axes();
+    let x = match dx {
+        -1 => i64::from(rect.left) + i64::from(inset),
+        1 => i64::from(rect.right) - i64::from(inset.max(1)),
+        _ => i64::from(rect.left) + width / 2,
+    };
+    let y = match dy {
+        -1 => i64::from(rect.top) + i64::from(inset),
+        1 => i64::from(rect.bottom) - i64::from(inset.max(1)),
+        _ => i64::from(rect.top) + height / 2,
+    };
+    Ok(Point {
+        x: x as i32,
+        y: y as i32,
+    })
+}
+
+fn border_hit(window: HWND, point: Point, expected: u32) -> Result<bool, SystemError> {
+    let (Ok(x), Ok(y)) = (i16::try_from(point.x), i16::try_from(point.y)) else {
+        return Err(("hitTestCoordinateOutOfRange", None).into());
+    };
+    // SAFETY: 仅查询真实输入目标；后续消息限定为自有窗口及其子窗口。
+    let actual = unsafe {
+        WindowFromPoint(POINT {
+            x: point.x,
+            y: point.y,
+        })
+    };
+    if actual != window && unsafe { IsChild(window, actual) } == 0 {
+        return Ok(false);
+    }
+    let packed = ((i32::from(y) << 16) | i32::from(x as u16)) as isize;
+    let mut hit = 0;
+    // SAFETY: WM_NCHITTEST 只读有符号短坐标；目标已验证自有，结果缓冲区有效，等待限于 250ms。
+    if unsafe {
+        SendMessageTimeoutW(
+            actual,
+            WM_NCHITTEST,
+            0,
+            packed,
+            SMTO_ABORTIFHUNG,
+            250,
+            &mut hit,
+        )
+    } == 0
+    {
+        return Err(error("resizeHitTest"));
+    }
+    Ok(hit == expected as usize)
+}
+
+pub(super) fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(), SystemError> {
+    let window = main as HWND;
+    check_input(window)?;
+    // SAFETY: 当前进程自有窗口，仅读取正常窗口状态。
+    if unsafe { IsZoomed(window) } != 0
+        || unsafe { IsIconic(window) } != 0
+        || dialog(main)?.is_some()
+    {
+        return Err(("resizeRequiresNormalWindow", None).into());
+    }
+    let mut rect = RECT::default();
+    // SAFETY: 自有窗口与初始化的可写 RECT。
+    if unsafe { GetWindowRect(window, &mut rect) } == 0 {
+        return Err(error("resizeWindowRect"));
+    }
+    let expected = match edge {
+        ResizeEdge::Left => HTLEFT,
+        ResizeEdge::Right => HTRIGHT,
+        ResizeEdge::Top => HTTOP,
+        ResizeEdge::Bottom => HTBOTTOM,
+        ResizeEdge::TopLeft => HTTOPLEFT,
+        ResizeEdge::TopRight => HTTOPRIGHT,
+        ResizeEdge::BottomLeft => HTBOTTOMLEFT,
+        ResizeEdge::BottomRight => HTBOTTOMRIGHT,
+    };
+    let mut start = None;
+    // 有界探查真实边框，处理不可见 resize margin；只读命中结果，不派发合成缩放消息。
+    for inset in [0, 1, 2, 4, 8, 16] {
+        let point = resize_point(&rect, edge, inset)?;
+        if border_hit(window, point, expected)? {
+            start = Some(point);
+            break;
+        }
+    }
+    let start = start.ok_or(SystemError::from(("resizeBorderNotFound", None)))?;
+    let (dx, dy) = edge.axes();
+    let end = Point {
+        x: start
+            .x
+            .checked_add(dx * distance)
+            .ok_or(SystemError::from(("resizeCoordinateOverflow", None)))?,
+        y: start
+            .y
+            .checked_add(dy * distance)
+            .ok_or(SystemError::from(("resizeCoordinateOverflow", None)))?,
+    };
+    drag_to(main, start, end, Some(expected))
+}
+
+#[cfg(test)]
+mod resize_tests {
+    use super::*;
+    #[test]
+    fn absolute_coordinates_land_inside_each_pixel_of_negative_origin_desktops() {
+        for extent in [2, 1600, 4480, 65536] {
+            for pixel in 0..extent {
+                let absolute = absolute_axis(pixel - 1920, -1920, extent).unwrap();
+                assert_eq!(
+                    i64::from(absolute) * i64::from(extent) / 65536,
+                    i64::from(pixel)
+                );
+            }
+        }
+        for (coordinate, origin, extent) in [
+            (0, 0, 1),
+            (0, 0, 65537),
+            (-1, 0, 100),
+            (100, 0, 100),
+            (i32::MAX, i32::MIN, 100),
+        ] {
+            assert!(absolute_axis(coordinate, origin, extent).is_err());
+        }
+    }
+    #[test]
+    fn consecutive_drags_wait_out_the_actual_double_click_interval() {
+        assert_eq!(
+            independent_click_delay(Duration::from_millis(100), 500).unwrap(),
+            Duration::from_millis(401)
+        );
+        assert_eq!(
+            independent_click_delay(Duration::from_millis(500), 500).unwrap(),
+            Duration::from_millis(1)
+        );
+        assert_eq!(
+            independent_click_delay(Duration::from_millis(501), 500).unwrap(),
+            Duration::ZERO
+        );
+        assert!(independent_click_delay(Duration::ZERO, 5001).is_err());
+    }
+    #[test]
+    fn border_points_preserve_negative_monitor_coordinates_and_reject_degenerate_bounds() {
+        let rect = RECT {
+            left: -1200,
+            top: -200,
+            right: -200,
+            bottom: 500,
+        };
+        for (edge, x, y) in [
+            (ResizeEdge::Left, -1198, 150),
+            (ResizeEdge::Right, -202, 150),
+            (ResizeEdge::Top, -700, -198),
+            (ResizeEdge::Bottom, -700, 498),
+            (ResizeEdge::TopLeft, -1198, -198),
+            (ResizeEdge::TopRight, -202, -198),
+            (ResizeEdge::BottomLeft, -1198, 498),
+            (ResizeEdge::BottomRight, -202, 498),
+        ] {
+            let p = resize_point(&rect, edge, 2).unwrap();
+            assert_eq!((p.x, p.y), (x, y));
+        }
+        assert!(resize_point(&rect, ResizeEdge::Left, 500).is_err());
+        assert!(resize_point(&rect, ResizeEdge::Top, -1).is_err());
+        let top = resize_point(&rect, ResizeEdge::Top, 0).unwrap();
+        assert_eq!((top.x, top.y), (-700, -200));
+        let corner = resize_point(&rect, ResizeEdge::BottomRight, 0).unwrap();
+        assert_eq!((corner.x, corner.y), (-201, 499));
+        assert!(resize_point(&RECT::default(), ResizeEdge::Top, 1).is_err());
+    }
 }
 
 struct ComApartment;

@@ -39,6 +39,9 @@ const runFiles = [
   'window-snap-right.png',
   'window-drag-maximized.png',
   'window-picker-opened.png',
+  ...['minimum', 'default'].flatMap((size) =>
+    ['before', 'after'].map((phase) => 'window-edge-' + size + '-' + phase + '.png'),
+  ),
   ...Array.from({ length: 16 }, (_, index) => 'window-monitor-' + index + '.png'),
   'render-comparison.png', // 只读收集历史证据；当前运行器不再生成多引擎对比。
   'visual-reference.json',

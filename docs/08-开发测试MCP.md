@@ -197,7 +197,11 @@ Windows 的顶层 HWND 焦点查询不包含 WebView2 子窗口。main 的 `focu
 
 Windows 产品入口在选择器返回后恢复所属 WebView 的键盘焦点，取消与选中文件复用同一路径。场景不额外派发 `focusMain` 补救，而是等待自有前台、输入焦点及 `filePickerIdle`，再检查取消无副作用或新文档实际加载。原生场景失败时另存 `failureNative`，查询失败保留原因，不覆盖最初失败。
 
-`dev_window_state.monitors` 最多 16 项，只含当前拓扑索引、工作区、scaleFactor 与 current 标记，不含设备标识。索引不是持久身份。新增等待 `filePicker { opened }`、`monitor { index }`、`position { x, y, tolerance }`、`scaleFactor { value }` 和 `snapped { side: left | right }`；位置容差不超过 16 物理像素，DPR 为 (0,8]。`test:dev-mcp:system-window` 串行运行三类场景各三次；`test:dev-mcp:cross-monitor` 要求真实多屏，不能用一个加宽视口替代。不同系统 DPI、窗口位置及 Canvas 后备像素分别核对，截图按捕获前后真实视口×DPR 验证，不按启动尺寸推断。
+`dev_window_state.monitors` 最多 16 项，只含当前拓扑索引、工作区、scaleFactor 与 current 标记，不含设备标识。索引不是持久身份。新增等待 `filePicker { opened }`、`monitor { index }`、`position { x, y, tolerance }`、`scaleFactor { value }` 和 `snapped { side: left | right }`；位置容差不超过 16 物理像素，DPR 为 (0,8]。`test:dev-mcp:system-window` 串行运行系统拖动／贴靠、选择器、Alt+F4 和边框调整四类场景，各三个独立实例；`test:dev-mcp:cross-monitor` 要求真实多屏，不能用一个加宽视口替代。不同系统 DPI、窗口位置及 Canvas 后备像素分别核对，截图按捕获前后真实视口×DPR 验证，不按启动尺寸推断。
+
+`resizeEdge { edge, direction }` 仅接受四边／四角（`left`／`right`／`top`／`bottom`／`topLeft`／`topRight`／`bottomLeft`／`bottomRight`）及 `inward`／`outward`。位移固定为 48 逻辑像素，再按当前原生 DPR 转成物理像素；不接受任意坐标、距离或外部窗口。安全封装对实际指针目标（自有主窗口或子窗口）有界查询 `WM_NCHITTEST`，不能以父窗口命中代替 WebView 子窗口命中。鼠标绝对坐标映射到像素中心，先投递移动并核对实际落点，再检查边框未变化后按下；最大化、最小化、文件选择器打开或输入未就绪时拒绝。`clientSize { width, height }` 等待可见普通窗口的实际客户区尺寸，范围 1–16384 物理像素、取整容差 2 像素；几何发生变化时仍须等待新的窗口事件。
+
+`window-resize` 先通过实际大小菜单固定手动缩放，在最小／默认窗口验证八方向共 40 次真实手势，检查最小尺寸、对边位置、当前 Canvas 布局／DPR、视图及固定选区／任务；最大化后的八方向请求须明确拒绝且几何不变。保留两档尺寸前后及最大化截图，以及当前尝试的方向／尺寸。独立原生拖动之间按实际 `GetDoubleClickTime` 等待，避免同位置连按成为边框双击；不修改系统双击设置，等待结束后重新验证前台和输入。统一套件接受 `--output-root`；CI 的系统专项写入独立目录并单独收集／上传，沿用每包 768 文件／64 MiB、单文件 8 MiB 的限额，不挤占既有主套件预算。实现与静态检查不替代实际 GUI 或托管 CI 验收。
 
 系统封装复用锁文件已有 `windows-sys 0.61.2` 和 `windows 0.61.3`，后者新增为测试封装直接依赖，只启用 UI Automation／COM 所需功能，无版本升级。均为 Microsoft 官方绑定、MIT／Apache-2.0，仅 Windows 开发测试编入；COM 引用与公寓在阻塞线程内释放，接口超时有界。普通核心／桌面继续禁止 unsafe，普通包不引入此测试封装。
 

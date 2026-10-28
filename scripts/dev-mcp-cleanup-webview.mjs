@@ -1,6 +1,7 @@
 // 清理边界通过真实 MCP、WebView 输入和命名检查点验证；没有固定休眠或组件状态写入。
 import assert from 'node:assert/strict';
 import { focusTestWindow } from './dev-mcp-render-focus.mjs';
+import { placeTestWindow } from './dev-mcp-preflight.mjs';
 
 export async function exerciseCleanupBoundaries(context) {
   const {
@@ -127,6 +128,7 @@ export async function exerciseCleanupBoundaries(context) {
         )
       ).value;
       assert(resized.satisfied);
+      await placeTestWindow(context);
       await wait({
         kind: 'display',
         width: Math.round(resized.lastState.logicalWidth),

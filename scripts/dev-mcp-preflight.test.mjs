@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { preflightOptions, prepareTestWindow } from './dev-mcp-preflight.mjs';
+import { preflightOptions, prepareTestWindow, placeTestWindow } from './dev-mcp-preflight.mjs';
 
 function fixture() {
   const native = {
@@ -92,6 +92,22 @@ test('输入桌面不接收输入或查询不可用时，在任何窗口动作�
     assert(context.report.preflight.terminal.nativeAfter);
     assert(calls.every((c) => c.name === 'dev_window_state'));
   }
+});
+
+test('重新安置必须满足原生工作区等待，失败保留回执且不重试', async () => {
+  const { context, native, calls } = fixture();
+  native.clientWithinWorkArea = false;
+  const original = context.tool;
+  context.tool = async (name, request) => {
+    const response = await original(name, request);
+    if (name === 'dev_window_wait') response.value.satisfied = false;
+    return response;
+  };
+  const record = {};
+  await assert.rejects(placeTestWindow(context, record), /工作区/);
+  assert.equal(record.placementWait.lastState.clientWithinWorkArea, false);
+  assert.equal(record.center.dispatched, true);
+  assert.equal(calls.length, 2);
 });
 
 test('实际 DPR 与预定值不同不接受；原生和前端不一致也不能当作通过', async () => {

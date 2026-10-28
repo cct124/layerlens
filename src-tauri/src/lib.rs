@@ -3,6 +3,8 @@
 mod commands;
 #[cfg(feature = "dev-mcp")]
 mod dev_mcp;
+#[cfg(windows)]
+mod window_geometry;
 mod workspace;
 
 use std::sync::Arc;
@@ -190,6 +192,13 @@ pub fn run() -> tauri::Result<()> {
                         });
                     }))?;
                 app.manage(running);
+            }
+            #[cfg(windows)]
+            if let Some(main) = app.get_webview_window("main")
+                && let Some(config) = app.config().app.windows.iter().find(|w| w.label == "main")
+                && let (Some(width), Some(height)) = (config.min_width, config.min_height)
+            {
+                window_geometry::install(main, tauri::LogicalSize::new(width, height))?;
             }
             Ok(())
         })
