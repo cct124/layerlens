@@ -66,14 +66,14 @@ npm run test:watch     # 交互式前端测试
 cargo test --locked -p layerlens-core # 单独验证不依赖 Tauri 的核心
 ```
 
-Windows CI 使用相同的完整检查入口、构建 NSIS 安装包并验证普通构建拒绝开发参数；新增独立的开发 MCP 作业执行重复回归并保留诊断产物。第三批本机验证已通过，新增工作流尚未在远端运行；必需检查与分支保护不由工作流文件自动生效。
+Windows CI 使用相同的完整检查入口、构建 NSIS 安装包并验证普通构建拒绝开发参数；独立的开发 MCP 作业执行重复回归并保留诊断产物。当前提交的托管结果与本机证据分别记录在[开发日志](devlog/README.md)，不以工作流已配置代替运行成功；必需检查与分支保护不由工作流文件自动生效。
 
 ### 开发测试 MCP
 
 [DEV-01](devlog/_fin/261014/DEV-01-开发测试MCP与M2自动验收.md) 已完成业务／真实 WebView、隔离、重复回归和本机／Windows CI 产物验证并归档；剩余产品场景与原生专项由 M2 继续验收。业务工具见[第一批](docs/08-开发测试MCP.md#当前实现dev-01-第一批)，UI 工具见[第二批](docs/08-开发测试MCP.md#当前实现dev-01-第二批)，CI 与报告规则见[第三批](docs/08-开发测试MCP.md#当前实现dev-01-第三批)。
 
 ```powershell
-npm run check:dev-mcp        # 开发特性的格式、Clippy、桌面 Rust 测试与观测 DTO 一致性
+npm run check:dev-mcp        # 开发特性的格式、全工作区 all-targets Clippy、桌面测试与 DTO 一致性
 npm run test:dev-mcp         # 单独运行开发特性下的桌面 Rust 测试，含官方 MCP 客户端
 npm run build:dev-mcp        # 构建 debug 桌面程序，内置静态前端，不生成安装包
 npm run test:dev-mcp:desktop # 启动独立桌面进程，经 HTTP MCP 验证业务闭环并正常退出

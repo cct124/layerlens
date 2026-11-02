@@ -431,77 +431,6 @@ pub(super) fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(),
     drag_to(main, start, end, Some(expected))
 }
 
-#[cfg(test)]
-mod resize_tests {
-    use super::*;
-    #[test]
-    fn absolute_coordinates_land_inside_each_pixel_of_negative_origin_desktops() {
-        for extent in [2, 1600, 4480, 65536] {
-            for pixel in 0..extent {
-                let absolute = absolute_axis(pixel - 1920, -1920, extent).unwrap();
-                assert_eq!(
-                    i64::from(absolute) * i64::from(extent) / 65536,
-                    i64::from(pixel)
-                );
-            }
-        }
-        for (coordinate, origin, extent) in [
-            (0, 0, 1),
-            (0, 0, 65537),
-            (-1, 0, 100),
-            (100, 0, 100),
-            (i32::MAX, i32::MIN, 100),
-        ] {
-            assert!(absolute_axis(coordinate, origin, extent).is_err());
-        }
-    }
-    #[test]
-    fn consecutive_drags_wait_out_the_actual_double_click_interval() {
-        assert_eq!(
-            independent_click_delay(Duration::from_millis(100), 500).unwrap(),
-            Duration::from_millis(401)
-        );
-        assert_eq!(
-            independent_click_delay(Duration::from_millis(500), 500).unwrap(),
-            Duration::from_millis(1)
-        );
-        assert_eq!(
-            independent_click_delay(Duration::from_millis(501), 500).unwrap(),
-            Duration::ZERO
-        );
-        assert!(independent_click_delay(Duration::ZERO, 5001).is_err());
-    }
-    #[test]
-    fn border_points_preserve_negative_monitor_coordinates_and_reject_degenerate_bounds() {
-        let rect = RECT {
-            left: -1200,
-            top: -200,
-            right: -200,
-            bottom: 500,
-        };
-        for (edge, x, y) in [
-            (ResizeEdge::Left, -1198, 150),
-            (ResizeEdge::Right, -202, 150),
-            (ResizeEdge::Top, -700, -198),
-            (ResizeEdge::Bottom, -700, 498),
-            (ResizeEdge::TopLeft, -1198, -198),
-            (ResizeEdge::TopRight, -202, -198),
-            (ResizeEdge::BottomLeft, -1198, 498),
-            (ResizeEdge::BottomRight, -202, 498),
-        ] {
-            let p = resize_point(&rect, edge, 2).unwrap();
-            assert_eq!((p.x, p.y), (x, y));
-        }
-        assert!(resize_point(&rect, ResizeEdge::Left, 500).is_err());
-        assert!(resize_point(&rect, ResizeEdge::Top, -1).is_err());
-        let top = resize_point(&rect, ResizeEdge::Top, 0).unwrap();
-        assert_eq!((top.x, top.y), (-700, -200));
-        let corner = resize_point(&rect, ResizeEdge::BottomRight, 0).unwrap();
-        assert_eq!((corner.x, corner.y), (-201, 499));
-        assert!(resize_point(&RECT::default(), ResizeEdge::Top, 1).is_err());
-    }
-}
-
 struct ComApartment;
 impl Drop for ComApartment {
     fn drop(&mut self) {
@@ -669,4 +598,75 @@ pub(super) fn choose_file(main: usize, path: &str) -> Result<(), SystemError> {
         release(&[keyboard(VK_RETURN, 0, KEYEVENTF_KEYUP)])?;
     }
     result
+}
+
+#[cfg(test)]
+mod resize_tests {
+    use super::*;
+    #[test]
+    fn absolute_coordinates_land_inside_each_pixel_of_negative_origin_desktops() {
+        for extent in [2, 1600, 4480, 65536] {
+            for pixel in 0..extent {
+                let absolute = absolute_axis(pixel - 1920, -1920, extent).unwrap();
+                assert_eq!(
+                    i64::from(absolute) * i64::from(extent) / 65536,
+                    i64::from(pixel)
+                );
+            }
+        }
+        for (coordinate, origin, extent) in [
+            (0, 0, 1),
+            (0, 0, 65537),
+            (-1, 0, 100),
+            (100, 0, 100),
+            (i32::MAX, i32::MIN, 100),
+        ] {
+            assert!(absolute_axis(coordinate, origin, extent).is_err());
+        }
+    }
+    #[test]
+    fn consecutive_drags_wait_out_the_actual_double_click_interval() {
+        assert_eq!(
+            independent_click_delay(Duration::from_millis(100), 500).unwrap(),
+            Duration::from_millis(401)
+        );
+        assert_eq!(
+            independent_click_delay(Duration::from_millis(500), 500).unwrap(),
+            Duration::from_millis(1)
+        );
+        assert_eq!(
+            independent_click_delay(Duration::from_millis(501), 500).unwrap(),
+            Duration::ZERO
+        );
+        assert!(independent_click_delay(Duration::ZERO, 5001).is_err());
+    }
+    #[test]
+    fn border_points_preserve_negative_monitor_coordinates_and_reject_degenerate_bounds() {
+        let rect = RECT {
+            left: -1200,
+            top: -200,
+            right: -200,
+            bottom: 500,
+        };
+        for (edge, x, y) in [
+            (ResizeEdge::Left, -1198, 150),
+            (ResizeEdge::Right, -202, 150),
+            (ResizeEdge::Top, -700, -198),
+            (ResizeEdge::Bottom, -700, 498),
+            (ResizeEdge::TopLeft, -1198, -198),
+            (ResizeEdge::TopRight, -202, -198),
+            (ResizeEdge::BottomLeft, -1198, 498),
+            (ResizeEdge::BottomRight, -202, 498),
+        ] {
+            let p = resize_point(&rect, edge, 2).unwrap();
+            assert_eq!((p.x, p.y), (x, y));
+        }
+        assert!(resize_point(&rect, ResizeEdge::Left, 500).is_err());
+        assert!(resize_point(&rect, ResizeEdge::Top, -1).is_err());
+        let top = resize_point(&rect, ResizeEdge::Top, 0).unwrap();
+        assert_eq!((top.x, top.y), (-700, -200));
+        let corner = resize_point(&rect, ResizeEdge::BottomRight, 0).unwrap();
+        assert_eq!((corner.x, corner.y), (-201, 499));
+        assert!(resize_point(&RECT::default(), ResizeEdge::Top, 1).is_err());
+    }
 }

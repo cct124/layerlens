@@ -38,7 +38,7 @@
     "artifacts:dev-mcp": "node scripts/collect-dev-mcp-artifacts.mjs",
     "bindings:dev:generate": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings",
     "bindings:dev:check": "cargo run --locked -p layerlens-desktop --features dev-mcp --example export_dev_bindings -- --check",
-    "check:dev-mcp": "npm run format:check && cargo clippy --locked -p layerlens-desktop --features dev-mcp --all-targets -- -D warnings && npm run test:dev-mcp && npm run bindings:dev:check",
+    "check:dev-mcp": "npm run format:check && cargo clippy --workspace --locked --features layerlens-desktop/dev-mcp --all-targets -- -D warnings && npm run test:dev-mcp && npm run bindings:dev:check",
     "build": "npm run typecheck && vite build && node scripts/check-render-isolation.mjs",
     "build:render-lab": "npm run typecheck && vite build --mode render-lab && node scripts/check-render-isolation.mjs --render-lab",
     "desktop:render-lab": "tauri build --debug --no-bundle --features render-lab --config src-tauri/tauri.render-lab.conf.json -- --locked",
