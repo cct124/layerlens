@@ -229,7 +229,10 @@ impl Driver {
         *self.session.lock().unwrap_or_else(|p| p.into_inner()) = Some(info.clone());
         Ok(info)
     }
-    pub(crate) async fn titlebar_region(&self) -> Result<UiRect, WorkspaceError> {
+    pub(crate) async fn titlebar_region(
+        &self,
+        region: TitlebarRegion,
+    ) -> Result<UiRect, WorkspaceError> {
         let before = self.probe_session(&self.session()?).await?;
         if !self.instance.native_windows
             || before.cleanup.opened
@@ -240,7 +243,7 @@ impl Driver {
                 "标题栏系统输入需要原生实例、无模态且没有保留手势。",
             ));
         }
-        let element = self.element("window:drag").await?;
+        let element = self.element(region.target()).await?;
         let value = self
             .session_command(Method::GET, &format!("element/{element}/rect"), None)
             .await?;
@@ -297,14 +300,41 @@ impl Driver {
             "task:name"
         };
         match request.action {
-            UiAction::TitlebarDoubleClick {} => {
+            UiAction::PanelDrag { axis, delta, hold } => {
+                let actions = super::panels::drag_actions(&before, axis, delta, hold)?;
+                self.held.store(true, Ordering::Release);
+                self.session_command(Method::POST, "actions", Some(actions))
+                    .await?;
+                self.held.store(hold, Ordering::Release);
+            }
+            UiAction::PanelScroll { target, edge } => {
+                let actions = super::panels::scroll_actions(&before, target, edge)?;
+                self.session_command(Method::POST, "actions", Some(actions))
+                    .await?;
+            }
+            UiAction::PanelReset { axis } => {
+                if before.cleanup.opened || !before.window.focused {
+                    return Err(error(
+                        Code::InvalidInput,
+                        "布局重置需要无模态且有焦点的窗口。",
+                    ));
+                }
+                let element = self.element(axis.target()).await?;
+                self.held.store(true, Ordering::Release);
+                self.session_command(Method::POST,"actions",Some(json!({"actions":[{"type":"pointer","id":"layerlens-pointer","parameters":{"pointerType":"mouse"},"actions":[
+                    {"type":"pointerMove","origin":{"element-6066-11e4-a52e-4f735466cecf":element},"x":0,"y":0,"duration":0},
+                    {"type":"pointerDown","button":0},{"type":"pointerUp","button":0},{"type":"pointerDown","button":0},{"type":"pointerUp","button":0}
+                ]}]}))).await?;
+                self.held.store(false, Ordering::Release);
+            }
+            UiAction::TitlebarDoubleClick { region } => {
                 if !self.instance.native_windows {
                     return Err(error(
                         Code::InvalidInput,
                         "标题栏输入需 nativeWindows 实例。",
                     ));
                 }
-                let element = self.element("window:drag").await?;
+                let element = self.element(region.target()).await?;
                 self.held.store(true, Ordering::Release);
                 self.session_command(Method::POST, "actions", Some(json!({"actions":[{
                     "type":"pointer", "id":"layerlens-pointer", "parameters":{"pointerType":"mouse"},

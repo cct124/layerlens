@@ -11,6 +11,7 @@ render-lab = ["dev-mcp", "layerlens-core/render-lab"]
 dev-mcp = [
   # 锁定版本的无 WebView WindowBuilder 仍属于 unstable，仅开发测试构建启用。
   "tauri/unstable",
+  "layerlens-core/test-hooks",
   "dep:rmcp", "dep:axum", "dep:schemars", "dep:tokio-util",
   "dep:uuid", "dep:base64", "dep:reqwest", "dep:ts-rs", "layerlens-core/schema",
   "dep:sysinfo", "dep:png", "dep:sha2", "dep:layerlens-window-probe",

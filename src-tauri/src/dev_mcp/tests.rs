@@ -34,9 +34,9 @@ use tokio::{
 type Client = RunningService<RoleClient, ClientConfig>;
 mod cleanup;
 
-struct Temporary(PathBuf);
+pub(super) struct Temporary(pub(super) PathBuf);
 impl Temporary {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let path = std::env::temp_dir().join(format!("layerlens-dev-mcp-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&path).unwrap();
         Self(path)
@@ -85,6 +85,7 @@ impl App {
                 native_windows: false,
                 render_lab: false,
                 large_render: false,
+                profile_key: None,
             }
             .prepare()
             .unwrap(),
@@ -899,6 +900,7 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
                 native_windows: true,
                 render_lab: false,
                 large_render: false,
+                profile_key: None,
             }
             .prepare()
             .is_err()
@@ -914,6 +916,7 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
             native_windows: false,
             render_lab: false,
             large_render: false,
+            profile_key: None,
         }
         .prepare()
         .unwrap()
@@ -975,6 +978,7 @@ fn configuration_and_paths_are_isolated_and_cannot_escape_samples() {
             native_windows: false,
             render_lab: false,
             large_render: false,
+            profile_key: None,
         }
         .prepare()
         .is_err()

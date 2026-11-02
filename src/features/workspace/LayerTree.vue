@@ -95,7 +95,12 @@ watch(
 );
 </script>
 <template>
-  <section class="layer-tree" aria-label="图层树">
+  <section
+    class="layer-tree"
+    aria-label="图层树"
+    :data-layer-count="layers.length"
+    :data-loading="loading"
+  >
     <div class="panel-heading">
       <h2>图层检查</h2>
       <span>{{ loading ? '读取中…' : `${rangeIds.length} 项已勾选` }}</span
@@ -110,7 +115,14 @@ watch(
       @input="search"
     />
     <p class="tree-help">点名称查看属性 · 勾选加入任务范围</p>
-    <div ref="viewport" class="tree-viewport" role="tree" aria-label="PSD 图层" @scroll="scroll">
+    <div
+      ref="viewport"
+      class="tree-viewport"
+      data-dev-target="panel:tree"
+      role="tree"
+      aria-label="PSD 图层"
+      @scroll="scroll"
+    >
       <div :style="{ height: `${rows.length * 28}px`, position: 'relative' }">
         <div
           v-for="(row, index) in windowRows"

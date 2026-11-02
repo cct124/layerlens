@@ -25,12 +25,16 @@ pub(super) struct Config {
     pub render_lab: bool,
     #[serde(default)]
     pub large_render: bool,
+    #[serde(default)]
+    pub profile_key: Option<Uuid>,
 }
 
 pub(crate) struct Instance {
     pub(super) id: String,
     pub(super) sample_root: PathBuf,
     pub(crate) directory: PathBuf,
+    pub(crate) webview_directory: PathBuf,
+    _profile_lock: Option<fs::File>,
     pub(super) token: String,
     pub(super) port: u16,
     pub(crate) visible: bool,
@@ -77,6 +81,9 @@ impl Config {
         if self.native_windows && (!self.visible || self.web_driver_url.is_none()) {
             return Err(invalid("nativeWindows 需显式可见窗口及 WebDriver 配置"));
         }
+        if self.profile_key.is_some() && !self.native_windows {
+            return Err(invalid("profileKey 仅允许显式原生窗口测试实例。"));
+        }
         let web_driver_url = self
             .web_driver_url
             .map(|value| {
@@ -111,12 +118,24 @@ impl Config {
         }
         let id = Uuid::new_v4().to_string();
         let directory = run_root.join(&id);
+        let reusable = self
+            .profile_key
+            .map(|key| isolated_profile(&run_root, key))
+            .transpose()?;
         fs::create_dir(&directory)?;
-        fs::create_dir(directory.join("webview"))?;
+        let (webview_directory, profile_lock) = if let Some((profile, lock)) = reusable {
+            (profile, Some(lock))
+        } else {
+            let profile = directory.join("webview");
+            fs::create_dir(&profile)?;
+            (profile, None)
+        };
         Ok(Instance {
             id,
             sample_root,
             directory,
+            webview_directory,
+            _profile_lock: profile_lock,
             token: format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple()),
             port: self.port,
             visible: self.visible,
@@ -128,6 +147,44 @@ impl Config {
             windows: std::sync::OnceLock::new(),
         })
     }
+}
+
+/// 重启测试仅复用同一隔离根内的 UUID profile，进程锁禁止并发使用；不接受外部目录。
+fn isolated_profile(root: &Path, key: Uuid) -> io::Result<(PathBuf, fs::File)> {
+    let parent = root.join("profiles");
+    let directory = parent.join(key.to_string());
+    for path in [&parent, &directory] {
+        match fs::create_dir(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+        if path.canonicalize()? != *path {
+            return Err(invalid("测试 profile 不允许目录别名或重解析路径。"));
+        }
+    }
+    let lock_path = directory.join("profile.lock");
+    let lock = match fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+    {
+        Ok(file) => file,
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            if lock_path.canonicalize()? != lock_path {
+                return Err(invalid("测试 profile 锁不允许链接。"));
+            }
+            fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&lock_path)?
+        }
+        Err(e) => return Err(e),
+    };
+    lock.try_lock()
+        .map_err(|e| io::Error::other(format!("测试 profile 正由其他进程使用或不可锁定：{e}")))?;
+    Ok((directory, lock))
 }
 
 impl Instance {
@@ -268,5 +325,28 @@ impl Drop for Instance {
                 self.id
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+    #[test]
+    fn reusable_profile_is_exclusive_persistent_and_scoped_to_the_run_root() {
+        let temp = crate::dev_mcp::tests::Temporary::new();
+        let root = temp.0.canonicalize().unwrap();
+        let key = Uuid::new_v4();
+        let (directory, lock) = isolated_profile(&root, key).unwrap();
+        fs::write(directory.join("proof"), b"retained").unwrap();
+        assert!(isolated_profile(&root, key).is_err());
+        let (other, _other_lock) = isolated_profile(&root, Uuid::new_v4()).unwrap();
+        assert_ne!(directory, other);
+        drop(lock);
+        let (same, _lock) = isolated_profile(&root, key).unwrap();
+        assert_eq!(same, directory);
+        assert_eq!(fs::read(same.join("proof")).unwrap(), b"retained");
+        let invalid =
+            serde_json::json!({"sampleRoot":"x","runRoot":"y","profileKey":"../ordinary-profile"});
+        assert!(serde_json::from_value::<Config>(invalid).is_err());
     }
 }

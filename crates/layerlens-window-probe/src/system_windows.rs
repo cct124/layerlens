@@ -11,6 +11,11 @@ use windows_sys::Win32::{
     System::Threading::GetCurrentThreadId,
     UI::{Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
 };
+#[path = "taskbar_windows.rs"]
+mod taskbar;
+pub(super) fn restore_taskbar(main: usize) -> Result<(), SystemError> {
+    taskbar::restore(main)
+}
 
 fn error(operation: &'static str) -> SystemError {
     // SAFETY: 仅取得当前线程错误码，无指针参数。
@@ -18,6 +23,10 @@ fn error(operation: &'static str) -> SystemError {
         operation,
         code: Some(unsafe { GetLastError() }),
     }
+}
+
+pub(super) fn set_taskbar_identity(instance: &str) -> Result<(), SystemError> {
+    taskbar::set_identity(instance)
 }
 fn check_input(window: HWND) -> Result<(), SystemError> {
     let thread = owned_thread(window)?;

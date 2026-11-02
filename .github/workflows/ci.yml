@@ -129,6 +129,14 @@ jobs:
         id: system_windows
         timeout-minutes: 10
         run: npm run test:dev-mcp:system-window -- --output-root .local/dev-mcp-system
+      - name: Verify panel layout restart long lists and shell interactions
+        id: panels
+        timeout-minutes: 10
+        run: npm run test:dev-mcp:panels -- --output-root .local/dev-mcp-panels
+      - name: Verify panel boundaries cancellation and loading exit
+        id: panel_boundaries
+        timeout-minutes: 10
+        run: npm run test:dev-mcp:panel-boundaries -- --output-root .local/dev-mcp-panel-boundaries
       - name: Build release development application preserving production binary
         run: npm run build:dev-mcp:release
       - name: Verify release canvas resources with three fixed independent instances
@@ -156,7 +164,7 @@ jobs:
       - name: Add stability summary
         if: always() && steps.driver.outcome != 'skipped'
         run: |
-          Get-ChildItem -Path .local/dev-mcp/stability-*/summary.md,.local/dev-mcp-system/stability-*/summary.md -ErrorAction SilentlyContinue |
+          Get-ChildItem -Path .local/dev-mcp/stability-*/summary.md,.local/dev-mcp-system/stability-*/summary.md,.local/dev-mcp-panels/stability-*/summary.md,.local/dev-mcp-panel-boundaries/stability-*/summary.md -ErrorAction SilentlyContinue |
             ForEach-Object { Get-Content -LiteralPath $_.FullName | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
       - name: Collect system window diagnostics separately
         if: always() && steps.system_windows.outcome != 'skipped' && steps.system_windows.outcome != ''
@@ -167,6 +175,30 @@ jobs:
         with:
           name: layerlens-system-windows-${{ github.run_attempt }}
           path: .local/dev-mcp-system-artifacts/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Collect panel diagnostics separately
+        if: always() && steps.panels.outcome != 'skipped' && steps.panels.outcome != ''
+        run: npm run artifacts:dev-mcp -- --source .local/dev-mcp-panels --output .local/dev-mcp-panels-artifacts
+      - name: Retain panel and shell reports
+        if: always() && steps.panels.outcome != 'skipped' && steps.panels.outcome != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: layerlens-panels-${{ github.run_attempt }}
+          path: .local/dev-mcp-panels-artifacts/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Collect panel boundary diagnostics separately
+        if: always() && steps.panel_boundaries.outcome != 'skipped' && steps.panel_boundaries.outcome != ''
+        run: npm run artifacts:dev-mcp -- --source .local/dev-mcp-panel-boundaries --output .local/dev-mcp-panel-boundaries-artifacts
+      - name: Retain panel boundary reports
+        if: always() && steps.panel_boundaries.outcome != 'skipped' && steps.panel_boundaries.outcome != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: layerlens-panel-boundaries-${{ github.run_attempt }}
+          path: .local/dev-mcp-panel-boundaries-artifacts/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14

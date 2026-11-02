@@ -112,6 +112,7 @@ impl Observations {
             return Err(error(Code::ForeignSession, "前端报告属于其他实例。"));
         }
         if uuid::Uuid::parse_str(&value.frontend_id).is_err()
+            || value.panels.as_ref().is_some_and(|p| !p.valid())
             || value.tasks.len() > 128
             || value.render_lab.as_ref().is_some_and(|r| {
                 r.engine != "konva"
@@ -328,6 +329,27 @@ impl Observations {
 impl UiCondition {
     fn validate(&self) -> Result<(), WorkspaceError> {
         let valid = match self {
+            Self::PanelKeyboard { .. } => true,
+            Self::PanelLayout {
+                sidebar_width,
+                inspector_percent,
+                tree_count,
+                after_revision,
+                ..
+            } => {
+                if let Some(after) = after_revision {
+                    number(after)?;
+                }
+                sidebar_width.is_none_or(|v| v.is_finite() && (1.0..=16384.0).contains(&v))
+                    && inspector_percent.is_none_or(|v| v.is_finite() && (0.0..=100.0).contains(&v))
+                    && tree_count.is_none_or(|v| v <= 4096)
+            }
+            Self::PanelScroll { after_revision, .. } => {
+                if let Some(after) = after_revision {
+                    number(after)?;
+                }
+                true
+            }
             Self::CleanupLayout {
                 plan_id,
                 task_count,
@@ -484,6 +506,49 @@ impl UiCondition {
     }
     fn matches(&self, value: &UiObservation) -> bool {
         match self {
+            Self::PanelKeyboard { axis, events_after } => value.panels.as_ref().is_some_and(|p| {
+                p.focused_handle == Some(*axis)
+                    && p.keyboard_events > *events_after
+                    && !p.preference_error
+            }),
+            Self::PanelLayout {
+                sidebar_width,
+                inspector_percent,
+                dragging,
+                tree_count,
+                after_revision,
+            } => {
+                after_revision
+                    .as_ref()
+                    .is_none_or(|r| number(&value.view_revision).ok() > number(r).ok())
+                    && value.panels.as_ref().is_some_and(|p| {
+                        p.dragging == *dragging
+                            && !p.preference_error
+                            && sidebar_width.is_none_or(|v| (v - p.sidebar_width).abs() <= 2.0)
+                            && inspector_percent
+                                .is_none_or(|v| (v - p.inspector_percent).abs() <= 0.5)
+                            && tree_count.is_none_or(|v| !p.tree_loading && v == p.tree_count)
+                    })
+            }
+            Self::PanelScroll {
+                target,
+                edge,
+                after_revision,
+            } => {
+                after_revision
+                    .as_ref()
+                    .is_none_or(|r| number(&value.view_revision).ok() > number(r).ok())
+                    && value
+                        .panels
+                        .as_ref()
+                        .and_then(|p| p.scroll(*target))
+                        .is_some_and(|s| match edge {
+                            ScrollEdge::Start => s.scroll_top <= 1.0,
+                            ScrollEdge::End => {
+                                s.scroll_top + s.client_height >= s.scroll_height - 1.0
+                            }
+                        })
+            }
             Self::PreviewReleased { at_least } => {
                 value.render_lab.is_none()
                     && value.active_document.is_none()

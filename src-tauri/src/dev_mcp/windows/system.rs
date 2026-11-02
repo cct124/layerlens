@@ -43,6 +43,15 @@ impl Windows {
             use layerlens_window_probe::system as input;
             let handle = self.main.hwnd().map_err(native)?.0 as usize;
             match action {
+                WindowAction::RestoreTaskbar {} => {
+                    if !before.minimized || before.file_picker.opened {
+                        return Err(error(
+                            Code::InvalidInput,
+                            "任务栏恢复仅用于已最小化的测试主窗口。",
+                        ));
+                    }
+                    input::restore_taskbar(handle).map_err(native)
+                }
                 WindowAction::ResizeEdge { edge, direction } => {
                     if before.file_picker.opened
                         || before.minimized
@@ -98,7 +107,7 @@ impl Windows {
                 WindowAction::CancelFilePicker {} => {
                     input::cancel_file_picker(handle).map_err(native)
                 }
-                WindowAction::DragTitlebar { destination } => {
+                WindowAction::DragTitlebar { destination, .. } => {
                     let region = drag_region
                         .ok_or_else(|| error(Code::InvalidInput, "缺少真实标题栏拖动区观测。"))?;
                     let client = self.main.inner_position().map_err(native)?;

@@ -4,7 +4,7 @@ let cancellingResize = false;
 </script>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { SplitterResizeHandle } from 'reka-ui';
 import { SPLITTER_SIZE } from './panelLayout';
 
@@ -15,14 +15,18 @@ defineProps<{
   valueText: string;
 }>();
 const emit = defineEmits<{ start: []; commit: []; cancel: []; reset: [] }>();
-const root = ref<HTMLElement | null>(null);
+const root = ref<InstanceType<typeof SplitterResizeHandle> | null>(null);
+const keyboardEvents = ref(0);
 let active = false;
+let keyboardPending = false;
 let disposed = false;
+const resizeKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
 
 function dragging(value: boolean) {
   if (value) {
     active = true;
-    root.value?.focus();
+    const element: unknown = root.value?.$el;
+    if (element instanceof HTMLElement) element.focus();
     emit('start');
   } else if (active) {
     active = false;
@@ -31,6 +35,10 @@ function dragging(value: boolean) {
   }
 }
 function cancel() {
+  if (keyboardPending) {
+    keyboardPending = false;
+    emit('cancel');
+  }
   if (!active) return;
   cancellingResize = true;
   // Reka 2.10 的公共接口没有取消手势：沿其标准 mouseup 路径结束注册器和全局光标，
@@ -42,25 +50,29 @@ function cancel() {
   }
 }
 function escape(event: KeyboardEvent) {
-  if (active && event.key === 'Escape' && !event.isComposing) {
+  if ((active || keyboardPending) && event.key === 'Escape' && !event.isComposing) {
     event.preventDefault();
     event.stopImmediatePropagation();
     cancel();
   }
 }
 function keydown(event: KeyboardEvent) {
-  event.stopPropagation();
   if (active || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) {
     event.preventDefault();
     return;
   }
-  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+  if (resizeKeys.includes(event.key) && !keyboardPending) {
+    keyboardPending = true;
     emit('start');
-    // Reka 的键盘监听在同一目标上执行，等待其布局更新后再保存一次用户意图。
-    void nextTick(() => {
-      if (!disposed) emit('commit');
-    });
   }
+}
+function keyup(event: KeyboardEvent) {
+  if (!keyboardPending || !resizeKeys.includes(event.key) || disposed) return;
+  keyboardPending = false;
+  // 原生事件监听器之间可能执行微任务；nextTick 不能代表后续 keydown 监听已完成。
+  // 松键时该次键盘调整已结束，和鼠标松开一致地提交偏好；失焦／Esc 会先撤销。
+  emit('commit');
+  keyboardEvents.value++;
 }
 function mouseDown(event: MouseEvent) {
   if (event.button !== 0 || event.buttons !== 1) event.stopPropagation();
@@ -90,24 +102,26 @@ defineExpose({ cancel });
 <template>
   <SplitterResizeHandle
     :id="id"
-    as-child
+    ref="root"
     :hit-area-margins="{ fine: 0, coarse: 0 }"
+    class="panel-resize-handle"
+    :data-dev-target="direction === 'horizontal' ? 'panel:width' : 'panel:height'"
+    :data-panel-key-events="keyboardEvents"
+    :style="{ flexBasis: `${SPLITTER_SIZE}px` }"
+    :aria-label="label"
+    :aria-orientation="direction === 'horizontal' ? 'vertical' : 'horizontal'"
+    :aria-valuetext="valueText"
+    :title="`${label} · 拖动或方向键调整 · 双击恢复默认`"
     @dragging="dragging"
-  >
-    <div
-      ref="root"
-      class="panel-resize-handle"
-      :style="{ flexBasis: `${SPLITTER_SIZE}px` }"
-      :aria-label="label"
-      :aria-orientation="direction === 'horizontal' ? 'vertical' : 'horizontal'"
-      :aria-valuetext="valueText"
-      :title="`${label} · 拖动或方向键调整 · 双击恢复默认`"
-      @mousedown="mouseDown"
-      @keydown="keydown"
-      @dblclick.prevent.stop="emit('reset')"
-      @contextmenu.prevent
-    ></div>
-  </SplitterResizeHandle>
+    @mousedown="mouseDown"
+    @keydown.capture="keydown"
+    @keydown.stop
+    @keyup.capture="keyup"
+    @keyup.stop
+    @blur="cancel"
+    @dblclick.prevent.stop="emit('reset')"
+    @contextmenu.prevent
+  />
 </template>
 
 <style scoped>

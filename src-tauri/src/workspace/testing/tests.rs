@@ -2,6 +2,56 @@ use super::*;
 use std::sync::Arc;
 
 #[tokio::test]
+async fn load_checkpoint_release_uses_real_parser_and_failed_gate_is_one_shot() {
+    use layerlens_core::documents::{DocumentService, OpenOutcome};
+    let controls = Arc::new(Controls::default());
+    controls.enable();
+    let worker = controls.clone();
+    let mut service =
+        DocumentService::with_load_checkpoint(Default::default(), move || worker.load_checkpoint())
+            .unwrap();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../crates/layerlens-core/tests/fixtures/psd/bitmap-raw.psd");
+    let gate = controls
+        .arm(Checkpoint::LoadBeforeParse, Mode::Pause, 30000)
+        .unwrap();
+    let job = service.open(&path).unwrap();
+    assert!(
+        controls
+            .wait(gate.id, Phase::Reached, 5000)
+            .await
+            .unwrap()
+            .0
+    );
+    assert!(service.snapshot().documents.is_empty());
+    controls.release(gate.id).unwrap();
+    let done = job.wait_timeout(Duration::from_secs(5)).unwrap();
+    let OpenOutcome::Opened { document_id, .. } = done.outcome else {
+        panic!("真实解析应完成");
+    };
+    assert_eq!(service.snapshot().documents.len(), 1);
+    service.close(document_id).unwrap();
+    controls
+        .arm(Checkpoint::LoadBeforeParse, Mode::Fail, 30000)
+        .unwrap();
+    let failed = service
+        .open(&path)
+        .unwrap()
+        .wait_timeout(Duration::from_secs(5))
+        .unwrap();
+    assert!(matches!(failed.outcome, OpenOutcome::Failed(_)));
+    assert!(service.snapshot().documents.is_empty());
+    let next = service
+        .open(&path)
+        .unwrap()
+        .wait_timeout(Duration::from_secs(5))
+        .unwrap();
+    assert!(matches!(next.outcome, OpenOutcome::Opened { .. }));
+    controls.stop();
+    service.shutdown().unwrap();
+}
+
+#[tokio::test]
 async fn checkpoint_is_one_shot_recoverable_and_shutdown_wakes_waiter() {
     let controls = Arc::new(Controls::default());
     assert!(

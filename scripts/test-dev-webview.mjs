@@ -24,6 +24,8 @@ import { checkDevPython, runDevPython } from './dev-python.mjs';
 import { createDisplayGuard } from './dev-mcp-render-environment.mjs';
 import { exerciseDisplayEnvironment } from './dev-mcp-display-webview.mjs';
 import { preflightOptions, prepareTestWindow } from './dev-mcp-preflight.mjs';
+import { exercisePanels } from './dev-mcp-panels-webview.mjs';
+import { prepareReusableProfile } from './dev-mcp-runner.mjs';
 import {
   exerciseWorkspaceCanvas,
   recordWorkspaceEnvironment,
@@ -35,6 +37,9 @@ const { values: options } = parseArgs({
     app: { type: 'string' },
     visible: { type: 'boolean', default: false },
     'output-root': { type: 'string' },
+    'profile-key': { type: 'string' },
+    'profile-root': { type: 'string' },
+    'panel-expectation': { type: 'string' },
     scenario: { type: 'string', default: 'baseline' },
     'canvas-memory-focus': { type: 'string', default: 'main' },
     'window-size': { type: 'string' },
@@ -79,12 +84,23 @@ assert(
     'window-blur',
     'window-menu',
     'window-exit',
+    'window-load-exit',
+    'window-load-alt-f4',
+    'panels-boundaries',
+    'panels-maximized',
+    'panels-cancel',
+    'panels-keyboard-cancel',
     'window-alt-f4',
     'window-system',
     'window-resize',
     'window-picker',
     'window-cross-monitor',
     'window-topology',
+    'window-shell',
+    'panels-drag',
+    'panels-list',
+    'panels-save',
+    'panels-restore',
   ].includes(options.scenario),
 );
 assert(
@@ -103,7 +119,21 @@ await mkdir(runs);
 const isBenchmark = options.scenario === 'render-benchmark';
 const isRender = options.scenario.startsWith('render-');
 const isWorkspaceCanvas = options.scenario.startsWith('canvas-');
+const isPanels = options.scenario.startsWith('panels-');
+assert(
+  (!options['profile-key'] && !options['profile-root']) ||
+    (['panels-save', 'panels-restore'].includes(options.scenario) &&
+      options['profile-key'] &&
+      options['profile-root']),
+  '共享测试 profile 仅用于成对的布局重启场景。',
+);
+const instanceRoot = options['profile-root'] ? path.resolve(root, options['profile-root']) : runs;
+if (options['profile-root']) await mkdir(instanceRoot, { recursive: true });
+const reusableProfile = options['profile-key']
+  ? await prepareReusableProfile(instanceRoot, options['profile-key'])
+  : null;
 const nativeWindows =
+  isPanels ||
   isBenchmark ||
   isWorkspaceCanvas ||
   options.scenario.startsWith('window-') ||
@@ -141,7 +171,9 @@ const samples = isBenchmark
   : [
       options.scenario === 'render-lab' || isWorkspaceCanvas
         ? 'render-simple.psd'
-        : 'viewer-scale.psd',
+        : options.scenario === 'panels-list'
+          ? 'viewer-long-list.psd'
+          : 'viewer-scale.psd',
       'bitmap-rle.psd',
     ];
 assert(samples.every((name) => path.basename(name) === name && name.endsWith('.psd')));
@@ -190,6 +222,7 @@ const report = {
       [
         'test-dev-webview.mjs',
         'dev-mcp-process-monitor.mjs',
+        'dev-mcp-processes.ps1',
         'dev-mcp-render-focus.mjs',
         'dev-mcp-preflight.mjs',
         'dev-mcp-display-webview.mjs',
@@ -201,6 +234,9 @@ const report = {
         'dev-mcp-input-webview.mjs',
         'dev-mcp-cleanup-webview.mjs',
         'dev-mcp-window-webview.mjs',
+        'dev-mcp-panels-webview.mjs',
+        'dev-mcp-panel-boundaries.mjs',
+        'dev-mcp-runner.mjs',
         'check-composite-capture.py',
         'dev-mcp-render-environment.mjs',
         'dev-mcp-render-acceptance.mjs',
@@ -290,7 +326,7 @@ async function wd(route, body, method = 'POST') {
 }
 async function readConnection() {
   const controller = new AbortController();
-  const events = watch(runs, {
+  const events = watch(instanceRoot, {
     recursive: true,
     signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]),
   });
@@ -298,9 +334,9 @@ async function readConnection() {
   next.catch(() => undefined);
   try {
     for (;;) {
-      for (const dir of await readdir(runs, { withFileTypes: true })) {
+      for (const dir of await readdir(instanceRoot, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
-        const directory = path.join(runs, dir.name);
+        const directory = path.join(instanceRoot, dir.name);
         if (!(await readdir(directory)).includes('ready')) continue;
         const value = JSON.parse(await readFile(path.join(directory, 'connection.json'), 'utf8'));
         assert.equal(value.formatVersion, 1);
@@ -487,7 +523,8 @@ try {
     config,
     JSON.stringify({
       sampleRoot,
-      runRoot: runs,
+      runRoot: instanceRoot,
+      profileKey: options['profile-key'],
       visible: options.visible || nativeWindows,
       webDriverUrl: endpoint,
       nativeWindows,
@@ -505,6 +542,7 @@ try {
           binary: app,
           args: ['--dev-mcp-config=' + config],
           windowTypes: ['webview'],
+          ...(reusableProfile ? { webviewOptions: { userDataFolder: reusableProfile } } : {}),
         },
       },
     },
@@ -541,7 +579,7 @@ try {
   await wd('/session/' + session + '/execute/sync', {
     script: `
     const trace=[];
-    for(const type of ['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture','gotpointercapture','blur','dragstart','dragend']) {
+    for(const type of ['pointerdown','pointermove','pointerup','mousedown','mouseup','pointercancel','lostpointercapture','gotpointercapture','blur','dragstart','dragend']) {
       window.addEventListener(type,event=>{ trace.push({type:event.type,buttons:event.buttons,pointerId:event.pointerId,trusted:event.isTrusted,target:event.target?.dataset?.devTarget??event.target?.tagName}); if(trace.length>32)trace.shift(); },true);
     }
     Object.defineProperty(window,'__LAYERLENS_INPUT_TRACE__',{value:()=>trace.slice()});
@@ -577,7 +615,9 @@ try {
         ? 480
         : options.scenario.startsWith('cleanup')
           ? 4
-          : 256,
+          : options.scenario === 'panels-list'
+            ? 64
+            : 256,
   );
   assert.equal(
     view.canvas.documentHeight,
@@ -587,7 +627,9 @@ try {
         ? 320
         : options.scenario.startsWith('cleanup')
           ? 3
-          : 128,
+          : options.scenario === 'panels-list'
+            ? 64
+            : 128,
   );
   if (isWorkspaceCanvas) {
     await exerciseWorkspaceCanvas({
@@ -907,8 +949,32 @@ try {
       sourceHashes,
     );
     report.checks.push('旧前端／非法目标拒绝、超时末态、截图版本关联与源文件不变');
+  } else if (isPanels) {
+    const previousPanelReport = options['panel-expectation']
+      ? JSON.parse(await readFile(options['panel-expectation'], 'utf8'))
+      : null;
+    await exercisePanels({
+      scenario: options.scenario,
+      state,
+      core,
+      wait,
+      waitCore,
+      action,
+      click,
+      key,
+      selection,
+      workspace,
+      tool,
+      args,
+      report,
+      screenshot,
+      document: a,
+      previousPanelReport,
+      point,
+    });
   } else if (options.scenario.startsWith('window-')) {
     report.windowResult = await exerciseWindows({
+      nextSample: samples[1],
       scenario: options.scenario,
       state,
       core,

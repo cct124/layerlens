@@ -332,14 +332,14 @@ impl ServerHandler for Handler {
                                 Ok(guard) => {
                                     match shared.mutation("window_action", &args, async move {
                                         let _guard = guard;
-                                        let region = if matches!(
-                                            &input,
-                                            WindowAction::DragTitlebar { .. }
-                                        ) {
-                                            Some(ui.titlebar_region().await?)
-                                        } else {
-                                            None
-                                        };
+                                        let region =
+                                            if let WindowAction::DragTitlebar { region, .. } =
+                                                &input
+                                            {
+                                                Some(ui.titlebar_region(*region).await?)
+                                            } else {
+                                                None
+                                            };
                                         windows
                                             .action(input, instance, region)
                                             .await

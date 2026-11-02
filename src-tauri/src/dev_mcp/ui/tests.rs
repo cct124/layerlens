@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 fn observation(epoch: u64, revision: u64) -> UiObservation {
     UiObservation {
+        panels: None,
         preview_resources: UiPreviewResources::default(),
         render_lab: None,
         instance_id: "instance".into(),
@@ -58,6 +59,156 @@ fn observation(epoch: u64, revision: u64) -> UiObservation {
             titlebar: None,
             controls: vec![],
         },
+    }
+}
+
+fn panel_observation() -> UiObservation {
+    let mut value = observation(1, 2);
+    value.window.focused = true;
+    let handle = UiRect {
+        x: 800.0,
+        y: 100.0,
+        width: 8.0,
+        height: 500.0,
+    };
+    value.panels = Some(UiPanels {
+        sidebar_width: 320.0,
+        inspector_percent: 36.0,
+        inspector_height: 180.0,
+        resources_height: 320.0,
+        focused_handle: None,
+        keyboard_events: 0,
+        width_handle: handle.clone(),
+        height_handle: UiRect {
+            x: 810.0,
+            y: 300.0,
+            width: 300.0,
+            height: 8.0,
+        },
+        dragging: false,
+        saved_sidebar_width: Some(320.0),
+        saved_inspector_percent: Some(36.0),
+        preference_error: false,
+        tree_count: 4096,
+        tree_loading: false,
+        tree: Some(UiPanelScroll {
+            rect: handle,
+            scroll_top: 0.0,
+            scroll_height: 114688.0,
+            client_height: 400.0,
+            rendered_rows: 20,
+            first_layer_id: Some(4095),
+            last_layer_id: Some(4076),
+            text_length: 200,
+        }),
+        properties: None,
+        search: String::new(),
+        task_name: String::new(),
+    });
+    value
+}
+#[test]
+fn panel_inputs_validate_targets_bounds_modal_and_real_visibility() {
+    use super::panels::{drag_actions, scroll_actions};
+    let mut state = panel_observation();
+    for invalid in [-1.0, f64::INFINITY] {
+        let mut bad = state.clone();
+        bad.panels.as_mut().unwrap().resources_height = invalid;
+        assert!(Observations::default().publish("instance", bad).is_err());
+    }
+    let action = drag_actions(&state, PanelAxis::Width, -80, false).unwrap();
+    assert_eq!(action["actions"][0]["actions"][0]["x"], 804);
+    assert_eq!(action["actions"][0]["actions"][2]["x"], 724);
+    for delta in [0, 2049, -2049, 1000] {
+        assert!(drag_actions(&state, PanelAxis::Width, delta, false).is_err());
+    }
+    assert!(scroll_actions(&state, PanelScrollTarget::Properties, ScrollEdge::End).is_err());
+    state.cleanup.opened = true;
+    assert!(drag_actions(&state, PanelAxis::Height, 20, true).is_err());
+    state.cleanup.opened = false;
+    state.window.focused = false;
+    assert!(scroll_actions(&state, PanelScrollTarget::Layers, ScrollEdge::End).is_err());
+    for value in [
+        serde_json::json!({"kind":"panelDrag","axis":"other","delta":10,"hold":false}),
+        serde_json::json!({"kind":"panelScroll","target":"body","edge":"end"}),
+    ] {
+        assert!(serde_json::from_value::<UiAction>(value).is_err());
+    }
+}
+#[tokio::test]
+async fn panel_wait_requires_new_geometry_not_old_or_loading_observations() {
+    for stale in 0..4 {
+        let observations = Observations::default();
+        let mut value = panel_observation();
+        match stale {
+            0 => value.view_revision = "1".into(),
+            1 => value.panels.as_mut().unwrap().tree_loading = true,
+            2 => value.panels.as_mut().unwrap().sidebar_width = 400.0,
+            3 => {}
+            _ => unreachable!(),
+        }
+        let frontend = value.frontend_id.clone();
+        observations.publish("instance", value).unwrap();
+        let result = observations
+            .wait(
+                UiWaitRequest {
+                    frontend_id: Some(frontend),
+                    condition: UiCondition::PanelLayout {
+                        sidebar_width: Some(320.0),
+                        inspector_percent: Some(36.0),
+                        dragging: false,
+                        tree_count: Some(4096),
+                        after_revision: Some("1".into()),
+                    },
+                    timeout_ms: 1,
+                },
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.satisfied, stale == 3);
+    }
+    let observations = Observations::default();
+    let mut value = panel_observation();
+    value
+        .panels
+        .as_mut()
+        .unwrap()
+        .tree
+        .as_mut()
+        .unwrap()
+        .scroll_top = f64::NAN;
+    assert!(observations.publish("instance", value).is_err());
+}
+
+#[tokio::test]
+async fn panel_keyboard_wait_requires_component_completion_and_current_handle_focus() {
+    for (completed, focused, expected) in [
+        (false, true, false),
+        (true, false, false),
+        (true, true, true),
+    ] {
+        let state = Observations::default();
+        let mut view = panel_observation();
+        let panel = view.panels.as_mut().unwrap();
+        panel.focused_handle = focused.then_some(PanelAxis::Height);
+        panel.keyboard_events = u32::from(completed);
+        state.publish("instance", view.clone()).unwrap();
+        let result = state
+            .wait(
+                UiWaitRequest {
+                    frontend_id: Some(view.frontend_id),
+                    timeout_ms: 1,
+                    condition: UiCondition::PanelKeyboard {
+                        axis: PanelAxis::Height,
+                        events_after: 0,
+                    },
+                },
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.satisfied, expected);
     }
 }
 #[tokio::test]

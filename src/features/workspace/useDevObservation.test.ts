@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { useDevObservation } from './useDevObservation';
 import { ownPreviewResource } from './previewResources';
+import { PANEL_LAYOUT_KEY } from './panelLayout';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 const active: ReturnType<typeof mount>[] = [];
 function setup(checkDom = false) {
@@ -157,6 +158,60 @@ describe('开发观测生命周期', () => {
     await flushPromises();
     expect(invoke).not.toHaveBeenCalled();
     expect(window.__LAYERLENS_DEV_VIEW__).toBeUndefined();
+  });
+  it('pointerup 之后的兼容 mouseup 更新仍进入观测，不能停在拖动中间态', async () => {
+    window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };
+    const { wrapper } = setup(true);
+    await flushPromises();
+    const element = wrapper.get('button').element;
+    element.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    await flushPromises();
+    element.addEventListener(
+      'mouseup',
+      () => {
+        element.textContent = '2';
+      },
+      { once: true },
+    );
+    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await flushPromises();
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.activeDocument?.id).toBe('2');
+    expect(window.__LAYERLENS_DEV_VIEW__?.read()?.input.pointerEvents).toBe('0');
+  });
+  it('输入上报结束后的面板 DOM 终态独立触发观测，不依赖下次输入', async () => {
+    window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };
+    const fixture = document.createElement('div');
+    fixture.innerHTML =
+      '<aside class="sidebar"></aside><div class="sidebar-stack"></div><div data-panel-id="workspace-inspector"></div><div data-panel-id="workspace-resources"></div><div data-dev-target="panel:width" data-resize-handle-state="drag"></div><div data-dev-target="panel:height"></div>';
+    document.body.append(fixture);
+    try {
+      setup();
+      await flushPromises();
+      expect(window.__LAYERLENS_DEV_VIEW__?.read()?.panels?.dragging).toBe(true);
+      const before = window.__LAYERLENS_DEV_VIEW__!.read()!.viewRevision;
+      fixture.querySelector<HTMLElement>(
+        '[data-dev-target="panel:width"]',
+      )!.dataset.resizeHandleState = 'hover';
+      await flushPromises();
+      const after = window.__LAYERLENS_DEV_VIEW__!.read()!;
+      expect(after.panels?.dragging).toBe(false);
+      expect(BigInt(after.viewRevision)).toBeGreaterThan(BigInt(before));
+      expect(after.input.pointerEvents).toBe('0');
+      // 上下重置不改变画布视口或拖动标志；独立尺寸属性仍必须唤醒观测。
+      localStorage.setItem(
+        PANEL_LAYOUT_KEY,
+        JSON.stringify({ version: 1, sidebarWidth: 320, inspectorPercent: 36 }),
+      );
+      fixture.querySelector<HTMLElement>('[data-panel-id]')!.dataset.panelSize = '36.0';
+      await flushPromises();
+      expect(window.__LAYERLENS_DEV_VIEW__!.read()!.panels?.savedInspectorPercent).toBe(36);
+      expect(BigInt(window.__LAYERLENS_DEV_VIEW__!.read()!.viewRevision)).toBeGreaterThan(
+        BigInt(after.viewRevision),
+      );
+    } finally {
+      localStorage.removeItem(PANEL_LAYOUT_KEY);
+      fixture.remove();
+    }
   });
   it('真实应用序号进入投影，慢 IPC 只保留最新待发状态，读取不能回写', async () => {
     window.__LAYERLENS_DEV_BOOT__ = { instanceId: 'instance' };

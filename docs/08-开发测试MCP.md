@@ -225,6 +225,8 @@ Windows 产品入口在选择器返回后恢复所属 WebView 的键盘焦点，
 
 命名检查点为 `desktopTasks`、`desktopTaskCreated`、`desktopContent`、`desktopCleanupCommitted`、`desktopSnapshot`、`desktopNotification` 与 `previewPublication`。前五项延迟／失败真实 IPC 结果交付；通知在测试实例内用单个异步转发者及一个最新投影槽保留，核心及业务观测不被阻塞；预览在固定真实 PNG 租约后、发布复检前暂停。检查点不持有业务锁或操作线程，不写组件状态、任务终态或同步序号。等待取消标为 abandoned；超时拒绝交付并保留可查询状态；退出唤醒所有暂停请求。已经发生的业务副作用仍须通过原计划／原请求核对。
 
+`loadBeforeParse` 是独立的后台加载检查点：作业已处于 running、路径已规范化并预留预算，但尚未调用真实解析器。仅开发构建启用核心 `test-hooks`；暂停唯一解析后台线程，不持业务锁，不阻塞界面及工作区邮箱。释放后继续真实解析，失败／超时拒绝继续；退出先停止门禁再等待后台释放资源。它证明加载在途退出，不代表第三方解析器内部任意指令可被中断。
+
 前端观测新增清理同步状态、屏障、实际渲染任务数量、滚动末端及焦点位置，`cleanupSync`／`cleanupListEnd`／`selectionIdle` 等待复用事件报告；列表为可聚焦区域，`Home`／`End` 经真实驱动键盘输入。`dev_wait` 新增 `frontendImageReady { documentId, revision, atLeast }`（核心序号至少为 atLeast 且前端图像解码／绘制准备完成）与 `resourcesReleased`（源、解码、输出、缓存账本均归零）。这些等待不代表物理首帧或进程 RSS。
 
 `test:dev-mcp:m2-cleanup` 运行 20 轮，128 项四页清理、TTL 过期、回包丢失／同步故障恢复、迟到结果／资源释放四个场景各 5 次。清理同步失败截图列入产物白名单。Windows CI 使用同一入口，失败仍保留报告；实际验证状态见 M2-03 记录。新增开发 Schema 与观测 DTO 同步更新，客户端应按 `dev_instance`／`tools/list` 查询实际能力，不沿用旧工具数量。
@@ -259,6 +261,32 @@ Windows 的窗口状态新增 `nativeFocus`：顺序读取系统前台窗口及�
 原生窗口场景在握手后、加载 PSD 前执行统一预检。顺序为输入桌面 → 前台 → 可选窗口预设及前端同步 → 主窗口居中与完整工作区等待 → 稳定显示条件。`dev_window_action` 的 `center` 只调用本实例主窗口的 Tauri 居中，不能指定外部窗口或坐标；`dev_window_wait` 的 `withinWorkArea` 等待客户区完整位于工作区、可见且未最小化。单场景 `--window-size` 接受已有三种尺寸，`--expect-dpr` 接受 (0,8] 的有限值，仅断言真实 DPR，不写浏览器模拟值。`preflight` 保存阶段、预期、原始观测、动作回执和失败末态；失败保留 `environment-precondition` 分类，仍执行正常退出和报告收集，不自动修复环境后重试。未启用原生窗口的旧业务／隐藏 WebView 场景保持原契约；不据此宣称真实焦点验收。
 
 WebView 运行器在失败发生时、进入收尾时及驱动清理前后分别保存应用进程句柄的观测结果，正常与异常退出都记录实际退出码。进入收尾的快照位于失败后的退出请求之前；成功路径则已经验证正常退出。驱动清理后的退出不能补作业务正常退出。MCP 请求记录时间、耗时及有界的网络错误原因链；不展开请求、响应对象或凭据。真实失焦场景保存派发前状态、派发回执和完整等待末态，原超时与失败断言保持不变。
+
+### 面板与重启偏好测试
+
+面板扩展复用 `dev_ui_action`／`dev_ui_state`／`dev_ui_wait`，不增加工具。输入限定无清理模态、可见且有焦点的本实例窗口：
+
+| 操作                              | 契约                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `panelDrag { axis, delta, hold }` | `axis` 为 `width` 或 `height`；非零整数 `delta` 不超过 ±2048 CSS px。根据实际热区派发 W3C 鼠标手势，起终点须位于真实视口；`hold` 保留按下供 Esc／真实失焦取消验收。 |
+| `panelReset { axis }`             | 对实际分隔条派发双击，不直接写偏好或调用组件方法。                                                                                                                  |
+| `panelScroll { target, edge }`    | `target` 为 `layers` 或 `properties`，`edge` 为 `start` 或 `end`；根据可见滚动区派发真实滚轮。                                                                      |
+
+`panels` 观测区分真实宽度／比例、拖动状态与已保存偏好；提供图层总数、加载状态、可见滚动区的尺寸／位置／渲染行数／首尾图层 ID 及文本长度。搜索和任务名仅返回有界输入草稿，原始报告仍按私有测试资料保存。隐藏滚动区为 null，不用节点存在代替可见。观测同时跟踪输入和分隔条实际 DOM 终态，避免 PointerEvent、兼容 MouseEvent 及 Vue 更新顺序导致保存状态停留在拖动中。
+
+`panelLayout { sidebarWidth, inspectorPercent, dragging, treeCount, afterRevision }` 等待实际尺寸、拖动态及已完成列表加载；可空尺寸／计数不作约束，宽度容差 2 CSS px、比例容差 0.5 个百分点。`panelScroll { target, edge, afterRevision }` 要求可见区域确实到达首尾，不能只断言动作成功。给出代次时两者均要求严格更新，超时保留末态。
+
+`panels` 另提供实际 `inspectorHeight`／`resourcesHeight`（CSS px）、`focusedHandle`（width／height／null）及 `keyboardEvents`。后者只在分隔条完成一次真实键盘处理后增加；`panelKeyboard { axis, eventsAfter }` 等待正确分隔条仍获焦点且组件完成计数严格增加。键盘通过固定分隔条目标与既有 `key` 派发，分别等待可信按键与组件完成，再核对尺寸及保存值，不用拖动状态或按键已到达推断偏好已保存。
+
+可选配置 `profileKey` 仅在原生 Windows 测试模式接受 UUID，路径固定为 `runRoot/profiles/<UUID>`，不接受外部 profile 路径。规范化检查及进程文件锁拒绝目录别名和并发复用；每次实例仍生成新的身份、凭据、核心会话及连接目录。运行器还将同一路径传给 Edge WebDriver 的 `webviewOptions.userDataFolder`，避免驱动默认临时目录覆盖应用设置。默认行为不变，普通 profile 不参与。保存／恢复对先确认保存场景正常退出，再以同一隔离 profile 启动新进程，比较实际布局和持久化值；任务不跨进程保留。
+
+`window-shell` 通过 `dragTitlebar`／`titlebarDoubleClick` 的固定 `region`（`blank`、`brand`、`status`、`readonly`）核对实际命中，并检查菜单控件不触发拖动。原生测试实例在创建窗口前设置含 UUID 的进程 AppUserModelID，避免与日常程序或其他测试实例合并为同一个任务栏组；不修改系统任务栏设置。`restoreTaskbar` 仅允许自有已最小化测试窗口：从固定系统任务栏按自有唯一标题或 AppUserModelID 匹配按钮，检查可见、启用、实际命中和输入桌面后发送真实鼠标点击，不以直接恢复窗口代替；其他应用名称及 AutomationId 不写入结果。按钮不存在、不唯一或被遮挡均明确失败。
+
+Windows 产品窗口观察最小化恢复，通过后台向主线程投递一次焦点交接；执行时仅在窗口已恢复且已激活的情况下聚焦所属 WebView，不主动激活后台窗口。`window-shell` 在实际任务栏点击后等待系统前台、WebView 焦点和新的可信 DOM focus 事件，不另发 `focusMain` 掩盖恢复失败。实现见 [window_focus.rs](../src-tauri/src/window_focus.rs)。
+
+`test:dev-mcp:panels` 包含 `panels-save`、`panels-restore`、`panels-drag`、`panels-list` 和 `window-shell`，默认各三次，串行且首个失败后停止。退出审计从配置验证 UUID profile，将其 WebView 进程与唯一运行目录一并检查；发现残留先记失败，再清理已确认归属的进程。新截图进入原白名单，预算不变；CI 独立收集并保留 14 天。实际通过范围及未验收条件以 M2-02 为准。
+
+`test:dev-mcp:panel-boundaries` 串行运行 `panels-boundaries`、`panels-cancel`、`panels-keyboard-cancel`、`window-load-exit` 和 `window-load-alt-f4` 各三次，失败停止、不自动重试。依次验证三种窗口状态的尺寸边界、布局变化取消、两轴按住键后的控件失焦／Esc／真实窗口失焦取消，以及 `loadBeforeParse` 到达后的正常关闭按钮／Alt+F4；保留实际几何、偏好、固定选区／任务与退出证据。CI 使用独立产物目录并保留 14 天，沿用原收集预算；实际 DPI 与运行结论按 M2-02 分批记录。
 
 ### 有界等待与错误恢复
 
@@ -313,7 +341,7 @@ Konva 脚本以两次原生观测夹住前端观测，保存原生窗口尺寸�
 - `canvasInput` 在同份前端投影内等待 `documentId`／`revision`、`ctrl`／`alt`、实际 DOM `pointerCaptured`、`keyEventsAtLeast` 和 `pointerEventsAtLeast`。持键／保留按下回执之后先等此条件，再核对系统前台并派发真实焦点转移；失焦后的取消断言必须早于焦点恢复和 `releaseInputs`。
 - `inspection` 等待固定文档修订、`selectedLayerId`（可空）、`autoSelect`、`ctrl`；要求完整摘要、请求结束，核心选中项与实际树行、实际属性标题一致。候选只报告数量，`precision` 首批固定为 `bounds`，不传完整私有图层名称或像素。
 - `canvas:auto`／`canvas:next` 是新增语义输入目标；Ctrl、普通点击／组合手势、真实失焦、原生尺寸调整继续复用现有受限工具，不能通过观测桥修改状态。
-- `fillLayerSearch` 经固定搜索输入框发送真实按键，只接收单行且不超过 256 UTF-8 字节的文本；`layerFilter` 等待实际过滤是否启用，报告不包含搜索原文。`layer:<id>:toggle` 只操作组的折叠按钮，用于验证树视图变化不影响画布候选。
+- `fillLayerSearch` 经固定搜索输入框发送真实按键，只接收单行且不超过 256 UTF-8 字节的文本；`layerFilter` 等待实际过滤是否启用。面板扩展在 `panels.search` 中观测有界草稿，原始报告应保持私有。`layer:<id>:toggle` 只操作组的折叠按钮，用于验证树视图变化不影响画布候选。
 
 `test:dev-mcp:canvas` 串行运行 `canvas-inspection`、`canvas-display`，默认各两个独立进程。覆盖默认开关、重叠与隐藏／透明边界、Ctrl 和任务独立、失焦取消，25%／100%／200% 合成图色块、窗口重排、重载和标签视图。截图通过开发 MCP 获取，由独立预期色块校验；不等于完整 Photoshop 保真。`canvas-sync` 仅将基线与检查各运行两次，用于输入同步修复后的定向复验，不代替显示或资源场景。
 

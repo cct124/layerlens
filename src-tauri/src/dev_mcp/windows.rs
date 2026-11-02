@@ -1,6 +1,7 @@
 //! 隔离实例的原生窗口测试。只持有 main 与一个无 WebView 的辅助窗口；不接受外部窗口句柄。
 //! 焦点由系统窗口 API 转移，窗口事件与 WebView 可信事件分别观测，禁止合成 blur。
 
+use crate::dev_mcp::ui::model::TitlebarRegion;
 use crate::workspace::error;
 use layerlens_core::workspace_contract::{WorkspaceError, WorkspaceErrorCode as Code};
 use schemars::JsonSchema;
@@ -31,6 +32,7 @@ impl WindowSize {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowAction {
+    RestoreTaskbar {},
     ResizeEdge {
         edge: ResizeEdge,
         direction: ResizeDirection,
@@ -39,6 +41,8 @@ pub(super) enum WindowAction {
         shortcut: SystemShortcut,
     },
     DragTitlebar {
+        #[serde(default)]
+        region: TitlebarRegion,
         destination: DragDestination,
     },
     ChooseSample {
@@ -504,6 +508,7 @@ impl Windows {
             let before = this.snapshot()?;
             match action {
                 action @ (WindowAction::SystemShortcut { .. }
+                | WindowAction::RestoreTaskbar {}
                 | WindowAction::ResizeEdge { .. }
                 | WindowAction::DragTitlebar { .. }
                 | WindowAction::ChooseSample { .. }

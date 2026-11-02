@@ -1,6 +1,6 @@
 // 默认每轮并行业务与 WebView；原生焦点套件串行，避免另一实例的启动／退出争用系统焦点。
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -33,6 +33,8 @@ assert(
     'm2-window',
     'cleanup-window',
     'system-window',
+    'panels',
+    'panel-boundaries',
     'cross-monitor',
     'render-lab',
     'workspace-canvas',
@@ -41,29 +43,39 @@ assert(
   ].includes(values['webview-suite']),
 );
 const scenarios =
-  values['webview-suite'] === 'canvas-resources'
-    ? ['canvas-memory']
-    : values['webview-suite'] === 'system-window'
-      ? ['window-system', 'window-picker', 'window-alt-f4', 'window-resize']
-      : values['webview-suite'] === 'cross-monitor'
-        ? ['window-cross-monitor']
-        : values['webview-suite'] === 'cleanup-window'
-          ? ['cleanup-window-max']
-          : values['webview-suite'] === 'canvas-sync'
-            ? ['baseline', 'canvas-inspection']
-            : values['webview-suite'] === 'workspace-canvas'
-              ? ['canvas-inspection', 'canvas-display']
-              : values['webview-suite'] === 'm2'
-                ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
-                : values['webview-suite'] === 'm2-input'
-                  ? ['input-pan', 'input-chord', 'input-snapping']
-                  : values['webview-suite'] === 'm2-cleanup'
-                    ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
-                    : values['webview-suite'] === 'm2-window'
-                      ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
-                      : values['webview-suite'] === 'render-lab'
-                        ? ['render-lab']
-                        : ['baseline'];
+  values['webview-suite'] === 'panel-boundaries'
+    ? [
+        'panels-boundaries',
+        'panels-cancel',
+        'panels-keyboard-cancel',
+        'window-load-exit',
+        'window-load-alt-f4',
+      ]
+    : values['webview-suite'] === 'panels'
+      ? ['panels-save', 'panels-restore', 'panels-drag', 'panels-list', 'window-shell']
+      : values['webview-suite'] === 'canvas-resources'
+        ? ['canvas-memory']
+        : values['webview-suite'] === 'system-window'
+          ? ['window-system', 'window-picker', 'window-alt-f4', 'window-resize']
+          : values['webview-suite'] === 'cross-monitor'
+            ? ['window-cross-monitor']
+            : values['webview-suite'] === 'cleanup-window'
+              ? ['cleanup-window-max']
+              : values['webview-suite'] === 'canvas-sync'
+                ? ['baseline', 'canvas-inspection']
+                : values['webview-suite'] === 'workspace-canvas'
+                  ? ['canvas-inspection', 'canvas-display']
+                  : values['webview-suite'] === 'm2'
+                    ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
+                    : values['webview-suite'] === 'm2-input'
+                      ? ['input-pan', 'input-chord', 'input-snapping']
+                      : values['webview-suite'] === 'm2-cleanup'
+                        ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
+                        : values['webview-suite'] === 'm2-window'
+                          ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
+                          : values['webview-suite'] === 'render-lab'
+                            ? ['render-lab']
+                            : ['baseline'];
 assert(
   repeats >= scenarios.length && repeats % scenarios.length === 0,
   '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',
@@ -80,6 +92,8 @@ const report = {
   startedAt: new Date().toISOString(),
   repeats,
   concurrency: [
+    'panels',
+    'panel-boundaries',
     'cleanup-window',
     'system-window',
     'cross-monitor',
@@ -134,6 +148,7 @@ async function checkpoint() {
   await writeFile(temporary, redact(JSON.stringify(report, null, 2)));
   await rename(temporary, path.join(directory, 'summary.json'));
 }
+let panelRestart = null;
 async function execute(kind, iteration) {
   const prefix = kind === 'webview' ? 'webview-' : 'desktop-';
   const previous = new Set(await readdir(runs));
@@ -148,6 +163,21 @@ async function execute(kind, iteration) {
   if (kind === 'disabled') args.push('--expect-disabled');
   const scenario = kind === 'webview' ? scenarios[(iteration - 1) % scenarios.length] : null;
   if (kind === 'webview') args.push('--driver', environment.driverPath, '--scenario', scenario);
+  if (scenario === 'panels-save') {
+    panelRestart = {
+      key: randomUUID(),
+      root: path.join(directory, 'restart', String(iteration)),
+      report: null,
+    };
+  }
+  if (scenario === 'panels-save' || scenario === 'panels-restore') {
+    assert(panelRestart, '重启场景缺少本轮隔离 profile');
+    args.push('--profile-key', panelRestart.key, '--profile-root', panelRestart.root);
+    if (scenario === 'panels-restore') {
+      assert(panelRestart.report, '必须先完成保存进程');
+      args.push('--panel-expectation', panelRestart.report);
+    }
+  }
   const outcome = await runProcess(process.execPath, args, { cwd: root, env: childEnv });
   const result = {
     kind,
@@ -233,6 +263,9 @@ async function execute(kind, iteration) {
       durationMs: result.durationMs,
     }),
   );
+  if (scenario === 'panels-save' && result.passed)
+    panelRestart.report = path.resolve(directory, result.report);
+  if (scenario === 'panels-restore') panelRestart = null;
   return result;
 }
 await checkpoint();
@@ -262,12 +295,19 @@ try {
   if (report.results[0].processError) {
     throw new Error('普通构建检查出现进程清理异常，停止开发场景。');
   }
+  if (['panels', 'panel-boundaries'].includes(values['webview-suite']) && !report.results[0].passed)
+    throw new Error('普通构建隔离失败，停止面板固定矩阵。');
   for (let iteration = 1; iteration <= repeats; iteration++) {
     if (report.concurrency === 1) {
       report.results.push(await execute('business', iteration));
       await checkpoint();
       if (report.results.at(-1).processError)
         throw new Error('业务实例未正常清理，禁止启动原生窗口场景。');
+      if (
+        ['panels', 'panel-boundaries'].includes(values['webview-suite']) &&
+        !report.results.at(-1).passed
+      )
+        throw new Error('业务实例失败，停止面板固定矩阵。');
       report.results.push(await execute('webview', iteration));
     } else {
       report.results.push(
@@ -277,6 +317,12 @@ try {
     await checkpoint();
     if (report.results.some((result) => result.processError)) {
       throw new Error('存在进程清理异常，停止后续轮次以免污染隔离证据。');
+    }
+    if (
+      ['panels', 'panel-boundaries'].includes(values['webview-suite']) &&
+      report.results.some((result) => !result.passed)
+    ) {
+      throw new Error('面板固定矩阵发生失败，保留结果并停止后续实例。');
     }
   }
   assert(

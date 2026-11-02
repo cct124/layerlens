@@ -4,6 +4,7 @@ mod driver;
 mod gesture;
 pub(crate) mod model;
 pub(super) mod observation;
+mod panels;
 mod targets;
 #[cfg(test)]
 mod tests;

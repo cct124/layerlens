@@ -68,8 +68,12 @@ impl WorkspaceHost {
             notify(snapshot);
         };
         let cleanup_handle = engine.service.cleanup_handle();
-        let (operations, mut operations_worker) =
-            OperationsWorker::start(engine.service.selection_handle(), cleanup_handle.clone())?;
+        let (operations, mut operations_worker) = OperationsWorker::start(
+            engine.service.selection_handle(),
+            cleanup_handle.clone(),
+            #[cfg(feature = "dev-mcp")]
+            engine.testing.clone(),
+        )?;
         let (sender, receiver) = mpsc::sync_channel(MAILBOX_LIMIT);
         let stopping = Arc::new(AtomicBool::new(false));
         let stopped = Arc::new(AtomicBool::new(false));
@@ -218,6 +222,52 @@ impl Drop for WorkspaceHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "dev-mcp")]
+    #[tokio::test]
+    async fn load_checkpoint_is_real_running_work_and_stop_wakes_parser() {
+        use crate::workspace::testing::{Checkpoint, Mode, Phase};
+        let (exited, exit) = oneshot::channel();
+        let host = WorkspaceHost::start(
+            Default::default(),
+            |_| {},
+            move |r| {
+                let _ = exited.send(r);
+            },
+        )
+        .unwrap();
+        let controls = &host.operations.testing;
+        controls.enable();
+        let gate = controls
+            .arm(Checkpoint::LoadBeforeParse, Mode::Pause, 30000)
+            .unwrap();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../crates/layerlens-core/tests/fixtures/psd/bitmap-raw.psd");
+        host.action(WorkspaceAction::Open {
+            path: path.to_string_lossy().into_owned(),
+        })
+        .await
+        .unwrap();
+        assert!(
+            controls
+                .wait(gate.id, Phase::Reached, 5000)
+                .await
+                .unwrap()
+                .0
+        );
+        let state = host.action(WorkspaceAction::Snapshot {}).await.unwrap();
+        assert!(state.documents.is_empty());
+        assert_eq!(state.jobs.len(), 1);
+        assert_eq!(state.jobs[0].phase, WorkspaceJobPhase::Running);
+        host.stop();
+        tokio::time::timeout(Duration::from_secs(5), exit)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert!(host.stopped());
+        assert_eq!(controls.state(gate.id).unwrap().phase, Phase::Stopped);
+    }
 
     #[test]
     fn bounded_mailbox_rejects_overflow_and_shutdown_releases_waiters() {

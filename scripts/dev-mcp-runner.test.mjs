@@ -4,8 +4,72 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { collectArtifacts, redact, summarize } from './dev-mcp-artifacts.mjs';
-import { checkSelectionObservation, isolatedEnvironment, runProcess } from './dev-mcp-runner.mjs';
+import {
+  checkSelectionObservation,
+  isolatedEnvironment,
+  prepareReusableProfile,
+  runProcess,
+} from './dev-mcp-runner.mjs';
 import { assertCaptureDimensions } from './dev-mcp-capture.mjs';
+import { windowsPowerShellEnvironment } from './windows-powershell.mjs';
+
+test('重启 profile 仅使用根内 UUID，保留已存内容并拒绝目录联接', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'layerlens-profile-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const key = '11111111-1111-4111-8111-111111111111';
+  await assert.rejects(prepareReusableProfile(root, '../ordinary'));
+  const profile = await prepareReusableProfile(root, key);
+  await writeFile(path.join(profile, 'saved'), 'retained');
+  assert.equal(await prepareReusableProfile(root, key), profile);
+  assert.equal(await readFile(path.join(profile, 'saved'), 'utf8'), 'retained');
+  const other = '22222222-2222-4222-8222-222222222222';
+  await symlink(
+    profile,
+    path.join(root, 'profiles', other),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  await assert.rejects(prepareReusableProfile(root, other), /目录别名/);
+});
+
+test(
+  '进程残留审计纳入共享 UUID profile，并拒绝外部目录联接',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'webview-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const key = '11111111-1111-4111-8111-111111111111';
+    const profile = await prepareReusableProfile(root, key);
+    const config = path.join(root, 'config.json');
+    await writeFile(config, JSON.stringify({ runRoot: root, profileKey: key }));
+    const audit = () =>
+      runProcess(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-File',
+          path.resolve('scripts/dev-mcp-processes.ps1'),
+          '-RunRoot',
+          root,
+          '-WaitMs',
+          '0',
+        ],
+        { env: windowsPowerShellEnvironment(), timeoutMs: 15000 },
+      );
+    const valid = await audit();
+    assert.equal(valid.code, 0, valid.output);
+    assert.deepEqual(JSON.parse(valid.output.trim()), {
+      profileDirectories: 1,
+      remaining: [],
+      terminated: [],
+    });
+    const other = '22222222-2222-4222-8222-222222222222';
+    await symlink(profile, path.join(root, 'profiles', other), 'junction');
+    await writeFile(config, JSON.stringify({ runRoot: root, profileKey: other }));
+    const rejected = await audit();
+    assert.notEqual(rejected.code, 0);
+    assert.equal(rejected.timedOut, false);
+  },
+);
 
 test('跨屏截图按实际视口与 DPR 验证，拒绝旧 DPR、裁切及空尺寸', () => {
   const before = { window: { width: 899, height: 600, devicePixelRatio: 1 } };
@@ -127,6 +191,19 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
     'window-edge-minimum-after.png',
     'window-edge-default-before.png',
     'window-edge-default-after.png',
+    'panels-default.png',
+    'panels-minimum.png',
+    'panels-list-end.png',
+    'panels-properties-end.png',
+    'panels-saved.png',
+    'panels-restored.png',
+    'panels-cancel.png',
+    'panels-keyboard-cancel.png',
+    'window-load-exit.png',
+    'panels-boundaries-minimum.png',
+    'panels-boundaries-default.png',
+    'panels-boundaries-maximized.png',
+    'window-taskbar-restored.png',
   ];
   for (const name of edgeImages)
     await writeFile(path.join(run, name), Buffer.from([137, 80, 78, 71]));
@@ -138,7 +215,7 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
   const output = path.join(directory, 'output');
   const manifest = await collectArtifacts(source, output);
   assert.deepEqual(manifest.errors, []);
-  assert.equal(manifest.files.length, 12);
+  assert.equal(manifest.files.length, 8 + edgeImages.length);
   for (const name of edgeImages)
     assert(manifest.files.some((entry) => entry.path.endsWith('/' + name)));
   assert(!manifest.files.some((entry) => entry.path.endsWith('/window-edge-private.png')));
@@ -162,7 +239,7 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
     path.join(directory, 'single'),
   );
   assert.deepEqual(single.errors, []);
-  assert.equal(single.files.length, 10);
+  assert.equal(single.files.length, 6 + edgeImages.length);
 });
 
 test('来源目录联接不能导出外部文件，空产物明确报错', async (t) => {

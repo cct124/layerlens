@@ -23,6 +23,8 @@ struct ActivePreview {
 }
 
 pub(super) struct Engine {
+    #[cfg(feature = "dev-mcp")]
+    pub(super) testing: std::sync::Arc<super::testing::Controls>,
     pub(super) service: DocumentService,
     opens: BTreeMap<OpenJobId, (String, OpenJob)>,
     preview: Option<ActivePreview>,
@@ -34,8 +36,19 @@ pub(super) struct Engine {
 
 impl Engine {
     pub(super) fn new(config: DocumentServiceConfig) -> Result<Self, WorkspaceError> {
+        #[cfg(feature = "dev-mcp")]
+        let testing = std::sync::Arc::new(super::testing::Controls::default());
+        #[cfg(feature = "dev-mcp")]
+        let service = {
+            let controls = testing.clone();
+            DocumentService::with_load_checkpoint(config, move || controls.load_checkpoint())
+        };
+        #[cfg(not(feature = "dev-mcp"))]
+        let service = DocumentService::new(config);
         Ok(Self {
-            service: DocumentService::new(config).map_err(|e| domain_error(&e))?,
+            service: service.map_err(|e| domain_error(&e))?,
+            #[cfg(feature = "dev-mcp")]
+            testing,
             opens: BTreeMap::new(),
             preview: None,
             notices: Vec::new(),

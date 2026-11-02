@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { UiObservation } from '../../shared/api/devGenerated';
 import { previewResourceVersion, readPreviewResources } from './previewResources';
 import { observeCleanupLayout } from './devCleanupLayout';
+import { observePanels } from './devPanelLayout';
 
 type Projection = Omit<
   UiObservation,
@@ -17,6 +18,7 @@ type Projection = Omit<
   | 'window'
   | 'renderLab'
   | 'previewResources'
+  | 'panels'
 > & {
   renderLab?: UiObservation['renderLab'];
   cleanup: Omit<
@@ -126,6 +128,7 @@ export function useDevObservation(project: () => Projection) {
       }
       const value = {
         ...projection,
+        panels: observePanels(),
         previewResources: readPreviewResources(),
         renderLab: projection.renderLab ?? null,
         cleanup: {
@@ -245,11 +248,20 @@ export function useDevObservation(project: () => Projection) {
         'aria-label',
         'disabled',
         'data-inspected-layer',
+        'data-resize-handle-state',
+        'data-panel-size',
+        'data-panel-key-events',
       ],
     });
     document.addEventListener('pointerdown', pointer, true);
     document.addEventListener('pointermove', pointer, true);
     document.addEventListener('pointerup', pointer, true);
+    // Reka 在 window 的兼容 mouseup 中提交；捕获阶段的微任务仍可能早于其处理器。
+    // 同时观察实际分隔条状态属性，确保 Vue 随后提交的终态也会独立上报。
+    // 两种事件都触发只读同步，可信输入计数仍只由原 PointerEvent 更新。
+    document.addEventListener('mousedown', schedule, true);
+    document.addEventListener('mouseup', schedule, true);
+    document.addEventListener('dblclick', schedule, true);
     document.addEventListener('keydown', key, true);
     document.addEventListener('keyup', key, true);
     document.addEventListener('focusin', schedule);
@@ -283,6 +295,9 @@ export function useDevObservation(project: () => Projection) {
       document.removeEventListener('pointerdown', pointer, true);
       document.removeEventListener('pointermove', pointer, true);
       document.removeEventListener('pointerup', pointer, true);
+      document.removeEventListener('mousedown', schedule, true);
+      document.removeEventListener('mouseup', schedule, true);
+      document.removeEventListener('dblclick', schedule, true);
       document.removeEventListener('keydown', key, true);
       document.removeEventListener('keyup', key, true);
       document.removeEventListener('focusin', schedule);

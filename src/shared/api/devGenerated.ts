@@ -2,6 +2,12 @@
 
 export type UiRect = { x: number, y: number, width: number, height: number, };
 
+export type PanelAxis = "width" | "height";
+
+export type UiPanelScroll = { rect: UiRect, scrollTop: number, scrollHeight: number, clientHeight: number, renderedRows: number, firstLayerId: number | null, lastLayerId: number | null, textLength: number, };
+
+export type UiPanels = { sidebarWidth: number, inspectorPercent: number, inspectorHeight: number, resourcesHeight: number, focusedHandle: PanelAxis | null, keyboardEvents: number, widthHandle: UiRect, heightHandle: UiRect, dragging: boolean, savedSidebarWidth: number | null, savedInspectorPercent: number | null, preferenceError: boolean, treeCount: number, treeLoading: boolean, tree: UiPanelScroll | null, properties: UiPanelScroll | null, search: string, taskName: string, };
+
 export type UiDocument = { id: string, revision: string, };
 
 export type UiSnapTarget = { position: number, layerId: number | null, };
@@ -42,7 +48,7 @@ export type UiRenderLab = { surface: UiRenderSurface | null, engine: string, pha
 
 export type UiRenderSample = { generation: string, operation: string, submitMs: number, readyMs: number, readbackMs: number, synchronized: boolean, frameIntervalMs: number | null, inputToReadyMs: number | null, };
 
-export type UiObservation = { previewResources: UiPreviewResources, renderLab: UiRenderLab | null, instanceId: string, frontendId: string,
+export type UiObservation = { panels: UiPanels | null, previewResources: UiPreviewResources, renderLab: UiRenderLab | null, instanceId: string, frontendId: string,
 /**
  * 前端挂载时 timeOrigin + now 的微秒整数，用于丢弃旧挂载或旧页面迟到报告。
  */

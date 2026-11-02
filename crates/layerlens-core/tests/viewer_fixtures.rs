@@ -103,6 +103,43 @@ fn default_budget_pages_all_512_layers_and_releases_the_saved_preview() {
 }
 
 #[test]
+fn default_budget_pages_all_4096_layers_without_duplicates_or_missing_endpoints() {
+    let service = DocumentService::new(Default::default()).unwrap();
+    let lease = open(&service, "viewer-long-list.psd");
+    assert_eq!((lease.info().width, lease.info().height), (64, 64));
+    for page_index in 0..32 {
+        let offset = page_index * 128;
+        let page = lease.layers(offset, 128).unwrap();
+        assert_eq!(page.total, 4096);
+        assert_eq!(page.layers.len(), 128);
+        assert_eq!(page.next_offset, (page_index < 31).then_some(offset + 128));
+        for (index, layer) in page.layers.iter().enumerate() {
+            let position = offset + index as u32;
+            let record = 4095 - position;
+            assert_eq!(layer.id, LayerId(position));
+            assert_eq!(layer.name, format!("row-{record:04}"));
+            assert_eq!(layer.kind, LayerKind::Bitmap);
+            assert!(layer.visible && layer.effective_visible);
+            assert_eq!(
+                layer.bounds,
+                Bounds {
+                    x: (record % 64) as i32,
+                    y: (record / 64) as i32,
+                    width: 1,
+                    height: 1,
+                }
+            );
+        }
+    }
+    service.select_layer(&lease, Some(LayerId(4095))).unwrap();
+    assert_eq!(
+        lease.layer_details(LayerId(4095), 0).unwrap().layer.name,
+        "row-0000"
+    );
+    close_and_check(service, lease);
+}
+
+#[test]
 fn default_budget_reconstructs_text_across_unit_run_and_byte_limits() {
     let service = DocumentService::new(Default::default()).unwrap();
     let lease = open(&service, "viewer-text.psd");

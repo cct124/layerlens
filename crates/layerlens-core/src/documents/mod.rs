@@ -64,6 +64,38 @@ impl DocumentService {
         loader: worker::Loader,
         renderer: preview::Renderer,
     ) -> Result<Self, DocumentError> {
+        Self::start_workers(
+            config,
+            loader,
+            renderer,
+            #[cfg(feature = "test-hooks")]
+            None,
+        )
+    }
+
+    /// 在已准入并预留资源的后台加载作业中、调用解析器前执行开发检查点。
+    ///
+    /// 回调不持有业务状态锁。调用方必须限定等待时间，并在退出时唤醒它；
+    /// 返回错误阻止解析及结果发布，不替换真实解析器。普通构建不提供此入口。
+    #[cfg(feature = "test-hooks")]
+    pub fn with_load_checkpoint(
+        config: DocumentServiceConfig,
+        checkpoint: impl Fn() -> Result<(), DocumentError> + Send + 'static,
+    ) -> Result<Self, DocumentError> {
+        Self::start_workers(
+            config,
+            Box::new(PsdDocument::open),
+            Box::new(PsdDocument::preview_png_bounded),
+            Some(Box::new(checkpoint)),
+        )
+    }
+
+    fn start_workers(
+        config: DocumentServiceConfig,
+        loader: worker::Loader,
+        renderer: preview::Renderer,
+        #[cfg(feature = "test-hooks")] checkpoint: Option<worker::LoadCheckpoint>,
+    ) -> Result<Self, DocumentError> {
         let config = config.validate()?;
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
@@ -76,7 +108,15 @@ impl DocumentService {
         let worker_state = Arc::clone(&shared);
         let worker = std::thread::Builder::new()
             .name("layerlens-documents".into())
-            .spawn(move || worker::run(worker_state, loader, renderer))
+            .spawn(move || {
+                worker::run(
+                    worker_state,
+                    loader,
+                    renderer,
+                    #[cfg(feature = "test-hooks")]
+                    checkpoint,
+                )
+            })
             .map_err(DocumentError::WorkerStart)?;
         Ok(Self {
             shared,

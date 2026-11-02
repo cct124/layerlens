@@ -4,6 +4,8 @@ mod commands;
 #[cfg(feature = "dev-mcp")]
 mod dev_mcp;
 #[cfg(windows)]
+mod window_focus;
+#[cfg(windows)]
 mod window_geometry;
 mod workspace;
 
@@ -65,7 +67,11 @@ pub fn run() -> tauri::Result<()> {
     #[cfg(feature = "dev-mcp")]
     let development = dev_mcp::Instance::from_args()?.map(Arc::new);
     #[cfg(feature = "dev-mcp")]
-    if development.is_some() {
+    if let Some(instance) = &development {
+        if instance.native_windows {
+            layerlens_window_probe::system::set_taskbar_identity(instance.instance_id())
+                .map_err(std::io::Error::other)?;
+        }
         for window in &mut context.config_mut().app.windows {
             window.create = false;
         }
@@ -156,9 +162,9 @@ pub fn run() -> tauri::Result<()> {
                     config
                 } else { window };
                 let mut builder = tauri::WebviewWindowBuilder::from_config(app, &window)?
-                    .data_directory(instance.directory.join("webview"))
+                    .data_directory(instance.webview_directory.clone())
                     .visible(instance.visible)
-                    .title("LayerLens · 开发测试实例");
+                    .title(format!("LayerLens · 测试 {}", instance.instance_id()));
                 #[cfg(feature = "render-lab")]
                 if instance.render_lab {
                     app.add_capability(include_str!("dev_mcp/render-capability.json"))?;
@@ -198,6 +204,7 @@ pub fn run() -> tauri::Result<()> {
                 && let Some(config) = app.config().app.windows.iter().find(|w| w.label == "main")
                 && let (Some(width), Some(height)) = (config.min_width, config.min_height)
             {
+                window_focus::install(main.clone())?;
                 window_geometry::install(main, tauri::LogicalSize::new(width, height))?;
             }
             Ok(())

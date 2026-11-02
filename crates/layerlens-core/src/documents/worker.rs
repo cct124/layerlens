@@ -16,6 +16,8 @@ use super::{
 };
 
 pub(super) type Loader = Box<dyn Fn(&Path, ParseLimits) -> Result<PsdDocument, PsdError> + Send>;
+#[cfg(feature = "test-hooks")]
+pub(super) type LoadCheckpoint = Box<dyn Fn() -> Result<(), DocumentError> + Send>;
 
 struct Work {
     id: OpenJobId,
@@ -41,7 +43,12 @@ enum Next {
     Preview(preview::Work),
 }
 
-pub(super) fn run(shared: Arc<Shared>, loader: Loader, renderer: preview::Renderer) {
+pub(super) fn run(
+    shared: Arc<Shared>,
+    loader: Loader,
+    renderer: preview::Renderer,
+    #[cfg(feature = "test-hooks")] checkpoint: Option<LoadCheckpoint>,
+) {
     loop {
         let work = {
             let mut state = lock(&shared.state);
@@ -82,14 +89,25 @@ pub(super) fn run(shared: Arc<Shared>, loader: Loader, renderer: preview::Render
         };
         // 第三方解析 panic 不能使等待者永久悬挂；展开栈会释放预留和未发布数据。
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            compute(&shared, &work, &loader)
+            compute(
+                &shared,
+                &work,
+                &loader,
+                #[cfg(feature = "test-hooks")]
+                checkpoint.as_ref(),
+            )
         }))
         .unwrap_or(Err(DocumentError::WorkerPanicked));
         publish(&shared, work, result);
     }
 }
 
-fn compute(shared: &Shared, work: &Work, loader: &Loader) -> Result<Computed, DocumentError> {
+fn compute(
+    shared: &Shared,
+    work: &Work,
+    loader: &Loader,
+    #[cfg(feature = "test-hooks")] checkpoint: Option<&LoadCheckpoint>,
+) -> Result<Computed, DocumentError> {
     let path = std::fs::canonicalize(&work.path).map_err(|source| DocumentError::Path {
         path: work.path.clone(),
         source,
@@ -121,6 +139,10 @@ fn compute(shared: &Shared, work: &Work, loader: &Loader) -> Result<Computed, Do
         }
     }
     let mut permit = shared.budget.reserve()?;
+    #[cfg(feature = "test-hooks")]
+    if let Some(checkpoint) = checkpoint {
+        checkpoint()?;
+    }
     if lock(&shared.state)
         .pending
         .get(&work.id)

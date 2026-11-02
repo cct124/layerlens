@@ -534,6 +534,7 @@ useDevObservation(() => ({
             <div
               v-show="inspectorTab === 'properties'"
               id="inspector-panel-properties"
+              data-dev-target="panel:details"
               class="dock-scroll"
               role="tabpanel"
               aria-labelledby="inspector-tab-properties"

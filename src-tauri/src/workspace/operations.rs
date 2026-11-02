@@ -51,12 +51,11 @@ impl OperationsWorker {
     pub(crate) fn start(
         handle: SelectionHandle,
         cleanup_handle: CleanupHandle,
+        #[cfg(feature = "dev-mcp")] testing: Arc<super::testing::Controls>,
     ) -> Result<(OperationsClient, Self), WorkspaceError> {
         let (sender, receiver) = mpsc::sync_channel::<Operation>(1);
         let stopping = Arc::new(AtomicBool::new(false));
         let stop = stopping.clone();
-        #[cfg(feature = "dev-mcp")]
-        let testing = Arc::new(super::testing::Controls::default());
         #[cfg(feature = "dev-mcp")]
         let clock = testing.clone();
         let thread = std::thread::Builder::new()
@@ -233,8 +232,13 @@ mod tests {
             .lease(service.snapshot().active_document.unwrap())
             .unwrap();
         let session = service.user_selection().unwrap().session_id;
-        let (client, mut worker) =
-            OperationsWorker::start(service.selection_handle(), service.cleanup_handle()).unwrap();
+        let (client, mut worker) = OperationsWorker::start(
+            service.selection_handle(),
+            service.cleanup_handle(),
+            #[cfg(feature = "dev-mcp")]
+            Arc::new(super::super::testing::Controls::default()),
+        )
+        .unwrap();
         let call = |operation| {
             tauri::async_runtime::block_on(client.cleanup(CleanupRequest {
                 protocol_version: layerlens_core::IPC_PROTOCOL_VERSION,
@@ -295,8 +299,13 @@ mod tests {
         let mut service =
             layerlens_core::documents::DocumentService::new(Default::default()).unwrap();
         let session = service.user_selection().unwrap().session_id;
-        let (client, mut worker) =
-            OperationsWorker::start(service.selection_handle(), service.cleanup_handle()).unwrap();
+        let (client, mut worker) = OperationsWorker::start(
+            service.selection_handle(),
+            service.cleanup_handle(),
+            #[cfg(feature = "dev-mcp")]
+            Arc::new(super::super::testing::Controls::default()),
+        )
+        .unwrap();
         let request = || SelectionRequest {
             protocol_version: layerlens_core::IPC_PROTOCOL_VERSION,
             session_id: session.as_str().to_owned(),

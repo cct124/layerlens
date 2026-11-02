@@ -1,5 +1,6 @@
 //! 仅开发测试实例启用的计划时钟与命名响应检查点。只控制时间／交付顺序，不改业务结果。
-//! 检查点不占操作线程或同步锁；最多四个活跃、32 个会话记录，超时／退出唤醒等待者。
+//! 结果交付检查点不占工作线程；加载检查点仅暂停解析后台，不持业务锁。
+//! 最多四个活跃、32 个会话记录，超时／退出唤醒等待者。
 
 use super::error;
 use layerlens_core::workspace_contract::{WorkspaceError, WorkspaceErrorCode as Code};
@@ -25,6 +26,7 @@ pub(crate) enum Checkpoint {
     DesktopSnapshot,
     DesktopNotification,
     PreviewPublication,
+    LoadBeforeParse,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -70,6 +72,17 @@ pub(crate) struct Controls {
 }
 
 impl Controls {
+    /// 由核心加载线程在解析前调用；复用同一有界门禁，退出先 stop 再等待核心线程。
+    pub(crate) fn load_checkpoint(&self) -> Result<(), layerlens_core::documents::DocumentError> {
+        if !self.enabled.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        tauri::async_runtime::block_on(self.hit(Checkpoint::LoadBeforeParse)).map_err(|e| {
+            layerlens_core::documents::DocumentError::LoadCheckpoint(std::io::Error::other(
+                e.message,
+            ))
+        })
+    }
     pub(crate) fn enable(&self) {
         self.enabled.store(true, Ordering::Release);
     }
@@ -204,7 +217,7 @@ impl Controls {
             }
         }
     }
-    /// 在真实结果已计算／固定租约后调用；等待期间不持有业务锁或工作线程。
+    /// 在命名的真实阶段调用；不持业务锁，加载检查点允许占用唯一解析后台线程。
     pub(crate) async fn hit(&self, checkpoint: Checkpoint) -> Result<(), WorkspaceError> {
         if !self.enabled.load(Ordering::Acquire) {
             return Ok(());

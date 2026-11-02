@@ -130,6 +130,40 @@ afterEach(() => {
 });
 
 describe('真实 Reka 分割面板集成', () => {
+  it('按住调整键后焦点离开分隔条，撤销调整且迟到松键不保存', async () => {
+    const bar = await setup();
+    const handle = bar.get('#sidebar-height-handle');
+    await handle.trigger('keydown', { key: 'End' });
+    await flushPromises();
+    expect(percent('workspace-inspector')).toBeGreaterThan(60);
+    await handle.trigger('blur');
+    await flushPromises();
+    await handle.trigger('keyup', { key: 'End' });
+    await flushPromises();
+    expect(percent('workspace-inspector')).toBeCloseTo(36, 1);
+    expect(localStorage.getItem(PANEL_LAYOUT_KEY)).toBeNull();
+  });
+  it('键盘先实时调整、松键再保存；失焦撤销且迟到松键不保存', async () => {
+    const bar = await setup();
+    const handle = bar.get('#sidebar-height-handle');
+    await handle.trigger('keydown', { key: 'End' });
+    await flushPromises();
+    expect(percent('workspace-inspector')).toBeGreaterThan(60);
+    expect(localStorage.getItem(PANEL_LAYOUT_KEY)).toBeNull();
+    await handle.trigger('keyup', { key: 'End' });
+    await flushPromises();
+    const saved = JSON.parse(localStorage.getItem(PANEL_LAYOUT_KEY)!);
+    expect(saved.inspectorPercent).toBeCloseTo(percent('workspace-inspector'), 1);
+    await handle.trigger('keydown', { key: 'Home' });
+    await flushPromises();
+    expect(percent('workspace-inspector')).toBeLessThan(30);
+    window.dispatchEvent(new Event('blur'));
+    await flushPromises();
+    await handle.trigger('keyup', { key: 'Home' });
+    await flushPromises();
+    expect(JSON.parse(localStorage.getItem(PANEL_LAYOUT_KEY)!)).toEqual(saved);
+    expect(percent('workspace-inspector')).toBeCloseTo(saved.inspectorPercent, 1);
+  });
   it('默认布局、分隔条语义与焦点；初始化不保存偏好', async () => {
     const bar = await setup();
     expectSidebar(320);
@@ -235,19 +269,29 @@ describe('真实 Reka 分割面板集成', () => {
     const bar = await setup();
     const handle = bar.get('#sidebar-width-handle');
     await handle.trigger('keydown', { key: 'ArrowLeft' });
+    await handle.trigger('keyup', { key: 'ArrowLeft' });
     await flushPromises();
     expect(sidebarWidth()).toBeGreaterThan(320);
     expect(localStorage.getItem(PANEL_LAYOUT_KEY)).not.toBeNull();
     await handle.trigger('keydown', { key: 'Home' });
+    await handle.trigger('keyup', { key: 'Home' });
     await flushPromises();
     expectSidebar(560);
+    expect(JSON.parse(localStorage.getItem(PANEL_LAYOUT_KEY)!).sidebarWidth).toBeCloseTo(560, 1);
     await handle.trigger('keydown', { key: 'End' });
+    await handle.trigger('keyup', { key: 'End' });
     await flushPromises();
     expectSidebar(260);
+    expect(JSON.parse(localStorage.getItem(PANEL_LAYOUT_KEY)!).sidebarWidth).toBeCloseTo(260, 1);
     await bar.get('#sidebar-height-handle').trigger('keydown', { key: 'ArrowDown' });
+    await bar.get('#sidebar-height-handle').trigger('keyup', { key: 'ArrowDown' });
     await flushPromises();
     const top = percent('workspace-inspector');
     expect(top).toBeGreaterThan(36);
+    expect(JSON.parse(localStorage.getItem(PANEL_LAYOUT_KEY)!).inspectorPercent).toBeCloseTo(
+      top,
+      1,
+    );
     await handle.trigger('dblclick');
     await flushPromises();
     expectSidebar(320);
@@ -288,6 +332,8 @@ describe('真实 Reka 分割面板集成', () => {
     await bar.get('#sidebar-width-handle').trigger('keydown', { key: 'ArrowLeft' });
     await flushPromises();
     expect(sidebarWidth()).toBeGreaterThan(320);
+    await bar.get('#sidebar-width-handle').trigger('keyup', { key: 'ArrowLeft' });
+    await flushPromises();
     expect(bar.get('[role="status"]').text()).toContain('无法保存：存储不可用');
   });
 });

@@ -177,6 +177,8 @@ pub(crate) struct UiPreviewResources {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct UiObservation {
+    #[serde(default)]
+    pub panels: Option<UiPanels>,
     pub preview_resources: UiPreviewResources,
     #[serde(default)]
     pub render_lab: Option<UiRenderLab>,
@@ -226,6 +228,18 @@ pub(crate) struct DriverInfo {
     deny_unknown_fields
 )]
 pub(crate) enum UiAction {
+    PanelDrag {
+        axis: PanelAxis,
+        delta: i32,
+        hold: bool,
+    },
+    PanelReset {
+        axis: PanelAxis,
+    },
+    PanelScroll {
+        target: PanelScrollTarget,
+        edge: ScrollEdge,
+    },
     /// target 为应用公开的稳定语义标识，不接受 CSS、XPath 或脚本。
     Click {
         target: String,
@@ -263,7 +277,10 @@ pub(crate) enum UiAction {
     },
     ReleaseInputs {},
     /// 只允许 nativeWindows 实例的真实标题栏双击。
-    TitlebarDoubleClick {},
+    TitlebarDoubleClick {
+        #[serde(default)]
+        region: TitlebarRegion,
+    },
     /// 无按键的真实画布移动，用于证明失焦后的平移／草稿不会继续。
     MovePointer {
         x: i32,
@@ -351,6 +368,22 @@ pub(crate) struct InputResult {
     deny_unknown_fields
 )]
 pub(crate) enum UiCondition {
+    PanelKeyboard {
+        axis: PanelAxis,
+        events_after: u32,
+    },
+    PanelLayout {
+        sidebar_width: Option<f64>,
+        inspector_percent: Option<f64>,
+        dragging: bool,
+        tree_count: Option<u32>,
+        after_revision: Option<String>,
+    },
+    PanelScroll {
+        target: PanelScrollTarget,
+        edge: ScrollEdge,
+        after_revision: Option<String>,
+    },
     FilePickerIdle {},
     /// 同一真实投影中同时确认当前文档、可信事件计数、修饰键及 DOM 指针捕获。
     CanvasInput {
@@ -483,6 +516,89 @@ pub(crate) enum CleanupLayoutTarget {
     Start,
     End,
     Controls,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum PanelAxis {
+    Width,
+    Height,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum TitlebarRegion {
+    #[default]
+    Blank,
+    Brand,
+    Status,
+    Readonly,
+}
+impl TitlebarRegion {
+    pub(super) fn target(self) -> &'static str {
+        match self {
+            Self::Blank => "window:drag",
+            Self::Brand => "window:brand",
+            Self::Status => "window:status",
+            Self::Readonly => "window:readonly",
+        }
+    }
+}
+impl PanelAxis {
+    pub(super) fn target(self) -> &'static str {
+        match self {
+            Self::Width => "panel:width",
+            Self::Height => "panel:height",
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum PanelScrollTarget {
+    Layers,
+    Properties,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ScrollEdge {
+    Start,
+    End,
+}
+
+/// 有界 DOM 布局／滚动投影；不返回完整图层、原文或任意存储内容。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiPanelScroll {
+    pub rect: UiRect,
+    pub scroll_top: f64,
+    pub scroll_height: f64,
+    pub client_height: f64,
+    pub rendered_rows: u32,
+    pub first_layer_id: Option<u32>,
+    pub last_layer_id: Option<u32>,
+    pub text_length: u32,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UiPanels {
+    pub sidebar_width: f64,
+    pub inspector_percent: f64,
+    pub inspector_height: f64,
+    pub resources_height: f64,
+    pub focused_handle: Option<PanelAxis>,
+    pub keyboard_events: u32,
+    pub width_handle: UiRect,
+    pub height_handle: UiRect,
+    pub dragging: bool,
+    pub saved_sidebar_width: Option<f64>,
+    pub saved_inspector_percent: Option<f64>,
+    pub preference_error: bool,
+    pub tree_count: u32,
+    pub tree_loading: bool,
+    pub tree: Option<UiPanelScroll>,
+    pub properties: Option<UiPanelScroll>,
+    pub search: String,
+    pub task_name: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

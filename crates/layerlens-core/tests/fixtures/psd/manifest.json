@@ -2869,6 +2869,28 @@
       "sha256": "9ded5c90db68b5518c44b16423fa51cf9ebb0edefd4811a42193c1c841497d70"
     },
     {
+      "file": "viewer-long-list.psd",
+      "compression": "raw",
+      "document": {
+        "width": 64,
+        "height": 64,
+        "depth": 8,
+        "colorMode": "RGB",
+        "resolutionDpi": 72
+      },
+      "viewerGrid": {
+        "columns": 64,
+        "rows": 64,
+        "tileSize": 1,
+        "layerCount": 4096,
+        "firstRecord": "row-0000",
+        "lastRecord": "row-4095"
+      },
+      "note": "4096 个 1×1 位图层，统一 RGBA=(64,128,192,255)，用于真实面板虚拟列表验收。",
+      "sizeBytes": 381006,
+      "sha256": "84d375ce09797beb7afbeee04ab34d7fd262c30c0079f3302d48e56b2a498056"
+    },
+    {
       "file": "viewer-text.psd",
       "compression": "raw",
       "document": {

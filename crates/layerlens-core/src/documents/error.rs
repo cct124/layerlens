@@ -32,6 +32,8 @@ pub enum DocumentError {
     IdExhausted,
     WorkerStart(io::Error),
     WorkerPanicked,
+    #[cfg(feature = "test-hooks")]
+    LoadCheckpoint(io::Error),
     Parse {
         path: PathBuf,
         source: PsdError,
@@ -63,6 +65,8 @@ impl fmt::Display for DocumentError {
             Self::IdExhausted => f.write_str("文档服务标识符已耗尽"),
             Self::WorkerStart(source) => write!(f, "无法启动文档后台线程：{source}"),
             Self::WorkerPanicked => f.write_str("文档后台计算异常终止"),
+            #[cfg(feature = "test-hooks")]
+            Self::LoadCheckpoint(source) => write!(f, "开发加载检查点拒绝继续：{source}"),
             Self::Parse { path, source } => write!(f, "无法打开 {}：{source}", path.display()),
             Self::Preview {
                 document,
@@ -81,6 +85,8 @@ impl fmt::Display for DocumentError {
 impl Error for DocumentError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            #[cfg(feature = "test-hooks")]
+            Self::LoadCheckpoint(source) => Some(source),
             Self::Path { source, .. } | Self::WorkerStart(source) => Some(source),
             Self::Parse { source, .. } | Self::Preview { source, .. } => Some(source),
             _ => None,

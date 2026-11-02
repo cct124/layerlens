@@ -81,6 +81,12 @@ GdFl 使用 `Grad` 键与空 `Grdn` descriptor，descriptor 结构完整但不�
 
 [公开服务回归](../../viewer_fixtures.rs)在默认配置下核对四页图层、全部网格像素、三层原文逐页重建、UTF-16／样式边界及关闭退出后的资源账本归零。所有文字单位仍为 `unverifiedEngine`，字体是虚构测试数据，纯白合成图不能证明文字排版。合成规模样本与原生桌面交互、真实稿视觉及性能验收分别记录，不互相替代。
 
+### 4096 层长列表
+
+`viewer-long-list.psd` 由主生成器独立构造：64×64、RGB/8 位、72 DPI，4096 个可见的一像素位图层，像素均为 RGBA `4080c0ff`。文件记录从 `row-0000` 到 `row-4095`，坐标为编号对 64 取余及整除；合成图按人工规则直接编码。查看器反序查询后，ID 0 对应 `row-4095`，ID 4095 对应 `row-0000`。
+
+公开服务测试在默认额度下验证全部 32 页、连续 ID、名称、坐标和末项详情，以及关闭退出后的资源归零。开发测试 MCP 另外验证真实界面的虚拟行数量、首尾滚动及面板切换；人工样本不代表复杂真实稿的兼容性或性能验收。
+
 ## 格式依据
 
 [Adobe Photoshop File Formats Specification](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/) 的以下部分：

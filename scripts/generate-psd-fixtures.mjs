@@ -533,6 +533,34 @@ cases.push({
 });
 
 const viewerTextBounds = { x: 16, y: 16, width: 224, height: 96 };
+// 与 512 层样本分开，达到默认图层上限；每层一个像素，不扩大解码预算。
+const longGrid = Array.from({ length: 4096 }, (_, index) => ({
+  name: 'row-' + String(index).padStart(4, '0'),
+  visible: true,
+  bounds: { x: index % 64, y: Math.floor(index / 64), width: 1, height: 1 },
+  rgbaHex: '4080c0ff',
+}));
+cases.push({
+  file: 'viewer-long-list.psd',
+  compression: 'raw',
+  bytes: Buffer.concat([
+    header(64, 64, 8),
+    unsigned32(0),
+    section(resolutionResource()),
+    layerSection(longGrid, 'raw'),
+    compositeData('raw', { width: 64, height: 64, rgbaHex: '4080c0ff'.repeat(4096) }),
+  ]),
+  document: { ...document, width: 64, height: 64 },
+  viewerGrid: {
+    columns: 64,
+    rows: 64,
+    tileSize: 1,
+    layerCount: 4096,
+    firstRecord: 'row-0000',
+    lastRecord: 'row-4095',
+  },
+  note: '4096 个 1×1 位图层，统一 RGBA=(64,128,192,255)，用于真实面板虚拟列表验收。',
+});
 cases.push({
   file: 'viewer-text.psd',
   compression: 'raw',

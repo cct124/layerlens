@@ -76,6 +76,58 @@ export async function exerciseWindows(context) {
   await wait({ kind: 'taskCount', count: 1 });
   await click('tool:region');
   const fixed = await state();
+  if (scenario === 'window-shell') {
+    report.shellInteractions = [];
+    for (const region of ['blank', 'brand', 'status', 'readonly']) {
+      report.phase = 'window-shell-' + region;
+      await native({ kind: 'restore' });
+      await native({ kind: 'center' });
+      await nativeWait({ kind: 'withinWorkArea' });
+      await nativeWait({ kind: 'foreground', target: 'main' });
+      const before = await nativeState();
+      await native({ kind: 'dragTitlebar', region, destination: { kind: 'offset' } });
+      const moved = await nativeWait({
+        kind: 'position',
+        x: before.x + Math.round(48 * before.scaleFactor),
+        y: before.y + Math.round(32 * before.scaleFactor),
+        tolerance: 2,
+      });
+      await action({ kind: 'titlebarDoubleClick', region });
+      await nativeWait({ kind: 'state', minimized: false, maximized: true });
+      await action({ kind: 'titlebarDoubleClick', region });
+      const restored = await nativeWait({ kind: 'state', minimized: false, maximized: false });
+      await unchanged();
+      report.shellInteractions.push({ region, before, moved, restored });
+    }
+    for (const menu of ['file', 'view', 'window']) {
+      const before = await nativeState();
+      await click('menu:' + menu);
+      await wait({ kind: 'menu', menu });
+      await key('escape');
+      await wait({ kind: 'menu', menu: null });
+      const after = await nativeState();
+      for (const field of ['x', 'y', 'physicalWidth', 'physicalHeight', 'maximized'])
+        assert.equal(after[field], before[field]);
+    }
+    report.phase = 'window-shell-taskbar';
+    const beforeMinimize = await state();
+    await click('window:minimize');
+    await nativeWait({ kind: 'state', minimized: true, maximized: false });
+    await native({ kind: 'restoreTaskbar' });
+    await nativeWait({ kind: 'state', minimized: false, maximized: false });
+    await nativeWait({ kind: 'foreground', target: 'main' });
+    const restoredFocus = await wait({
+      kind: 'windowFocus',
+      focused: true,
+      eventsAfter: beforeMinimize.window.focusEvents,
+    });
+    report.taskbarRestored = { before: beforeMinimize.window, after: restoredFocus.window };
+    await layout(await nativeState(), 'taskbar-restored');
+    report.checks.push(
+      '四类标题栏区域真实拖动／双击、菜单不误移动，以及唯一测试实例的真实任务栏点击恢复',
+    );
+    return { closeWindow: false };
+  }
   async function unchanged(view) {
     view ??= await state();
     assert.equal(view.selectionRevision, fixed.selectionRevision);
@@ -393,7 +445,9 @@ export async function exerciseWindows(context) {
       '真实系统文件选择器打开／取消保持状态，越界样本拒绝，再次选取样本完成真实桌面加载',
     );
   } else {
-    assert(['window-exit', 'window-alt-f4'].includes(scenario));
+    assert(
+      ['window-exit', 'window-alt-f4', 'window-load-exit', 'window-load-alt-f4'].includes(scenario),
+    );
     const arm = async (checkpoint) =>
       (
         await tool(
@@ -412,6 +466,31 @@ export async function exerciseWindows(context) {
       report.checkpoints ??= [];
       report.checkpoints.push(result.gate);
     };
+    if (scenario.startsWith('window-load-')) {
+      const loading = await arm('loadBeforeParse');
+      if (scenario === 'window-load-exit') {
+        assert(context.nextSample, '缺少允许列表内的第二样本');
+        await workspace({ kind: 'open', path: context.nextSample });
+      } else await workspace({ kind: 'reload', documentId: document.id });
+      await reached(loading);
+      const during = await core();
+      assert(
+        during.jobs.some((j) => j.phase === 'running'),
+        '必须是真实运行中的加载作业',
+      );
+      assert.equal(during.documents.find((d) => d.id === document.id).revision, document.revision);
+      await unchanged(await state());
+      report.loadCheckpoint = {
+        gate: loading,
+        operation: scenario === 'window-load-exit' ? 'open' : 'reload',
+        workspace: during,
+      };
+      await screenshot('window-load-exit.png');
+      report.checks.push(
+        '真实后台加载在解析前且预算已预留时暂停，旧修订和任务保持，退出负责唤醒及释放',
+      );
+      return { closeWindow: true, systemClose: scenario === 'window-load-alt-f4' };
+    }
     const content = await arm('desktopContent');
     await click('task:' + fixed.tasks[0].id + ':view');
     await reached(content);

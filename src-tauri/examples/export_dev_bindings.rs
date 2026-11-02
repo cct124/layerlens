@@ -16,6 +16,9 @@ fn main() -> io::Result<()> {
     let mut output = String::from("// 由 export_dev_bindings 从 Rust 自动生成，请勿手工编辑。\n\n");
     for declaration in [
         UiRect::decl(&config),
+        PanelAxis::decl(&config),
+        UiPanelScroll::decl(&config),
+        UiPanels::decl(&config),
         UiDocument::decl(&config),
         UiSnapTarget::decl(&config),
         UiCanvas::decl(&config),

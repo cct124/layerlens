@@ -31,15 +31,17 @@ function titlebarMouseDown(event: MouseEvent) {
 
 <template>
   <header class="app-header" aria-label="LayerLens 标题栏" @mousedown="titlebarMouseDown">
-    <div class="brand" data-window-drag-region><WorkspaceIcon name="brand" />LayerLens</div>
+    <div class="brand" data-window-drag-region data-dev-target="window:brand">
+      <WorkspaceIcon name="brand" />LayerLens
+    </div>
     <slot />
     <span v-if="picking" role="status" class="menu-status">选择文件中…</span>
     <span class="header-spacer" data-window-drag-region data-dev-target="window:drag"></span>
-    <span class="connection-status" data-window-drag-region
+    <span class="connection-status" data-window-drag-region data-dev-target="window:status"
       ><span class="status-dot" :class="{ ready: connected }"></span
       >{{ connected ? '工作区已连接' : desktop ? '未连接' : '浏览器预览' }}</span
     >
-    <span class="readonly-label" data-window-drag-region
+    <span class="readonly-label" data-window-drag-region data-dev-target="window:readonly"
       ><WorkspaceIcon name="lock" />PSD 只读</span
     >
     <div v-if="desktop" class="window-controls" role="group" aria-label="窗口控制">

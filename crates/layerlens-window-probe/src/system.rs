@@ -78,11 +78,40 @@ impl From<(&'static str, Option<u32>)> for SystemError {
     }
 }
 
+/// 在创建窗口前为开发实例设置唯一任务栏分组身份，避免与其他实例或固定项合并。
+///
+/// # Errors
+/// UUID 格式无效、平台不支持或系统拒绝设置时返回错误。
+pub fn set_taskbar_identity(instance: &str) -> Result<(), SystemError> {
+    #[cfg(windows)]
+    {
+        implementation::set_taskbar_identity(instance)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = instance;
+        Err(("taskbarUnsupported", None).into())
+    }
+}
+
 /// 查询主窗口拥有的文件选择器；无效／非当前进程句柄返回错误。
 pub fn file_picker(main: usize) -> Result<FilePickerState, SystemError> {
     #[cfg(windows)]
     {
         implementation::file_picker(main)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = main;
+        Err(("unsupportedPlatform", None).into())
+    }
+}
+
+/// 仅点击具有测试主窗口唯一标题的任务栏按钮；不接受外部目标或任意坐标。
+pub fn restore_taskbar(main: usize) -> Result<(), SystemError> {
+    #[cfg(windows)]
+    {
+        implementation::restore_taskbar(main)
     }
     #[cfg(not(windows))]
     {

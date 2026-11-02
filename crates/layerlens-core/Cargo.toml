@@ -8,6 +8,7 @@ description = "LayerLens 的共享应用核心与边界类型"
 
 [features]
 schema = ["dep:schemars"]
+test-hooks = []
 render-lab = []
 
 [[example]]
