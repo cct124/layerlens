@@ -52,6 +52,15 @@ export async function exerciseWindowResize(context) {
         );
         await nativeWait({ kind: 'foreground', target: 'main' });
         const after = await nativeState();
+        const probe = after.nativeResize;
+        assert.equal(probe?.status, 'available', '边框动作必须保留原生命中观测');
+        assert.equal(probe.probe?.complete, true);
+        assert.equal(probe.probe.edge, edge);
+        assert(probe.probe.candidates.length >= 1 && probe.probe.candidates.length <= 6);
+        const chosen = probe.probe.candidates.at(-1);
+        assert.deepEqual(chosen.point, probe.probe.matched);
+        assert.equal(chosen.hit, probe.probe.expectedHit);
+        assert(['main', 'mainChild'].includes(chosen.target), '仅自有实际鼠标目标可通过边框命中');
         assert.equal(after.scaleFactor, before.scaleFactor);
         assert.equal(
           after.monitors.find((m) => m.current)?.index,

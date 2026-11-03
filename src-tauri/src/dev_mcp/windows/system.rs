@@ -166,7 +166,8 @@ fn drag_points(
         DragDestination::Offset {} => {
             (x + 48.0 * state.scale_factor, y + 32.0 * state.scale_factor)
         }
-        DragDestination::TopEdge {} => (x, f64::from(area.y) + 2.0),
+        // 顶边贴靠必须到达真实边界；保留两像素间隔会依赖系统的热区宽度。
+        DragDestination::TopEdge {} => (x, f64::from(area.y)),
         DragDestination::Monitor { index } => {
             let monitor = state
                 .monitors
@@ -187,4 +188,57 @@ fn drag_points(
         return Err(error(Code::InvalidInput, "标题栏坐标超出物理范围。"));
     }
     Ok((start, (end.0.round() as i32, end.1.round() as i32)))
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn title_drag_reaches_the_physical_top_edge_at_each_scale_and_negative_origin() {
+        for scale in [1.0, 1.5, 2.0] {
+            for top in [-1080, 0, 32] {
+                let mut state = super::super::tests::window_state();
+                state.scale_factor = scale;
+                state.foreground_ready = Some(FocusTarget::Main);
+                state.work_area = Some(WindowWorkArea {
+                    x: -1920,
+                    y: top,
+                    physical_width: 1920,
+                    physical_height: 1080,
+                });
+                let rect = UiRect {
+                    x: 200.0,
+                    y: 0.0,
+                    width: 100.0,
+                    height: 32.0,
+                };
+                let (start, end) = drag_points(
+                    &state,
+                    &rect,
+                    (-1800, top + 100),
+                    &DragDestination::TopEdge {},
+                )
+                .unwrap();
+                assert_eq!(
+                    start,
+                    (
+                        (-1800.0 + 250.0 * scale) as i32,
+                        top + 100 + (16.0 * scale) as i32
+                    )
+                );
+                assert_eq!(end, (start.0, top));
+                state.maximized = true;
+                assert!(
+                    drag_points(
+                        &state,
+                        &rect,
+                        (-1800, top + 100),
+                        &DragDestination::TopEdge {}
+                    )
+                    .is_err()
+                );
+            }
+        }
+    }
 }

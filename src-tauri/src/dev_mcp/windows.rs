@@ -118,6 +118,9 @@ pub(super) struct WindowState {
     /// 原生系统诊断独立于 Tauri／WebView 事件计数；不可用时保留原因。
     #[cfg(windows)]
     pub native_focus: layerlens_window_probe::FocusObservation,
+    /// 最近一次边框动作的只读候选命中，不以父窗口结果冒充实际鼠标目标。
+    #[cfg(windows)]
+    pub native_resize: layerlens_window_probe::system::ResizeProbeObservation,
     /// 系统前台、活动窗口和键盘焦点共同指向的自有窗口；未知或切换中为 None。
     pub foreground_ready: Option<FocusTarget>,
     pub event_sequence: String,
@@ -470,6 +473,10 @@ impl Windows {
             foreground_ready: None,
             #[cfg(windows)]
             native_focus,
+            #[cfg(windows)]
+            native_resize: layerlens_window_probe::system::observe_resize(
+                self.main.hwnd().map_err(native)?.0 as usize,
+            ),
             event_sequence: events.sequence.to_string(),
             focus_events: events.focused.to_string(),
             blur_events: events.blurred.to_string(),
@@ -681,7 +688,7 @@ mod tests {
     }
 
     #[cfg(windows)]
-    fn window_state() -> WindowState {
+    pub(super) fn window_state() -> WindowState {
         WindowState {
             monitors: vec![],
             file_picker: FilePickerState {
@@ -691,6 +698,9 @@ mod tests {
             work_area: None,
             client_within_work_area: None,
             native_focus: focus_observation(layerlens_window_probe::WindowTarget::Other),
+            native_resize: layerlens_window_probe::system::ResizeProbeObservation::Available {
+                probe: None,
+            },
             foreground_ready: None,
             event_sequence: "4".into(),
             focus_events: "2".into(),

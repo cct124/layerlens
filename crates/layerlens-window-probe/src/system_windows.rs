@@ -1,6 +1,8 @@
 //! 自有窗口的 Win32 输入与 UI Automation；所有 FFI 指针在本模块内验证。
 //! SendInput 不保证送达，调用者必须继续等待实际窗口／业务状态。
-use super::{FilePickerState, Point, ResizeEdge, SystemError, SystemShortcut};
+use super::{
+    BorderHit, FilePickerState, Point, ResizeEdge, ResizeProbe, SystemError, SystemShortcut,
+};
 use crate::windows::{desktop_receives_input, owned_thread};
 use std::{
     sync::Mutex,
@@ -348,26 +350,16 @@ fn resize_point(rect: &RECT, edge: ResizeEdge, inset: i32) -> Result<Point, Syst
     })
 }
 
-fn border_hit(window: HWND, point: Point, expected: u32) -> Result<bool, SystemError> {
+fn query_hit(window: HWND, point: Point) -> Result<i32, SystemError> {
     let (Ok(x), Ok(y)) = (i16::try_from(point.x), i16::try_from(point.y)) else {
         return Err(("hitTestCoordinateOutOfRange", None).into());
     };
-    // SAFETY: 仅查询真实输入目标；后续消息限定为自有窗口及其子窗口。
-    let actual = unsafe {
-        WindowFromPoint(POINT {
-            x: point.x,
-            y: point.y,
-        })
-    };
-    if actual != window && unsafe { IsChild(window, actual) } == 0 {
-        return Ok(false);
-    }
     let packed = ((i32::from(y) << 16) | i32::from(x as u16)) as isize;
     let mut hit = 0;
     // SAFETY: WM_NCHITTEST 只读有符号短坐标；目标已验证自有，结果缓冲区有效，等待限于 250ms。
     if unsafe {
         SendMessageTimeoutW(
-            actual,
+            window,
             WM_NCHITTEST,
             0,
             packed,
@@ -379,11 +371,73 @@ fn border_hit(window: HWND, point: Point, expected: u32) -> Result<bool, SystemE
     {
         return Err(error("resizeHitTest"));
     }
-    Ok(hit == expected as usize)
+    Ok(hit as isize as i32)
+}
+
+fn probe_border(window: HWND, point: Point, inset: u32) -> Result<BorderHit, SystemError> {
+    // SAFETY: 只读实际命中目标及其与已验证自有窗口的父子关系，不返回句柄。
+    let actual = unsafe {
+        WindowFromPoint(POINT {
+            x: point.x,
+            y: point.y,
+        })
+    };
+    let target = if actual.is_null() {
+        crate::WindowTarget::None
+    } else if actual == window {
+        crate::WindowTarget::Main
+    } else if unsafe { IsChild(window, actual) } != 0 {
+        crate::WindowTarget::MainChild
+    } else {
+        crate::WindowTarget::Other
+    };
+    let parent_hit = query_hit(window, point)?;
+    let hit = match target {
+        crate::WindowTarget::Main => Some(parent_hit),
+        crate::WindowTarget::MainChild => Some(query_hit(actual, point)?),
+        _ => None,
+    };
+    Ok(BorderHit {
+        inset,
+        point,
+        target,
+        hit,
+        parent_hit,
+    })
+}
+
+fn border_hit(window: HWND, point: Point, expected: u32) -> Result<bool, SystemError> {
+    // 父窗口命中仅作诊断；不能用它代替实际接收鼠标输入的子窗口结果。
+    Ok(probe_border(window, point, 0)?.hit == Some(expected as i32))
+}
+
+static LAST_RESIZE_PROBE: Mutex<Option<(usize, ResizeProbe)>> = Mutex::new(None);
+
+fn record_probe(main: usize, probe: &ResizeProbe) -> Result<(), SystemError> {
+    *LAST_RESIZE_PROBE
+        .lock()
+        .map_err(|_| SystemError::from(("resizeProbeUnavailable", None)))? =
+        Some((main, probe.clone()));
+    Ok(())
+}
+
+pub(super) fn observe_resize(main: usize) -> Result<Option<ResizeProbe>, SystemError> {
+    owned_thread(main as HWND)?;
+    let record = LAST_RESIZE_PROBE
+        .lock()
+        .map_err(|_| SystemError::from(("resizeProbeUnavailable", None)))?;
+    Ok(record
+        .as_ref()
+        .filter(|(owner, _)| *owner == main)
+        .map(|(_, probe)| probe.clone()))
 }
 
 pub(super) fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(), SystemError> {
     let window = main as HWND;
+    owned_thread(window)?;
+    *LAST_RESIZE_PROBE
+        .lock()
+        .map_err(|_| SystemError::from(("resizeProbeUnavailable", None)))? = None;
     check_input(window)?;
     // SAFETY: 当前进程自有窗口，仅读取正常窗口状态。
     if unsafe { IsZoomed(window) } != 0
@@ -407,16 +461,33 @@ pub(super) fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(),
         ResizeEdge::BottomLeft => HTBOTTOMLEFT,
         ResizeEdge::BottomRight => HTBOTTOMRIGHT,
     };
-    let mut start = None;
+    let mut probe = ResizeProbe {
+        edge,
+        expected_hit: expected as i32,
+        candidates: Vec::with_capacity(6),
+        matched: None,
+        complete: false,
+    };
+    record_probe(main, &probe)?;
     // 有界探查真实边框，处理不可见 resize margin；只读命中结果，不派发合成缩放消息。
     for inset in [0, 1, 2, 4, 8, 16] {
         let point = resize_point(&rect, edge, inset)?;
-        if border_hit(window, point, expected)? {
-            start = Some(point);
+        let candidate = probe_border(window, point, inset as u32)?;
+        let matched = candidate.hit == Some(expected as i32);
+        probe.candidates.push(candidate);
+        if matched {
+            probe.matched = Some(point);
+        }
+        record_probe(main, &probe)?;
+        if matched {
             break;
         }
     }
-    let start = start.ok_or(SystemError::from(("resizeBorderNotFound", None)))?;
+    probe.complete = true;
+    record_probe(main, &probe)?;
+    let start = probe
+        .matched
+        .ok_or(SystemError::from(("resizeBorderNotFound", None)))?;
     let (dx, dy) = edge.axes();
     let end = Point {
         x: start
@@ -603,6 +674,34 @@ pub(super) fn choose_file(main: usize, path: &str) -> Result<(), SystemError> {
 #[cfg(test)]
 mod resize_tests {
     use super::*;
+    #[test]
+    fn hit_test_coordinates_reject_unrepresentable_signed_words_before_native_queries() {
+        for point in [
+            Point {
+                x: i32::from(i16::MAX) + 1,
+                y: 0,
+            },
+            Point {
+                x: i32::from(i16::MIN) - 1,
+                y: 0,
+            },
+            Point {
+                x: 0,
+                y: i32::from(i16::MAX) + 1,
+            },
+            Point {
+                x: 0,
+                y: i32::from(i16::MIN) - 1,
+            },
+        ] {
+            assert_eq!(
+                query_hit(std::ptr::null_mut(), point)
+                    .unwrap_err()
+                    .operation,
+                "hitTestCoordinateOutOfRange"
+            );
+        }
+    }
     #[test]
     fn absolute_coordinates_land_inside_each_pixel_of_negative_origin_desktops() {
         for extent in [2, 1600, 4480, 65536] {

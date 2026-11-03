@@ -18,7 +18,8 @@ pub enum SystemShortcut {
 }
 
 /// 原生窗口边框的八个固定方向，不接受任意屏幕坐标。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub enum ResizeEdge {
     Left,
     Right,
@@ -45,10 +46,67 @@ impl ResizeEdge {
 }
 
 /// 物理桌面坐标，由适配层从自有窗口与受限目标计算。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
+}
+
+/// 一次只读边框探查；只报告匿名窗口归属和 WM_NCHITTEST 结果，不返回句柄或窗口文字。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BorderHit {
+    pub inset: u32,
+    pub point: Point,
+    pub target: crate::WindowTarget,
+    pub hit: Option<i32>,
+    pub parent_hit: i32,
+}
+
+/// 最近一次边框动作在派发前取得的有界探查记录，不代表拖动已经成功。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ResizeProbe {
+    pub edge: ResizeEdge,
+    pub expected_hit: i32,
+    pub candidates: Vec<BorderHit>,
+    pub matched: Option<Point>,
+    pub complete: bool,
+}
+
+/// 查询失败与尚未执行边框动作分别表示；读取不会移动指针或改变窗口。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ResizeProbeObservation {
+    Available {
+        probe: Option<ResizeProbe>,
+    },
+    Unavailable {
+        operation: &'static str,
+        error_code: Option<u32>,
+    },
+}
+
+/// 查询当前进程自有主窗口的最近一次边框探查，最多保留六个候选。
+pub fn observe_resize(main: usize) -> ResizeProbeObservation {
+    #[cfg(windows)]
+    let result = implementation::observe_resize(main);
+    #[cfg(not(windows))]
+    let result: Result<Option<ResizeProbe>, SystemError> = {
+        let _ = main;
+        Err(("unsupportedPlatform", None).into())
+    };
+    match result {
+        Ok(probe) => ResizeProbeObservation::Available { probe },
+        Err(error) => ResizeProbeObservation::Unavailable {
+            operation: error.operation,
+            error_code: error.code,
+        },
+    }
 }
 
 /// 原生选择器仅报告归属／焦点，不包含路径或系统窗口文字。
@@ -209,6 +267,10 @@ mod tests {
             assert!(choose_file(main, "sample.psd").is_err());
             assert!(cancel_file_picker(main).is_err());
             assert!(resize(main, ResizeEdge::BottomRight, 48).is_err());
+            assert!(matches!(
+                observe_resize(main),
+                ResizeProbeObservation::Unavailable { .. }
+            ));
         }
     }
     #[test]
