@@ -53,19 +53,7 @@ impl Windows {
                     input::restore_taskbar(handle).map_err(native)
                 }
                 WindowAction::ResizeEdge { edge, direction } => {
-                    if before.file_picker.opened
-                        || before.minimized
-                        || before.maximized
-                        || before.foreground_ready != Some(FocusTarget::Main)
-                        || !before.scale_factor.is_finite()
-                        || before.scale_factor <= 0.0
-                        || before.scale_factor > 8.0
-                    {
-                        return Err(error(
-                            Code::InvalidInput,
-                            "边缘调整只允许自有前台普通窗口。",
-                        ));
-                    }
+                    let distance = resize_distance(before)?;
                     let edge = match edge {
                         ResizeEdge::Left => input::ResizeEdge::Left,
                         ResizeEdge::Right => input::ResizeEdge::Right,
@@ -80,12 +68,10 @@ impl Windows {
                         ResizeDirection::Outward => 1,
                         ResizeDirection::Inward => -1,
                     };
-                    input::resize(
-                        handle,
-                        edge,
-                        (48.0 * before.scale_factor).round() as i32 * sign,
-                    )
-                    .map_err(native)
+                    input::resize(handle, edge, distance * sign).map_err(native)
+                }
+                WindowAction::DiagnoseTopResize {} => {
+                    input::diagnose_top_resize(handle, resize_distance(before)?).map_err(native)
                 }
                 WindowAction::SystemShortcut { shortcut } => {
                     let key = match shortcut {
@@ -130,6 +116,23 @@ impl Windows {
 }
 
 type PhysicalPoint = (i32, i32);
+fn resize_distance(before: &WindowState) -> Result<i32, WorkspaceError> {
+    if before.file_picker.opened
+        || before.minimized
+        || before.maximized
+        || before.foreground_ready != Some(FocusTarget::Main)
+        || !before.scale_factor.is_finite()
+        || before.scale_factor <= 0.0
+        || before.scale_factor > 8.0
+    {
+        return Err(error(
+            Code::InvalidInput,
+            "边缘调整只允许自有前台普通窗口。",
+        ));
+    }
+    Ok((48.0 * before.scale_factor).round() as i32)
+}
+
 fn drag_points(
     state: &WindowState,
     rect: &UiRect,
@@ -193,6 +196,32 @@ fn drag_points(
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resize_input_requires_normal_foreground_window_and_bounded_real_dpi() {
+        let mut state = super::super::tests::window_state();
+        state.foreground_ready = Some(FocusTarget::Main);
+        for (scale, expected) in [(1.0, 48), (1.5, 72), (2.0, 96)] {
+            state.scale_factor = scale;
+            assert_eq!(resize_distance(&state).unwrap(), expected);
+        }
+        for scale in [f64::NAN, f64::INFINITY, 0.0, -1.0, 8.01] {
+            state.scale_factor = scale;
+            assert!(resize_distance(&state).is_err());
+        }
+        state.scale_factor = 1.0;
+        state.foreground_ready = None;
+        assert!(resize_distance(&state).is_err());
+        state.foreground_ready = Some(FocusTarget::Main);
+        state.minimized = true;
+        assert!(resize_distance(&state).is_err());
+        state.minimized = false;
+        state.maximized = true;
+        assert!(resize_distance(&state).is_err());
+        state.maximized = false;
+        state.file_picker.opened = true;
+        assert!(resize_distance(&state).is_err());
+    }
 
     #[test]
     fn title_drag_reaches_the_physical_top_edge_at_each_scale_and_negative_origin() {

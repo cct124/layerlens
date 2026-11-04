@@ -33,6 +33,7 @@ assert(
     'm2-window',
     'cleanup-window',
     'system-window',
+    'top-input',
     'panels',
     'panel-boundaries',
     'cross-monitor',
@@ -43,39 +44,41 @@ assert(
   ].includes(values['webview-suite']),
 );
 const scenarios =
-  values['webview-suite'] === 'panel-boundaries'
-    ? [
-        'panels-boundaries',
-        'panels-cancel',
-        'panels-keyboard-cancel',
-        'window-load-exit',
-        'window-load-alt-f4',
-      ]
-    : values['webview-suite'] === 'panels'
-      ? ['panels-save', 'panels-restore', 'panels-drag', 'panels-list', 'window-shell']
-      : values['webview-suite'] === 'canvas-resources'
-        ? ['canvas-memory']
-        : values['webview-suite'] === 'system-window'
-          ? ['window-system', 'window-picker', 'window-alt-f4', 'window-resize']
-          : values['webview-suite'] === 'cross-monitor'
-            ? ['window-cross-monitor']
-            : values['webview-suite'] === 'cleanup-window'
-              ? ['cleanup-window-max']
-              : values['webview-suite'] === 'canvas-sync'
-                ? ['baseline', 'canvas-inspection']
-                : values['webview-suite'] === 'workspace-canvas'
-                  ? ['canvas-inspection', 'canvas-display']
-                  : values['webview-suite'] === 'm2'
-                    ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
-                    : values['webview-suite'] === 'm2-input'
-                      ? ['input-pan', 'input-chord', 'input-snapping']
-                      : values['webview-suite'] === 'm2-cleanup'
-                        ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
-                        : values['webview-suite'] === 'm2-window'
-                          ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
-                          : values['webview-suite'] === 'render-lab'
-                            ? ['render-lab']
-                            : ['baseline'];
+  values['webview-suite'] === 'top-input'
+    ? ['window-top-input']
+    : values['webview-suite'] === 'panel-boundaries'
+      ? [
+          'panels-boundaries',
+          'panels-cancel',
+          'panels-keyboard-cancel',
+          'window-load-exit',
+          'window-load-alt-f4',
+        ]
+      : values['webview-suite'] === 'panels'
+        ? ['panels-save', 'panels-restore', 'panels-drag', 'panels-list', 'window-shell']
+        : values['webview-suite'] === 'canvas-resources'
+          ? ['canvas-memory']
+          : values['webview-suite'] === 'system-window'
+            ? ['window-system', 'window-picker', 'window-alt-f4', 'window-resize']
+            : values['webview-suite'] === 'cross-monitor'
+              ? ['window-cross-monitor']
+              : values['webview-suite'] === 'cleanup-window'
+                ? ['cleanup-window-max']
+                : values['webview-suite'] === 'canvas-sync'
+                  ? ['baseline', 'canvas-inspection']
+                  : values['webview-suite'] === 'workspace-canvas'
+                    ? ['canvas-inspection', 'canvas-display']
+                    : values['webview-suite'] === 'm2'
+                      ? ['baseline', 'geometry-25', 'geometry-100', 'geometry-200', 'cleanup']
+                      : values['webview-suite'] === 'm2-input'
+                        ? ['input-pan', 'input-chord', 'input-snapping']
+                        : values['webview-suite'] === 'm2-cleanup'
+                          ? ['cleanup-max', 'cleanup-expiry', 'cleanup-recovery', 'cleanup-late']
+                          : values['webview-suite'] === 'm2-window'
+                            ? ['window-controls', 'window-blur', 'window-menu', 'window-exit']
+                            : values['webview-suite'] === 'render-lab'
+                              ? ['render-lab']
+                              : ['baseline'];
 assert(
   repeats >= scenarios.length && repeats % scenarios.length === 0,
   '轮数必须是场景数的正整数倍，确保每个场景重复次数一致。',
@@ -91,11 +94,13 @@ const report = {
   status: 'running',
   startedAt: new Date().toISOString(),
   repeats,
+  acceptance: values['webview-suite'] === 'top-input' ? 'diagnostic-only' : 'functional-regression',
   concurrency: [
     'panels',
     'panel-boundaries',
     'cleanup-window',
     'system-window',
+    'top-input',
     'cross-monitor',
     'm2-window',
     'render-lab',

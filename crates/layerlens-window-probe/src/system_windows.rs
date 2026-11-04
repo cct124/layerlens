@@ -15,6 +15,16 @@ use windows_sys::Win32::{
 };
 #[path = "taskbar_windows.rs"]
 mod taskbar;
+#[path = "top_resize_windows.rs"]
+mod top_resize;
+pub(super) fn diagnose_top_resize(main: usize, distance: i32) -> Result<(), SystemError> {
+    top_resize::diagnose(main, distance)
+}
+pub(super) fn observe_top_resize(
+    main: usize,
+) -> Result<Option<super::TopResizeDiagnosis>, SystemError> {
+    top_resize::observe(main)
+}
 pub(super) fn restore_taskbar(main: usize) -> Result<(), SystemError> {
     taskbar::restore(main)
 }
@@ -226,13 +236,7 @@ pub(super) fn drag(main: usize, start: Point, end: Point) -> Result<(), SystemEr
     drag_to(main, start, end, None)
 }
 
-fn drag_to(
-    main: usize,
-    start: Point,
-    end: Point,
-    expected_border: Option<u32>,
-) -> Result<(), SystemError> {
-    let main = main as HWND;
+fn prepare_drag(main: HWND, start: Point, end: Point) -> Result<(Point, Point, u32), SystemError> {
     check_input(main)?;
     let last_release = *LAST_DRAG_RELEASE
         .lock()
@@ -277,12 +281,49 @@ fn drag_to(
         }
         std::thread::sleep(Duration::from_millis(10));
     }
+    verify_drag_target(main, start)?;
+    Ok((start_absolute, end_absolute, move_flags))
+}
+
+fn verify_drag_target(main: HWND, start: Point) -> Result<(), SystemError> {
     check_input(main)?;
+    let mut cursor = POINT::default();
+    // SAFETY: 初始化的可写 POINT；拒绝用户或系统在探查期间改变指针位置。
+    if unsafe { GetCursorPos(&mut cursor) } == 0 {
+        return Err(error("dragCursorPosition"));
+    }
+    if cursor.x != start.x || cursor.y != start.y {
+        return Err(("dragCursorNotAtStart", None).into());
+    }
+    // 指针移动或有界命中查询后再次检查真实目标仍属自有层级。
+    // SAFETY: 只读屏幕点的系统命中窗口，不解引用返回的句柄。
+    let actual = unsafe {
+        WindowFromPoint(POINT {
+            x: start.x,
+            y: start.y,
+        })
+    };
+    // SAFETY: 仅读取系统返回句柄与已验证主窗口的父子关系。
+    if actual != main && unsafe { IsChild(main, actual) } == 0 {
+        return Err(("dragPointNotOwned", None).into());
+    }
+    Ok(())
+}
+
+fn drag_to(
+    main: usize,
+    start: Point,
+    end: Point,
+    expected_border: Option<u32>,
+) -> Result<(), SystemError> {
+    let main = main as HWND;
+    let (start_absolute, end_absolute, move_flags) = prepare_drag(main, start, end)?;
     if let Some(expected) = expected_border
         && !border_hit(main, start, expected)?
     {
         return Err(("resizeBorderChanged", None).into());
     }
+    verify_drag_target(main, start)?;
     let up = mouse(Point { x: 0, y: 0 }, MOUSEEVENTF_LEFTUP);
     let result = (|| {
         send(&[mouse(Point { x: 0, y: 0 }, MOUSEEVENTF_LEFTDOWN)])?;
@@ -397,12 +438,27 @@ fn probe_border(window: HWND, point: Point, inset: u32) -> Result<BorderHit, Sys
         crate::WindowTarget::MainChild => Some(query_hit(actual, point)?),
         _ => None,
     };
+    let resize_overlay = if matches!(target, crate::WindowTarget::MainChild) {
+        let mut class = [0u16; 64];
+        // SAFETY: 只查询已验证自有层级的窗口类，输出缓冲区有效且不对外返回类名。
+        let len = unsafe { GetClassNameW(actual, class.as_mut_ptr(), class.len() as i32) };
+        if len <= 0 {
+            return Err(error("resizeTargetClass"));
+        }
+        class[..len as usize]
+            .iter()
+            .copied()
+            .eq("TAURI_DRAG_RESIZE_BORDERS".encode_utf16())
+    } else {
+        false
+    };
     Ok(BorderHit {
         inset,
         point,
         target,
         hit,
         parent_hit,
+        resize_overlay,
     })
 }
 

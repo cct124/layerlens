@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { focusTestWindow } from './dev-mcp-render-focus.mjs';
 import { exerciseWindowResize } from './dev-mcp-window-resize.mjs';
+import { diagnoseTopResize } from './dev-mcp-top-input.mjs';
 import { placeTestWindow } from './dev-mcp-preflight.mjs';
 
 export async function exerciseWindows(context) {
@@ -331,6 +332,8 @@ export async function exerciseWindows(context) {
     report.checks.push(
       '失焦关闭菜单，恢复后 Alt 访问键、方向键与 Esc 正常；输入框隔离 V／M／Esc，画布快捷键恢复且固定任务保留',
     );
+  } else if (scenario === 'window-top-input') {
+    await diagnoseTopResize({ ...context, native, nativeWait, nativeState, layout });
   } else if (scenario === 'window-resize') {
     await exerciseWindowResize({ ...context, native, nativeWait, nativeState, layout });
   } else if (scenario === 'window-system' || scenario === 'window-cross-monitor') {

@@ -40,6 +40,8 @@ const runFiles = [
   'window-snap-right.png',
   'window-drag-maximized.png',
   'window-picker-opened.png',
+  'window-top-input-before.png',
+  'window-top-input-after.png',
   'panels-default.png',
   'panels-minimum.png',
   'panels-list-end.png',

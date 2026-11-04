@@ -33,6 +33,8 @@ impl WindowSize {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(super) enum WindowAction {
     RestoreTaskbar {},
+    /// 固定顶部向外手势，仅诊断真实输入；不接受任意坐标或跳过前台检查。
+    DiagnoseTopResize {},
     ResizeEdge {
         edge: ResizeEdge,
         direction: ResizeDirection,
@@ -121,6 +123,8 @@ pub(super) struct WindowState {
     /// 最近一次边框动作的只读候选命中，不以父窗口结果冒充实际鼠标目标。
     #[cfg(windows)]
     pub native_resize: layerlens_window_probe::system::ResizeProbeObservation,
+    #[cfg(windows)]
+    pub native_top_resize: layerlens_window_probe::system::TopResizeObservation,
     /// 系统前台、活动窗口和键盘焦点共同指向的自有窗口；未知或切换中为 None。
     pub foreground_ready: Option<FocusTarget>,
     pub event_sequence: String,
@@ -477,6 +481,10 @@ impl Windows {
             native_resize: layerlens_window_probe::system::observe_resize(
                 self.main.hwnd().map_err(native)?.0 as usize,
             ),
+            #[cfg(windows)]
+            native_top_resize: layerlens_window_probe::system::observe_top_resize(
+                self.main.hwnd().map_err(native)?.0 as usize,
+            ),
             event_sequence: events.sequence.to_string(),
             focus_events: events.focused.to_string(),
             blur_events: events.blurred.to_string(),
@@ -517,6 +525,7 @@ impl Windows {
                 action @ (WindowAction::SystemShortcut { .. }
                 | WindowAction::RestoreTaskbar {}
                 | WindowAction::ResizeEdge { .. }
+                | WindowAction::DiagnoseTopResize {}
                 | WindowAction::DragTitlebar { .. }
                 | WindowAction::ChooseSample { .. }
                 | WindowAction::CancelFilePicker {}) => {
@@ -701,6 +710,9 @@ mod tests {
             native_resize: layerlens_window_probe::system::ResizeProbeObservation::Available {
                 probe: None,
             },
+            native_top_resize: layerlens_window_probe::system::TopResizeObservation::Available {
+                diagnosis: None,
+            },
             foreground_ready: None,
             event_sequence: "4".into(),
             focus_events: "2".into(),
@@ -804,6 +816,9 @@ mod tests {
             json!({"kind":"resize","size":"screen"}),
             json!({"kind":"resizeEdge","edge":"left","direction":"outward","distance":9000}),
             json!({"kind":"resizeEdge","edge":"outside","direction":"inward"}),
+            json!({"kind":"diagnoseTopResize","distance":48}),
+            json!({"kind":"diagnoseTopResize","handle":123}),
+            json!({"kind":"diagnoseTopResize","x":1,"y":2}),
             json!({"kind":"center","handle":123}),
             json!({"kind":"systemShortcut","shortcut":"launchShell"}),
             json!({"kind":"dragTitlebar","destination":{"kind":"offset","x":0}}),
@@ -817,6 +832,9 @@ mod tests {
                 .is_ok()
         );
         assert!(serde_json::from_value::<WindowAction>(json!({"kind":"close"})).is_ok());
+        assert!(
+            serde_json::from_value::<WindowAction>(json!({"kind":"diagnoseTopResize"})).is_ok()
+        );
         assert!(
             serde_json::from_value::<WindowAction>(
                 json!({"kind":"resizeEdge","edge":"topLeft","direction":"inward"})

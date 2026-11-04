@@ -61,6 +61,112 @@ pub struct BorderHit {
     pub target: crate::WindowTarget,
     pub hit: Option<i32>,
     pub parent_hit: i32,
+    /// 仅标记锁定 Tauri 运行时的缩放覆盖窗口，不公开原始窗口类名。
+    pub resize_overlay: bool,
+}
+
+/// 顶部真实输入诊断的固定阶段；记录最多六项，不采集连续轨迹。
+#[derive(Debug, Clone, Copy, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TopResizeStage {
+    Prepared,
+    PointerReady,
+    Pressed,
+    SystemMode,
+    Moved,
+    Released,
+}
+
+/// 自有窗口的物理外框和客户区尺寸，不包含设备或窗口标识。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InputGeometry {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub client_width: i32,
+    pub client_height: i32,
+}
+
+/// 输入阶段的真实系统观测；命中查询仅用于按下前两个阶段。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopResizeSample {
+    pub stage: TopResizeStage,
+    pub pointer: Point,
+    pub hit: Option<BorderHit>,
+    pub geometry: InputGeometry,
+    pub in_move_size: bool,
+    pub mouse_capture: crate::WindowTarget,
+    pub left_button_down: bool,
+    pub foreground: bool,
+}
+
+/// 一次固定顶部向外手势的诊断，complete 仅表示输入已完成且释放，不表示缩放通过。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopResizeDiagnosis {
+    pub start: Point,
+    pub end: Point,
+    pub samples: Vec<TopResizeSample>,
+    pub complete: bool,
+    pub error: Option<SystemError>,
+}
+
+/// 区分尚无诊断与读取失败；查询本身不派发任何输入。
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum TopResizeObservation {
+    Available {
+        diagnosis: Option<TopResizeDiagnosis>,
+    },
+    Unavailable {
+        operation: &'static str,
+        error_code: Option<u32>,
+    },
+}
+
+/// 读取最近一次顶部真实输入诊断；仅允许当前进程自有主窗口。
+pub fn observe_top_resize(main: usize) -> TopResizeObservation {
+    #[cfg(windows)]
+    let result = implementation::observe_top_resize(main);
+    #[cfg(not(windows))]
+    let result: Result<Option<TopResizeDiagnosis>, SystemError> = {
+        let _ = main;
+        Err(("unsupportedPlatform", None).into())
+    };
+    match result {
+        Ok(diagnosis) => TopResizeObservation::Available { diagnosis },
+        Err(error) => TopResizeObservation::Unavailable {
+            operation: error.operation,
+            error_code: error.code,
+        },
+    }
+}
+
+/// 从真实顶部中点向外拖动以诊断输入路由，不以预查询的 HTTOP 值作为派发前提。
+///
+/// # Errors
+/// 距离必须为 1–512 物理像素；非自有前台普通窗口、输入未就绪或未释放均返回错误。
+/// 仅使用真实鼠标输入；不发送窗口缩放消息。完成后须独立判断真实几何结果。
+pub fn diagnose_top_resize(main: usize, distance: i32) -> Result<(), SystemError> {
+    if !(1..=512).contains(&distance) {
+        return Err(("invalidResizeDistance", None).into());
+    }
+    #[cfg(windows)]
+    {
+        implementation::diagnose_top_resize(main, distance)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = main;
+        Err(("unsupportedPlatform", None).into())
+    }
 }
 
 /// 最近一次边框动作在派发前取得的有界探查记录，不代表拖动已经成功。
@@ -267,6 +373,11 @@ mod tests {
             assert!(choose_file(main, "sample.psd").is_err());
             assert!(cancel_file_picker(main).is_err());
             assert!(resize(main, ResizeEdge::BottomRight, 48).is_err());
+            assert!(diagnose_top_resize(main, 48).is_err());
+            assert!(matches!(
+                observe_top_resize(main),
+                TopResizeObservation::Unavailable { .. }
+            ));
             assert!(matches!(
                 observe_resize(main),
                 ResizeProbeObservation::Unavailable { .. }
@@ -278,6 +389,12 @@ mod tests {
         for distance in [i32::MIN, -513, 0, 513, i32::MAX] {
             assert_eq!(
                 resize(0, ResizeEdge::Left, distance).unwrap_err().operation,
+                "invalidResizeDistance"
+            );
+        }
+        for distance in [i32::MIN, -1, 0, 513, i32::MAX] {
+            assert_eq!(
+                diagnose_top_resize(0, distance).unwrap_err().operation,
                 "invalidResizeDistance"
             );
         }

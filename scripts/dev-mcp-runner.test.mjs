@@ -204,6 +204,8 @@ test('只保留白名单报告与截图，连接凭据、profile 和下载程序
     'panels-boundaries-default.png',
     'panels-boundaries-maximized.png',
     'window-taskbar-restored.png',
+    'window-top-input-before.png',
+    'window-top-input-after.png',
   ];
   for (const name of edgeImages)
     await writeFile(path.join(run, name), Buffer.from([137, 80, 78, 71]));
