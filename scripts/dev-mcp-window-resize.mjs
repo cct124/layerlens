@@ -1,5 +1,28 @@
 // 验证真实窗口边框拖动，不以 set_size 的结果代替系统命中和手势。
 import assert from 'node:assert/strict';
+import { diagnoseTopResize } from './dev-mcp-top-input.mjs';
+
+export function assertResizeInput(probe, edge) {
+  assert.equal(probe?.status, 'available', '边框动作必须保留输入路径观测');
+  const observation = probe.probe;
+  assert.equal(observation?.complete, true);
+  assert.equal(observation.inputCompleted, true, '必须真实进入系统手势并完成输入');
+  assert.equal(observation.edge, edge);
+  assert(observation.candidates.length >= 1 && observation.candidates.length <= 6);
+  let chosen;
+  if (observation.inputRoute === 'clientTop') {
+    assert.equal(edge, 'top', '只有已实现顶部热区可走客户区输入');
+    assert.equal(observation.matched, null, '客户区路径不得冒充原生命中');
+    chosen = observation.clientTop;
+  } else {
+    assert.equal(observation.inputRoute, 'nativeBorder');
+    assert.equal(observation.clientTop, null);
+    chosen = observation.candidates.at(-1);
+    assert.deepEqual(chosen.point, observation.matched);
+    assert.equal(chosen.hit, observation.expectedHit);
+  }
+  assert(chosen && ['main', 'mainChild'].includes(chosen.target), '只允许自有实际输入目标');
+}
 
 export async function exerciseWindowResize(context) {
   const { native, nativeWait, nativeState, layout, state, report, click, wait, tool, args } =
@@ -53,14 +76,7 @@ export async function exerciseWindowResize(context) {
         await nativeWait({ kind: 'foreground', target: 'main' });
         const after = await nativeState();
         const probe = after.nativeResize;
-        assert.equal(probe?.status, 'available', '边框动作必须保留原生命中观测');
-        assert.equal(probe.probe?.complete, true);
-        assert.equal(probe.probe.edge, edge);
-        assert(probe.probe.candidates.length >= 1 && probe.probe.candidates.length <= 6);
-        const chosen = probe.probe.candidates.at(-1);
-        assert.deepEqual(chosen.point, probe.probe.matched);
-        assert.equal(chosen.hit, probe.probe.expectedHit);
-        assert(['main', 'mainChild'].includes(chosen.target), '仅自有实际鼠标目标可通过边框命中');
+        assertResizeInput(probe, edge);
         assert.equal(after.scaleFactor, before.scaleFactor);
         assert.equal(
           after.monitors.find((m) => m.current)?.index,
@@ -96,6 +112,11 @@ export async function exerciseWindowResize(context) {
     await layout(await nativeState(), 'edge-' + size + '-after');
     assert.equal((await state()).window.focused, true);
   }
+  // 最外侧顶边也必须真实缩放；客户区热区通过不能掩盖边界落点仍在移动整窗。
+  await diagnoseTopResize(context);
+  report.phase = 'window-resize-top-input-geometry';
+  report.topInputAcceptance = 'functional-regression';
+  assert.equal(report.topInputOutcome, 'resized', '最外侧顶部真实手势必须改变客户区并保持对边');
   report.phase = 'window-resize-maximized-rejections';
   await native({ kind: 'maximize' });
   const maximized = await nativeWait({ kind: 'state', minimized: false, maximized: true });

@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   toggleMaximize: vi.fn<() => Promise<void>>(),
   close: vi.fn<() => Promise<void>>(),
   startDragging: vi.fn<() => Promise<void>>(),
+  startResizeDragging: vi.fn<(direction: string) => Promise<void>>(),
 }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: api.getCurrentWindow }));
 let wrapper: VueWrapper | undefined;
@@ -56,6 +57,7 @@ beforeEach(() => {
   api.toggleMaximize.mockResolvedValue();
   api.close.mockResolvedValue();
   api.startDragging.mockResolvedValue();
+  api.startResizeDragging.mockResolvedValue();
 });
 afterEach(() => {
   wrapper?.unmount();
@@ -63,6 +65,41 @@ afterEach(() => {
 });
 
 describe('合并标题栏', () => {
+  it('顶部热区只开始系统高度调整，双击不最大化，非主键不误触发', async () => {
+    await mountTitlebar();
+    await mouseDown('.window-top-resize');
+    await mouseDown('.window-top-resize', { detail: 2 });
+    expect(api.startResizeDragging.mock.calls).toEqual([['North'], ['North']]);
+    expect(api.startDragging).not.toHaveBeenCalled();
+    expect(api.toggleMaximize).not.toHaveBeenCalled();
+    await mouseDown('.window-top-resize', { button: 1, buttons: 4 });
+    await mouseDown('.window-top-resize', { button: 2, buttons: 2 });
+    expect(api.startResizeDragging).toHaveBeenCalledTimes(2);
+    api.isMaximized.mockResolvedValue(true);
+    resized();
+    await flushPromises();
+    expect(wrapper!.find('.window-top-resize').exists()).toBe(false);
+  });
+
+  it('顶部缩放在途不追加移动或缩放，失败可见且能够再次尝试', async () => {
+    const command = deferred<void>();
+    api.startResizeDragging.mockReturnValueOnce(command.promise);
+    await mountTitlebar();
+    await mouseDown('.window-top-resize');
+    await mouseDown('.window-top-resize');
+    await mouseDown('.header-spacer');
+    expect(api.startResizeDragging).toHaveBeenCalledOnce();
+    expect(api.startDragging).not.toHaveBeenCalled();
+    command.resolve();
+    await flushPromises();
+    api.startResizeDragging.mockRejectedValueOnce('系统拒绝缩放');
+    await mouseDown('.window-top-resize');
+    expect(wrapper!.get('[role="alert"]').text()).toContain('调整窗口高度失败：系统拒绝缩放');
+    await mouseDown('.window-top-resize');
+    expect(api.startResizeDragging).toHaveBeenCalledTimes(3);
+    expect(wrapper!.find('[role="alert"]').exists()).toBe(false);
+  });
+
   it('窗口命令调用原生 API，最大化状态由实际窗口决定；关闭不是关闭文档', async () => {
     const bar = await mountTitlebar();
     expect(bar.find('[aria-label="最大化窗口"]').exists()).toBe(true);
@@ -179,6 +216,7 @@ describe('合并标题栏', () => {
   it('浏览器预览无窗口按钮、不访问 Tauri，仍显示菜单及只读说明', async () => {
     const bar = await mountTitlebar(false);
     expect(bar.find('[aria-label="窗口控制"]').exists()).toBe(false);
+    expect(bar.find('.window-top-resize').exists()).toBe(false);
     expect(bar.find('[aria-label="文件"]').exists()).toBe(true);
     expect(bar.text()).toContain('浏览器预览');
     await mouseDown('.header-spacer');

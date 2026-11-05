@@ -62,14 +62,17 @@ export function useWindowControls(desktop: boolean) {
     }
   }
 
-  async function startDragging() {
+  async function startGesture(kind: 'move' | 'resizeTop') {
     if (!appWindow || disposed || pending.value || dragging) return;
+    if (kind === 'resizeTop' && maximized.value !== false) return;
     dragging = true;
     actionError.value = null;
     try {
-      await appWindow.startDragging();
+      if (kind === 'resizeTop') await appWindow.startResizeDragging('North');
+      else await appWindow.startDragging();
     } catch (cause: unknown) {
-      if (!disposed) actionError.value = `拖动窗口失败：${message(cause)}`;
+      if (!disposed)
+        actionError.value = `${kind === 'resizeTop' ? '调整窗口高度' : '拖动窗口'}失败：${message(cause)}`;
     } finally {
       dragging = false;
     }
@@ -102,6 +105,7 @@ export function useWindowControls(desktop: boolean) {
       stateError.value = null;
     },
     run,
-    startDragging,
+    startDragging: () => startGesture('move'),
+    startTopResizing: () => startGesture('resizeTop'),
   };
 }

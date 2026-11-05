@@ -27,6 +27,7 @@ pub(super) fn selector(target: &str) -> Result<String, WorkspaceError> {
         "window:brand",
         "window:status",
         "window:readonly",
+        "window:resize-top",
         "menu:file",
         "menu:view",
         "menu:window",

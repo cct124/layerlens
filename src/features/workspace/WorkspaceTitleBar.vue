@@ -4,9 +4,8 @@ import WorkspaceIcon from './WorkspaceIcon.vue';
 import { useWindowControls } from './useWindowControls';
 
 const props = defineProps<{ desktop: boolean; connected: boolean; picking: boolean }>();
-const { maximized, pending, error, dismissError, run, startDragging } = useWindowControls(
-  props.desktop,
-);
+const { maximized, pending, error, dismissError, run, startDragging, startTopResizing } =
+  useWindowControls(props.desktop);
 const maximizeLabel = computed(() =>
   maximized.value === null ? '最大化 / 还原窗口' : maximized.value ? '还原窗口' : '最大化窗口',
 );
@@ -27,10 +26,25 @@ function titlebarMouseDown(event: MouseEvent) {
   if (event.detail === 2) void run('toggleMaximize');
   else void startDragging();
 }
+
+function topResizeMouseDown(event: MouseEvent) {
+  if (event.button !== 0 || event.buttons !== 1 || event.defaultPrevented) return;
+  event.preventDefault();
+  event.stopPropagation();
+  void startTopResizing();
+}
 </script>
 
 <template>
   <header class="app-header" aria-label="LayerLens 标题栏" @mousedown="titlebarMouseDown">
+    <!-- 部分 Windows WebView 覆盖原生顶边；客户区热区将真实按下交给系统缩放。 -->
+    <div
+      v-if="desktop && maximized === false"
+      class="window-top-resize"
+      data-dev-target="window:resize-top"
+      aria-hidden="true"
+      @mousedown="topResizeMouseDown"
+    ></div>
     <div class="brand" data-window-drag-region data-dev-target="window:brand">
       <WorkspaceIcon name="brand" />LayerLens
     </div>
@@ -88,6 +102,13 @@ function titlebarMouseDown(event: MouseEvent) {
 </template>
 
 <style scoped>
+.window-top-resize {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  z-index: 1;
+  cursor: ns-resize;
+}
 .window-controls {
   display: flex;
   align-self: stretch;

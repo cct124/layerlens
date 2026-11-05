@@ -1,7 +1,8 @@
 //! 自有窗口的 Win32 输入与 UI Automation；所有 FFI 指针在本模块内验证。
 //! SendInput 不保证送达，调用者必须继续等待实际窗口／业务状态。
 use super::{
-    BorderHit, FilePickerState, Point, ResizeEdge, ResizeProbe, SystemError, SystemShortcut,
+    BorderHit, FilePickerState, Point, ResizeEdge, ResizeInputRoute, ResizeProbe, SystemError,
+    SystemShortcut,
 };
 use crate::windows::{desktop_receives_input, owned_thread};
 use std::{
@@ -523,6 +524,9 @@ pub(super) fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(),
         candidates: Vec::with_capacity(6),
         matched: None,
         complete: false,
+        client_top: None,
+        input_route: None,
+        input_completed: false,
     };
     record_probe(main, &probe)?;
     // 有界探查真实边框，处理不可见 resize margin；只读命中结果，不派发合成缩放消息。
@@ -541,9 +545,36 @@ pub(super) fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(),
     }
     probe.complete = true;
     record_probe(main, &probe)?;
-    let start = probe
-        .matched
-        .ok_or(SystemError::from(("resizeBorderNotFound", None)))?;
+    let (start, expected_border, route) = if let Some(point) = probe.matched {
+        (point, Some(expected), ResizeInputRoute::NativeBorder)
+    } else if matches!(edge, ResizeEdge::Top) {
+        // 产品在客户区顶部提供真实缩放热区。单独记录该路径，不能把父窗口的
+        // HTTOP 冒充实际子窗口命中；仍须真实按下、进入系统模式及验证客户区和对边。
+        let mut info = WINDOWINFO {
+            cbSize: std::mem::size_of::<WINDOWINFO>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: 自有窗口和完整初始化的缓冲区；rcClient 是屏幕物理坐标。
+        if unsafe { GetWindowInfo(window, &mut info) } == 0 {
+            return Err(error("resizeClientBounds"));
+        }
+        let point = resize_point(&info.rcClient, ResizeEdge::Top, 1)?;
+        let candidate = probe_border(window, point, 1)?;
+        let owned = matches!(
+            candidate.target,
+            crate::WindowTarget::Main | crate::WindowTarget::MainChild
+        );
+        probe.client_top = Some(candidate);
+        record_probe(main, &probe)?;
+        if !owned {
+            return Err(("resizeClientTopNotOwned", None).into());
+        }
+        (point, None, ResizeInputRoute::ClientTop)
+    } else {
+        return Err(("resizeBorderNotFound", None).into());
+    };
+    probe.input_route = Some(route);
+    record_probe(main, &probe)?;
     let (dx, dy) = edge.axes();
     let end = Point {
         x: start
@@ -555,7 +586,10 @@ pub(super) fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(),
             .checked_add(dy * distance)
             .ok_or(SystemError::from(("resizeCoordinateOverflow", None)))?,
     };
-    drag_to(main, start, end, Some(expected))
+    let result = drag_to(main, start, end, expected_border);
+    probe.input_completed = result.is_ok();
+    record_probe(main, &probe)?;
+    result
 }
 
 struct ComApartment;

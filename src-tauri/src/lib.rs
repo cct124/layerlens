@@ -370,12 +370,18 @@ mod tests {
             "minimize",
             "toggle_maximize",
             "start_dragging",
+            "start_resize_dragging",
             "close",
         ] {
             let command = format!("plugin:window|{command}");
             let blocked = invoke_raw("untrusted", &command, json!({})).unwrap_err();
             assert!(blocked.as_str().unwrap().contains("not allowed"));
-            invoke_raw("main", &command, json!({})).expect("主窗口应具有标题栏所需的最小权限");
+            let body = if command.ends_with("|start_resize_dragging") {
+                json!({"value": "North"})
+            } else {
+                json!({})
+            };
+            invoke_raw("main", &command, body).expect("主窗口应具有标题栏所需的最小权限");
         }
         for command in ["destroy", "set_decorations", "set_fullscreen", "create"] {
             let blocked =

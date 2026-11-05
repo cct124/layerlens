@@ -169,7 +169,15 @@ pub fn diagnose_top_resize(main: usize, distance: i32) -> Result<(), SystemError
     }
 }
 
-/// 最近一次边框动作在派发前取得的有界探查记录，不代表拖动已经成功。
+/// 真实边框输入的路径；客户区热区不冒充原生非客户区命中。
+#[derive(Debug, Clone, Copy, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ResizeInputRoute {
+    NativeBorder,
+    ClientTop,
+}
+
+/// 原生命中和客户区顶部热区分别记录；输入完成仍须由调用方验证几何。
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ResizeProbe {
@@ -178,6 +186,9 @@ pub struct ResizeProbe {
     pub candidates: Vec<BorderHit>,
     pub matched: Option<Point>,
     pub complete: bool,
+    pub client_top: Option<BorderHit>,
+    pub input_route: Option<ResizeInputRoute>,
+    pub input_completed: bool,
 }
 
 /// 查询失败与尚未执行边框动作分别表示；读取不会移动指针或改变窗口。
@@ -311,7 +322,8 @@ pub fn drag(main: usize, start: Point, end: Point) -> Result<(), SystemError> {
     }
 }
 
-/// 从经真实命中测试确认的自有窗口边框拖动；正距离向外、负距离向内，单位为物理像素。
+/// 从自有原生边框拖动；顶边被 WebView 覆盖时使用产品的客户区顶部热区。
+/// 正距离向外、负距离向内，单位为物理像素；父窗口命中仅作为诊断。
 /// 距离非零且绝对值不超过 512；派发后仍须等待实际几何和前端状态。
 pub fn resize(main: usize, edge: ResizeEdge, distance: i32) -> Result<(), SystemError> {
     if distance == 0 || !(-512..=512).contains(&distance) {
